@@ -10,6 +10,8 @@ Paper examining the effects of various privacy protection methods on the forecas
 * LSTM (pinball loss)
 * VAR model (have to see if scalable)
 
+Code for some of these methods (in R) can be found [here](https://github.com/Mcompetitions/M4-methods) from the M4 competition.
+
 ### *Data Protection Methods to Implement:*
 
 * Random noise
