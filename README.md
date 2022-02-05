@@ -1,8 +1,8 @@
-# Privacy-and-Forecasting-Empirical
+# Privacy and Forecasting Empirical Analysis
 
 Paper examining the effects of various privacy protection methods on the forecast accuracy achieved by multivariate forecasting models.
 
-*Forecasting Models to Implement:*
+### *Forecasting Models to Implement:*
 
 * Exponential smoothing
 * Autoregressive
@@ -10,13 +10,13 @@ Paper examining the effects of various privacy protection methods on the forecas
 * LSTM (pinball loss)
 * VAR model (have to see if scalable)
 
-*Data Protection Methods to Implement:*
+### *Data Protection Methods to Implement:*
 
 * Random noise
 * Method from Schneider and Lee (2021)
 * Other methods applied to disaggregate time series
 
-*Model Accuracy Metrics*
+### *Model Accuracy Metrics*
 
 * RMSE (room mean-squared error)
 * MAE (mean absolute error)
