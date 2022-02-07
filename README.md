@@ -14,9 +14,11 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 
 ### *Data Protection Methods to Implement:*
 
-* Random noise
-* Method from Schneider and Lee (2021)
-* Other methods applied to disaggregate time series
+* Additive noise
+* Bottom Coding
+* Top coding
+* Method from Schneider and Lee (2021) - *k*-mTS
+* Other methods applied to disaggregate time series?
 
 ### *Model Accuracy Metrics*
 
