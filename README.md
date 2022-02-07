@@ -25,7 +25,7 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 
 ### *Model Accuracy Metrics*
 
-* RMSE (room mean-squared error)
+* RMSE (root mean-squared error)
 * MAE (mean absolute error)
 
 **Goal**: determine whether forecast accuracy is better or worse for each model for each protection method.
