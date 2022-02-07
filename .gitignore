@@ -6,6 +6,9 @@ __pycache__/
 # Data
 Data/
 
+# Private Work, i.e., things we don't want showing up in the repo when we make it public
+Private/
+
 # C extensions
 *.so
 
