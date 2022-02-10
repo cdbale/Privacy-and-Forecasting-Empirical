@@ -19,10 +19,13 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 
 ### *Data Protection Methods to Implement:*
 
+(want 'simple' ones)
+
 * Additive noise
 * Bottom Coding
 * Top coding
 * Method from Schneider and Lee (2021) - *k*-mTS
+* Differential privacy
 * Other methods applied to disaggregate time series?
 
 ### *Model Accuracy Metrics*
