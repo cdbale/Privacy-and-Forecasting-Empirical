@@ -22,10 +22,9 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 (want 'simple' ones)
 
 * Additive noise
-* Bottom Coding
-* Top coding
 * Method from Schneider and Lee (2021) - *k*-mTS
 * Differential privacy
+* Look up some more innovative ones
 * Other methods applied to disaggregate time series?
 
 ### *Model Accuracy Metrics*
