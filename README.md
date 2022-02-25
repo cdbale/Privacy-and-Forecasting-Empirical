@@ -9,7 +9,7 @@ Paper examining the effects of various privacy protection methods on the forecas
    - ~~DES~~
    - ~~TES~~
 * ~~Autoregressive~~
-* Light GBM
+* ~~Light GBM~~
 * LSTM (pinball loss)
 * Prophet
 * Zillow?
