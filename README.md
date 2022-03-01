@@ -11,7 +11,8 @@ Paper examining the effects of various privacy protection methods on the forecas
 * ~~Autoregressive~~
 * ~~Light GBM~~
 * LSTM (pinball loss)
-* Prophet
+* ~~Prophet~~
+* ~~NeuralProphet~~
 * Zillow?
 * ~~VAR model (have to see if scalable)~~
 
