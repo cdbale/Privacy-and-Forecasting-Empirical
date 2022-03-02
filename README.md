@@ -24,6 +24,8 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 * Additive noise
 * Method from Schneider and Lee (2021) - *k*-mTS
 * Differential privacy
+   * series-level DP for univariate methods (i.e., aggregate values released over time?)
+   * global DP for global/multivariate models (not sure yet on how to accomplish this)
 * Look up some more innovative ones
 * Other methods applied to disaggregate time series?
 
