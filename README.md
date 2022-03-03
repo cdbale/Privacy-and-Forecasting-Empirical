@@ -21,9 +21,11 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 
 (want 'simple' ones)
 
-* Additive noise
+* **Additive noise**
+* **Top coding (.10, .20, .40)**
+* Bottom coding (.10, .20, .40)
 * Method from Schneider and Lee (2021) - *k*-mTS
-* Differential privacy
+* **Differential privacy**
    * series-level DP for univariate methods (i.e., aggregate values released over time?)
    * global DP for global/multivariate models (not sure yet on how to accomplish this)
 * Look up some more innovative ones
