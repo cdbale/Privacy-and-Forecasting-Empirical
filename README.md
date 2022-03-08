@@ -13,6 +13,7 @@ Paper examining the effects of various privacy protection methods on the forecas
 * ~~Prophet~~
 * ~~NeuralProphet~~
 * ~~VAR model (have to see if scalable)~~
+* Lasso-VAR?
 * GreyKite (LinkedIn)
 * LSTM (pinball loss) - I think pinball loss is for training uncertainty forecasts. Do we want to examine these and point forecasts?
 
