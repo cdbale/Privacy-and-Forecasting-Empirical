@@ -237,6 +237,24 @@ def additive_noise_protection(sensitive_data, num_stdev):
 
     return P
 
+def DP_protection(sensitive_data, epsilon):
+    """
+    Adds random noise to each sensitive series y to achieve differential privacy,
+    defined by privacy budget epsilon and the series-specific sensitivity approximated
+    by the difference between the minimum and maximum values in the series.
+    Noise is sampled from a Laplace distribution centered at 0, with scale = GS/epsilon.
+
+    param: sensitive_data: pandas dataframe containing series in the rows and time
+                periods in the columns.
+    param: epsilon: Privacy budget. Larger values = less noise and less privacy.
+    return: P: pandas dataframe containing protected series.
+    """
+    num_series, num_periods = sensitive_data.shape
+    GS = (sensitive_data.max(axis=1) - sensitive_data.min(axis=1))/epsilon
+    P = [np.random.laplace(loc=0, scale=GS[i], size=num_periods) + sensitive_data.iloc[i,:] for i in range(num_series)]
+    P = pd.concat(P, axis=1).T
+    return P
+
 ###################################################################
 ################### Results/Accuracy Comparison ###################
 ###################################################################
@@ -259,17 +277,45 @@ def forecast_accuracy_results(test_data, original_forecasts, protected_forecasts
         "% Change global accuracy:"
     """
 
-    ##### Metric Calculations #####
+    ########## Comparisons of interest ##########
+    # percentage of forecasts in each time step that were adjusted downward or upward
+    percent_downward = ((original_forecasts-protected_forecasts)>0.0).mean().mean()
+    percent_upward = ((original_forecasts-protected_forecasts)<0.0).mean().mean()
 
-    # calculate local forecast accuracies for confidential training data
+    # boolean values for whether a forecasted point was adjusted up or down after protection
+    adjusted_up = original_forecasts < protected_forecasts
+    adjusted_up = pd.concat([row for i, row in adjusted_up.iterrows()])
+    adjusted_down = original_forecasts > protected_forecasts
+    adjusted_down = pd.concat([row for i, row in adjusted_down.iterrows()])
+
+    # point level absolute forecast error using original data
+    absolute_error = np.absolute(test_data - original_forecasts)
+    absolute_error = pd.concat([row for i, row in absolute_error.iterrows()])
+
+    # point level absolute forecast error using protected data
+    protected_absolute_error = np.absolute(test_data - protected_forecasts)
+    protected_absolute_error = pd.concat([row for i, row in protected_absolute_error.iterrows()])
+
+    # average absolute error for upward adjusted points prior to adjustment
+    avg_up_prior = np.mean(absolute_error[adjusted_up])
+    # average absolute error for downward adjusted points prior to adjustment
+    avg_down_prior = np.mean(absolute_error[adjusted_down])
+
+    # average absolute error for upward adjusted points after adjustment
+    avg_up_post = np.mean(protected_absolute_error[adjusted_up])
+    # average absolute error for downward adjusted points after adjustment
+    avg_down_post = np.mean(protected_absolute_error[adjusted_down])
+
+    ########## Metric Calculations ##########
+    # calculate series level forecast accuracies for confidential training data
     local_mae = mean_absolute_error(test_data, original_forecasts, multioutput="raw_values")
     local_rmse = mean_squared_error(test_data, original_forecasts, multioutput="raw_values", square_root=True)
 
-    # calculate local forecast accuracies for protected training data
+    # calculate series level forecast accuracies for protected training data
     protected_local_mae = mean_absolute_error(test_data, protected_forecasts, multioutput="raw_values")
     protected_local_rmse = mean_squared_error(test_data, protected_forecasts, multioutput="raw_values", square_root=True)
 
-    # calculate global forecast accuracy for confidential training data
+    # calculate global forecast accuracies for confidential training data
     global_mae = mean_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
     global_rmse = mean_squared_error(test_data, original_forecasts, multioutput="uniform_average", square_root=True)
 
@@ -277,43 +323,58 @@ def forecast_accuracy_results(test_data, original_forecasts, protected_forecasts
     protected_global_mae = mean_absolute_error(test_data, protected_forecasts, multioutput="uniform_average")
     protected_global_rmse = mean_squared_error(test_data, protected_forecasts, multioutput="uniform_average", square_root=True)
 
-    ##### Comparisons of Interest #####
+    ########## Comparing Accuracies Before and After Protection ##########
 
-    percent_downward = ((original_forecasts-protected_forecasts)>0.0).mean().mean()
-    percent_upward = ((original_forecasts-protected_forecasts)<0.0).mean().mean()
-
-    ## calculated tuples contain (MAE, RMSE) comparisons ##
+    ## calculated tuples correspond to (MAE, RMSE) comparisons ##
 
     # percentage of series for which forecast accuracy improved under protection
     local_percent_improved = (np.mean(local_mae-protected_local_mae > 0.0),
                               np.mean(local_rmse-protected_local_rmse > 0.0))
 
     # percentage of series for which forecast accuracy worsened under protection
-    local_percent_worsened = (np.mean(local_mae-protected_local_mae < 0.0),
+    local_percent_reduced = (np.mean(local_mae-protected_local_mae < 0.0),
                               np.mean(local_rmse-protected_local_rmse < 0.0))
 
     # percentage of series for which forecast accuracy stayed the same under protection
+    # this is really only applicable to the SES model
     local_percent_equal = (np.mean(local_mae-protected_local_mae == 0.0),
                            np.mean(local_rmse-protected_local_rmse == 0.0))
 
     # percentage change in global accuracy
-    mean_percent_change_global = ((global_mae-protected_global_mae)/global_mae,
-                             (global_rmse-protected_global_rmse)/global_rmse)
+    percent_change_mean_accuracy = ((global_mae-protected_global_mae)/global_mae,
+                                    (global_rmse-protected_global_rmse)/global_rmse)
 
-    median_percent_change_global = ((np.median(local_mae)-np.median(protected_local_mae))/np.median(local_mae),
-                                    (np.median(local_rmse)-np.median(protected_local_rmse))/np.median(local_rmse))
+    percent_change_median_accuracy = ((np.median(local_mae)-np.median(protected_local_mae))/np.median(local_mae),
+                                      (np.median(local_rmse)-np.median(protected_local_rmse))/np.median(local_rmse))
+
+
+    # average absolute error for upward adjusted points prior to adjustment
+    avg_up_prior = np.mean(absolute_error[adjusted_up])
+    # average absolute error for downward adjusted points prior to adjustment
+    avg_down_prior = np.mean(absolute_error[adjusted_down])
+
+    # average absolute error for upward adjusted points after adjustment
+    avg_up_post = np.mean(protected_absolute_error[adjusted_up])
+    # average absolute error for downward adjusted points after adjustment
+    avg_down_post = np.mean(protected_absolute_error[adjusted_down])
 
     results_dict = {
-        "% of forecasted points adjusted downward:": percent_downward,
-        "% of forecasted points adjusted upward:": percent_upward,
+        "Mean Accuracies": (global_mae, global_rmse),
+        "Protected Mean Accuracies:": (protected_global_mae, protected_global_rmse),
+        "% Change Mean accuracy:": percent_change_mean_accuracy,
+        "% Change Median accuracy:": percent_change_median_accuracy,
+        "% Forecasted Points adjusted downward:": percent_downward,
+        "% Forecasted Points adjusted upward:": percent_upward,
         "% Series with improved accuracy:": local_percent_improved,
-        "% Series with worsened accuracy:": local_percent_worsened,
-        "% Series with unchanged accuracy:": local_percent_equal,
-        "% Change mean global accuracy:": mean_percent_change_global,
-        "% Change median global accuracy:": median_percent_change_global
+        "% Series with reduced accuracy:": local_percent_reduced,
+        "Original Mean Absolute Error Upward Adjusted:": avg_up_prior,
+        "Original Mean Absolute Error Downward Adjusted:": avg_down_prior,
+        "Protected Mean Absolute Error Upward Adjusted:": avg_up_post,
+        "Protected Mean Absolute Error Downward Adjusted:": avg_down_post
+        # "% Series with unchanged accuracy:": local_percent_equal,
     }
 
-    results_dict = {k: np.round(v, 3)*100 for k, v in results_dict.items()}
+    results_dict = {k: np.round(v, 4)*100 for k, v in results_dict.items()}
 
     return results_dict
 
@@ -326,7 +387,7 @@ def forecast_accuracy_results(test_data, original_forecasts, protected_forecasts
 # in one go
 
 # perform full analysis for top or bottom coding
-def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, coding_type=None, coding_percentage=None, num_stdev=None, window_length=None):
+def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, coding_type=None, coding_percentage=None, num_stdev=None, window_length=None, epsilon=None):
     """
     Perform train-test split, data protection using top or bottom coding,
     forecasting, and accuracy comparisons in one go.
@@ -358,10 +419,16 @@ def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, 
         Train_protected = Train.apply(coding_protection, axis=1, args=(coding_type, coding_percentage))
     elif num_stdev is not None:
         Train_protected = additive_noise_protection(Train, num_stdev=num_stdev)
+    elif epsilon is not None:
+        Train_protected = DP_protection(Train, epsilon=epsilon)
+
+
+    Train, Test = pre_process(Train, Test)
+    Train_protected, _ = pre_process(Train_protected, Test)
 
     if type(forecasting_model) == lgb.sklearn.LGBMRegressor:
-        Train, Test = pre_process(Train, Test)
-        Train_protected, _ = pre_process(Train_protected, Test)
+        #Train, Test = pre_process(Train, Test)
+        #Train_protected, _ = pre_process(Train_protected, Test)
         # construct detrender
         detrender = Detrender()
         detrended_series = [detrender.fit_transform(series) for _ , series in Train_protected.iterrows()]
@@ -389,4 +456,4 @@ def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, 
     # forecast accuracy results
     results_dict = forecast_accuracy_results(Test.T, fcasts, fcasts_protected)
 
-    return results_dict
+    return results_dict, Test.T, fcasts, fcasts_protected
