@@ -374,7 +374,7 @@ def forecast_accuracy_results(test_data, original_forecasts, protected_forecasts
         # "% Series with unchanged accuracy:": local_percent_equal,
     }
 
-    results_dict = {k: np.round(v, 4)*100 for k, v in results_dict.items()}
+    results_dict = {k: np.round(v, 4) for k, v in results_dict.items()}
 
     return results_dict
 
