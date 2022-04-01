@@ -13,7 +13,7 @@ from sktime.transformations.series.detrend import Detrender
 ################### Data Processing ###################
 #######################################################
 
-def pre_process(train_dataset, test_dataset):
+def pre_process(train_dataset):
     """
     Performs pre-processing steps on the specified time series dataset, supplied as
     train and test data. Current steps are to normalize each series by its respective mean, and take the log.
@@ -25,20 +25,29 @@ def pre_process(train_dataset, test_dataset):
     # normalize by the series means
     series_means = train_dataset.apply(np.mean, axis=1)
     train_processed = train_dataset.divide(series_means, axis=0)
-    test_processed = test_dataset.divide(series_means, axis=0)
+    # test_processed = test_dataset.divide(series_means, axis=0)
     # add minimum value of a series back to a series if the minimum values is <= 0
     # This avoids problems when taking the log
     ############## This is a temporary fix, need to see how this is handled in practice #######
-    # create test_processed first since based on train prior to adding minimums
-    test_processed = pd.concat([test_processed.iloc[i,:] + np.abs(np.min(row))+1.0 if np.min(row) <= 0.0 else test_processed.iloc[i,:] for i, row in train_processed.iterrows()], axis=1).T
-    train_processed = pd.concat([row + np.abs(np.min(row))+1.0 if np.min(row) <= 0.0 else row for i, row in train_processed.iterrows()], axis=1).T
-    # take the log
-    test_processed = np.log(test_processed)
-    train_processed = np.log(train_processed)
-    return train_processed, test_processed
 
-#def post_process(train_dataset, test_dataset, forecasts, means):
-    # implement for LGBM
+    # add mins to the training and test data and return out of the function, then remove in
+    # post processing so that test data is the same for each method
+
+    # create test_processed first since based on train prior to adding minimums
+    mins = np.min(train_dataset, axis=1)
+    # test_processed = pd.concat([row + np.abs(train_mins[i]) + 1.0 if train_mins[i] <= 0.0 else row for i, row in test_processed.iterrows()], axis=1).T
+    train_processed = pd.concat([row + np.abs(mins[i]) + 1.0 if mins[i] <= 0.0 else row for i, row in train_processed.iterrows()], axis=1).T
+    # take the log
+    # test_processed = np.log(test_processed)
+    train_processed = np.log(train_processed)
+    return train_processed, mins, series_means
+
+def post_process(forecasts, series_mins, series_means):
+    fcasts = forecasts.T
+    fcasts = np.exp(fcasts)
+    fcasts = pd.concat([row - np.abs(series_mins[i]) - 1.0 if series_mins[i] <= 0.0 else row for i, row in fcasts.iterrows()], axis=1).T
+    fcasts = fcasts.multiply(series_means, axis=0)
+    return fcasts.T
 
 # function to perform reduction on global training data
 def reduce_train_test_global(train_data, window_length, h):
@@ -106,10 +115,12 @@ def reverse_transformation(forecasts, original_training_data, transformation):
         # list for transformed forecasts
         fcasts = []
         # for each series,
-        for i in range(len(forecasts)):
+        num_series = original_training_data.shape[0]
+        for i in range(num_series):
             detrender.fit(original_training_data.iloc[i,:])
             fcasts.append(detrender.inverse_transform(forecasts[i]))
-        fcasts = pd.concat(fcasts, axis=1).T
+            #fcasts.append(detrender.inverse_transform(forecasts.iloc[i,:]))
+        fcasts = pd.concat(fcasts, axis=1)
     # return transformed forecasts
     return fcasts
 
@@ -422,9 +433,8 @@ def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, 
     elif epsilon is not None:
         Train_protected = DP_protection(Train, epsilon=epsilon)
 
-
-    Train, Test = pre_process(Train, Test)
-    Train_protected, _ = pre_process(Train_protected, Test)
+    Train, mins, means = pre_process(Train)
+    Train_protected, mins_protected, means_protected = pre_process(Train_protected)
 
     if type(forecasting_model) == lgb.sklearn.LGBMRegressor:
         #Train, Test = pre_process(Train, Test)
@@ -450,8 +460,11 @@ def full_coding_analysis(time_series_data, forecasting_model, forecast_horizon, 
     fcasts_protected = train_and_forecast(forecasting_model=forecasting_model, horizon_length=forecast_horizon, training_data=Train_protected, window_length=window_length)
 
     if type(forecasting_model) == lgb.sklearn.LGBMRegressor:
-        fcasts = reverse_transformation(fcasts, Train_orig, "Add Trend").T
-        fcasts_protected = reverse_transformation(fcasts_protected, Train_protected_orig, "Add Trend").T
+        fcasts = reverse_transformation(fcasts, Train_orig, "Add Trend")
+        fcasts_protected = reverse_transformation(fcasts_protected, Train_protected_orig, "Add Trend")
+
+    fcasts = post_process(fcasts, mins, means)
+    fcasts_protected = post_process(fcasts_protected, mins_protected, means_protected)
 
     # forecast accuracy results
     results_dict = forecast_accuracy_results(Test.T, fcasts, fcasts_protected)
