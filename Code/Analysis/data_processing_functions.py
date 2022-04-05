@@ -50,8 +50,7 @@ def reduce_train_test_global(train_data, window_length, h):
     Y_train = []
 
     for series in train_data:
-        train, test = series[:-h], series[-(h + window_length):]
-        x_train, y_train = train[:-1], np.roll(train, -window_length)[:-window_length]
+        x_train, y_train = series[:-1], np.roll(series, -window_length)[:-window_length]
 
         x_train = np.reshape(x_train, (-1, 1))
         temp_train = np.roll(x_train, -1)
@@ -63,13 +62,24 @@ def reduce_train_test_global(train_data, window_length, h):
         X_train.append(x_train)
         Y_train.append(y_train)
 
+    last_x = [x[-1,:] for x in X_train]
+    last_y = [y[-1] for y in Y_train]
+
+    last_window = pd.DataFrame(np.hstack([np.vstack(last_x), np.vstack(last_y)])[:,1:])
+
     X_train = np.concatenate(X_train)
     Y_train = np.concatenate(Y_train)
 
     # concatenate outcome with features
     combined = pd.DataFrame(np.hstack([X_train, Y_train.reshape(X_train.shape[0],1)]))
 
-    return combined
+    # perform per-window trend normalization (detrending) for training data and
+    # last window
+    detrender = Detrender()
+    last_window = last_window.apply(lambda x: detrender.fit_transform(x), axis=1)
+    combined = combined.apply(lambda x: detrender.fit_transform(x), axis=1)
+
+    return combined, last_window
 
 # pre-process the data using various pre-processing steps
 def pre_process(ts_data, truncate=False, log=False, transform_dict=None):
@@ -117,9 +127,13 @@ def pre_process(ts_data, truncate=False, log=False, transform_dict=None):
 
         if "windows" in transform_dict:
             # steps 4, 5: perform reduction
-            processed = reduce_train_test_global(train_data=np.array(processed), window_length=transform_dict["windows"]["window_length"], h=transform_dict["windows"]["h"])
-            # perform per-window trend normalization (detrending)
-            detrender = Detrender()
-            processed = processed.apply(lambda x: detrender.fit_transform(x), axis=1)
+            processed, last_window = reduce_train_test_global(train_data=np.array(processed), window_length=transform_dict["windows"]["window_length"], h=transform_dict["windows"]["h"])
 
     return processed
+
+# post-process the data to reverse the steps performed in pre_processing
+def post_process(ts_data, truncate=False, log=False, transform_dict=None):
+
+
+
+    return None
