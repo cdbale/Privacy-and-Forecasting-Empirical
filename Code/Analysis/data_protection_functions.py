@@ -3,7 +3,7 @@
 #####   - additive_noise_protection
 #####   - differential privacy protection
 #####   - top coding
-#####   - bottom coding 
+#####   - bottom coding
 
 ##### Author: Cameron Bale
 
@@ -70,17 +70,17 @@ def coding_protection(sensitive_data, coding_type, coding_percentage):
 
     if coding_type=="Bottom":
         # calculate coding_percentage quantile for each series
-        qs = np.quantile(sensitive_data, q=coding_percentage, axis=1)
+        qs = [np.quantile(x, q=coding_percentage) for x in sensitive_data]
 
         # apply bottom coding
-        P = pd.concat([pd.Series([val if val > qs[i] else qs[i] for val in row]) for i, row in sensitive_data.iterrows()], axis=1).T
+        P = [pd.Series([val if val > qs[i] else qs[i] for val in row]) for i, row in enumerate(sensitive_data)]
 
     elif coding_type=="Top":
         # calculate 1-coding_percentage quantile for each series
-        qs = np.quantile(sensitive_data, q=1-coding_percentage, axis=1)
+        qs = [np.quantile(x, q=1-coding_percentage) for x in sensitive_data]
 
         # apply top coding
-        P = pd.concat([pd.Series([val if val < qs[i] else qs[i] for val in row]) for i, row in sensitive_data.iterrows()], axis=1).T
+        P = [pd.Series([val if val < qs[i] else qs[i] for val in row]) for i, row in enumerate(sensitive_data)]
 
     return P
 
@@ -100,15 +100,15 @@ def additive_noise_protection(sensitive_data, num_stdev):
                 periods in the columns.
     """
 
-    # store the number of time series and the number of time periods
-    num_series, num_periods = sensitive_data.shape
+    # store the number of time series
+    num_series = len(sensitive_data)
 
     # calculate standard deviation of each series
-    sigmas = np.std(sensitive_data, axis=1)
+    sigmas = [np.std(x) for x in sensitive_data]
 
     # random normal draws to create r,
     # add to each y_i
-    P = pd.concat([(np.random.normal(loc=0, scale=sigmas[i]*num_stdev, size=num_periods) + row) for i, row in sensitive_data.iterrows()], axis=1).T
+    P = [np.random.normal(loc=0, scale=sigmas[i]*num_stdev, size=len(row)) + row for i, row in enumerate(sensitive_data)]
 
     return P
 
@@ -129,14 +129,14 @@ def DP_protection(sensitive_data, epsilon):
                 periods in the columns.
     """
 
-    # store the number of time series and the number of time periods
-    num_series, num_periods = sensitive_data.shape
+    # store the number of time series
+    num_series = len(sensitive_data)
 
     # calculate global sensitivity for each series
-    GS = sensitive_data.max(axis=1) - sensitive_data.min(axis=1)
+    GS = [x.max() - x.min() for x in sensitive_data]
 
     # For each series, add random noise sampled from 0-centered laplace
     # distribution with scale parameter = GS/epsilon
-    P = pd.concat([np.random.laplace(loc=0, scale=GS[i]/epsilon, size=num_periods) + row for i, row in sensitive_data.iterrows()], axis=1).T
+    P = [np.random.laplace(loc=0, scale=GS[i]/epsilon, size=len(row)) + row for i, row in enumerate(sensitive_data)]
 
     return P
