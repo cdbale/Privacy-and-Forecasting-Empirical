@@ -9,13 +9,14 @@ Paper examining the effects of various privacy protection methods on the forecas
    - ~~DES~~
    - ~~TES~~
 * ~~Autoregressive~~
-* ~~Light GBM~~
-* ~~Prophet~~
-* ~~NeuralProphet~~
-* ~~VAR model (have to see if scalable)~~
-* Lasso-VAR?
+* ~~LGBM - univariate~~
+* Prophet
+* NeuralProphet
+* ~~VAR model~~
+* Lasso-Var?
 * GreyKite (LinkedIn)
-* LSTM (pinball loss) - I think pinball loss is for training uncertainty forecasts. Do we want to examine these and point forecasts?
+* RNN
+* LSTM (multivariate)
 
 Code for some of these methods (in R) can be found [here](https://github.com/Mcompetitions/M4-methods) from the M4 competition.
 
@@ -23,19 +24,14 @@ Code for some of these methods (in R) can be found [here](https://github.com/Mco
 
 (want 'simple' ones)
 
-* **Additive noise**
-* **Top coding (.10, .20, .40)**
-* Bottom coding (.10, .20, .40)
+* ~~Additive noise~~
+* ~~Top coding (.10, .20, .40)~~
+* ~~Bottom coding (.10, .20, .40)~~
 * Method from Schneider and Lee (2021) - *k*-mTS
-* **Differential privacy**
-   * series-level DP for univariate methods (i.e., aggregate values released over time - use standard DP, could expand to Fourier transform/FAST)
-   * DP for global/multivariate models - consider literature on differentially private location trajectory publishing.
-* Look up some more innovative ones
-* Other methods applied to disaggregate time series?
+* ~~Differential privacy~~
 
 ### *Model Accuracy Metrics*
 
-* RMSE (root mean-squared error)
 * MAE (mean absolute error)
 
 **Goal**: determine whether forecast accuracy is better or worse for each model for each protection method.
