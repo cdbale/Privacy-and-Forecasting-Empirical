@@ -1,9 +1,9 @@
 ##### This file contains various functions used to protect
 ##### time series data. Functions include:
-#####   - additive_noise_protection
-#####   - differential privacy protection
-#####   - top coding
-#####   - bottom coding
+#####   - additive_noise_protection (additive noise)
+#####   - coding_protection (top and bottom coding)
+#####   - DP_protection (differential privacy)
+#####   - apply_data_protection (function to apply any of the above methods)
 
 ##### Author: Cameron Bale
 
@@ -108,7 +108,8 @@ def additive_noise_protection(sensitive_data, num_stdev):
 
     # random normal draws to create r,
     # add to each y_i
-    P = [np.random.normal(loc=0, scale=sigmas[i]*num_stdev, size=len(row)) + row for i, row in enumerate(sensitive_data)]
+    rng = np.random.default_rng(2022)
+    P = [rng.normal(loc=0, scale=sigmas[i]*num_stdev, size=len(row)) + row for i, row in enumerate(sensitive_data)]
 
     return P
 
@@ -137,6 +138,7 @@ def DP_protection(sensitive_data, epsilon):
 
     # For each series, add random noise sampled from 0-centered laplace
     # distribution with scale parameter = GS/epsilon
-    P = [np.random.laplace(loc=0, scale=GS[i]/epsilon, size=len(row)) + row for i, row in enumerate(sensitive_data)]
+    rng = np.random.default_rng(2022)
+    P = [rng.laplace(loc=0, scale=GS[i]/epsilon, size=len(row)) + row for i, row in enumerate(sensitive_data)]
 
     return P
