@@ -5,11 +5,15 @@
 
 ################################################################################
 
+import pickle
+import gzip
 import pandas as pd
 import numpy as np
 import sktime
+import itertools
 from sktime.forecasting.exp_smoothing import ExponentialSmoothing
-from sktime.forecasting.var import VAR
+# from sktime.forecasting.var import VAR
+from statsmodels.tsa.vector_ar.var_model import VAR
 from sktime.forecasting.arima import AutoARIMA
 from sktime.forecasting.model_selection import ForecastingGridSearchCV, ExpandingWindowSplitter
 from sktime.forecasting.compose import make_reduction
@@ -17,24 +21,271 @@ import lightgbm as lgb
 from sktime.performance_metrics.forecasting import mean_absolute_error, median_absolute_error, mean_absolute_percentage_error, MeanAbsoluteError
 from data_protection_functions import *
 from data_processing_functions import *
+from RNN_functions import *
+from darts import TimeSeries
 
+# function for forecasting with LSTM-RNN
+def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models):
+
+    num_series = len(ts_data)
+
+    # convert to type np.float32 to speed up training
+    processed = [x.astype(np.float32) for x in ts_data]
+
+    # convert index to a RangeIndex
+    for i in range(len(processed)):
+        processed[i].index = pd.RangeIndex(start=0, stop=processed[i].shape[0])
+
+    # create and remove validation set from processed
+    validation = [x.iloc[-h:] for x in processed]
+    validation = pd.DataFrame([x.reset_index(drop=True) for x in validation]).T
+    processed_noval = [x.iloc[:-h] for x in processed]
+
+    # convert to TimeSeries objects for RNN model
+    processed = [TimeSeries.from_series(x) for x in processed]
+    processed_noval = [TimeSeries.from_series(x) for x in processed_noval]
+
+    best_params = optimize_RNN(train_data=processed_noval,
+                               validation_data=validation,
+                               h=h,
+                               num_ensemble_models=num_ensemble_models,
+                               input_chunk_length=input_chunk_length,
+                               training_length=training_length,
+                               max_samples_per_ts=max_samples_per_ts)
+
+    fcasts = train_RNN(train_data=processed,
+                       h=h,
+                       num_ensemble_models=num_ensemble_models,
+                       input_chunk_length=input_chunk_length,
+                       training_length=training_length,
+                       max_samples_per_ts=max_samples_per_ts,
+                       learning_rate_=best_params['params']['learning_rate_'],
+                       n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
+                       hidden_dim_=int(best_params['params']['hidden_dim_']),
+                       batch_size_=int(best_params['params']['batch_size_']),
+                       n_epochs_=int(best_params['params']['n_epochs_']),
+                       dropout_=best_params['params']['dropout_'],
+                       L2_penalty_=best_params['params']['L2_penalty_'])
+
+    fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+
+    fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
+
+    # add correct time index back to forecasts
+    for i in range(num_series):
+        fcasts[i].index = fcast_indexes[i]
+
+    # fcasts = [pd.Series(x) for x in fcasts]
+
+    return fcasts
 
 # function to forecast with a univariate LGBM
 def univariate_lgbm_forecast(ts_data, h, param_grid):
     fcasts = []
     regressor = lgb.LGBMRegressor()
-    forecaster = make_reduction(regressor, window_length=15, strategy="recursive")
+    if h[-1]==1:
+        forecaster = make_reduction(regressor, window_length=14, strategy="recursive")
+    if h[-1]==18:
+        forecaster = make_reduction(regressor, window_length=28, strategy="recursive")
 
     for y in ts_data:
-        cv = ExpandingWindowSplitter(fh=h, initial_window=int(np.floor(0.6*len(y))), start_with_window=True)
+        cv = ExpandingWindowSplitter(fh=h, initial_window=int(np.floor(0.9*len(y))), start_with_window=True)
         gscv = ForecastingGridSearchCV(forecaster, strategy="refit", cv=cv, param_grid=param_grid, scoring=MeanAbsoluteError())
         gscv.fit(y)
         fcasts.append(gscv.predict(h))
 
     return fcasts
 
+# def multivariate_lgbm_window_length(ts_data, h, param_grid):
+#     num_series = len(ts_data)
+#
+#     # set model parameters
+#     params = {"objective": "mae",
+#               "metrics": "mae"}
+#
+#     # use cross-validation to choose best window length from param_grid
+#     maes = []
+#
+#     window_lengths = param_grid['window_length']
+#
+#     for w in window_lengths:
+#
+#         transform_dict = {"windows": {"window_length": w}, "deseasonalize": {"sp": 12, "seasonality_type": "additive"}}
+#
+#         Y_processed, last_window_dt, last_window, full_lags = pre_process(ts_data=ts_data,
+#                                                                           target_forecast_period=h,
+#                                                                           mean_normalize=True,
+#                                                                           log=True,
+#                                                                           sp=12,
+#                                                                           transform_dict=transform_dict)
+#
+#         train = Y_processed.iloc[:,:-1]
+#         label = Y_processed.iloc[:,-1]
+#         train_data = lgb.Dataset(train, label=label)
+#
+#         bst = lgb.cv(params,
+#                      train_data,
+#                      stratified=False)
+#
+#         best_mae = bst['l1-mean'][-1]
+#         maes.append(best_mae)
+#
+#     which_best = np.argmin(maes)
+#
+#     return window_lengths[which_best]
+
+def multivariate_lgbm_cv(ts_data, param_grid):
+
+    # going to have two parameters to optimize:
+    # - learning rate (lr)
+    # - num_boost_round (nbr)
+
+    param_combos = list(itertools.product(param_grid['learning_rate'],
+                                          param_grid['num_boost_round']))
+
+    mae_vals = []
+
+    train = ts_data.iloc[:,:-1]
+    label = ts_data.iloc[:,-1]
+    train_data = lgb.Dataset(train, label=label)
+
+    for p in param_combos:
+
+        # define model parameters
+        params = {"objective": "mae",
+                  "metrics": "mae",
+                  "force_col_wise": "true",
+                  "learning_rate": p[0]}
+
+        # perform cross validation using specified parameters
+        bst_vals = lgb.cv(params,
+                          train_data,
+                          num_boost_round=p[1],
+                          nfold=10,
+                          stratified=False)
+
+        mae_vals.append(bst_vals['l1-mean'][-1])
+
+    best_combo = np.argmin(mae_vals)
+
+    return param_combos[best_combo]
+
+def multivariate_lgbm_forecast(ts_data, h, last_window, num_series, best_params):
+    """
+    Function to train multivariate lgbm model. Note that the hyperparameter (window_length) chosen using cross-validation
+    is part of the pre-processing. It is important that non-processed data is input into this function.
+    """
+
+    lr = best_params[0]
+    nbr = best_params[1]
+
+    # set model parameters
+    params = {"objective": "mae",
+              "metrics": "mae",
+              "force_col_wise": "true",
+              "learning_rate": lr}
+
+    train = ts_data.iloc[:,:-1]
+    label = ts_data.iloc[:,-1]
+    train_data = lgb.Dataset(train, label=label)
+
+    bst = lgb.train(params, train_data, num_boost_round=nbr)
+
+    # fcasts = bst.predict(last_window)
+
+    # fcasts = [pd.Series(x) for x in fcasts]
+
+    # fcast_indexes = [last_window[i].index[-1]+1 for i in range(num_series)]
+
+    fcast_indexes = [np.arange(last_window[i].index[-1]+1, last_window[i].index[-1]+h+1) for i in range(num_series)]
+
+    # add correct time index back to forecasts
+    # for i in range(num_series):
+    #     fcasts[i].index = [fcast_indexes[i]]
+
+        # store forecasted value based on last window of training data
+
+    last_prediction = bst.predict(last_window)
+
+    fcasts = []
+
+    for i in range(h):
+        # add latest forecast
+        fcasts.append(last_prediction)
+        # roll window forward one period (places first value in window at the end)
+        last_window = np.roll(last_window, -1)
+        # replace the end value (used to be first value) with the latest forecast
+        last_window[:,-1] = last_prediction
+        # forecast for next period
+        last_prediction = bst.predict(last_window)
+
+    # combine forecasts into (num_series, horizon_length) shaped array
+    fcasts = np.concatenate([i.reshape(num_series, 1) for i in fcasts], axis=1)
+    fcasts = [pd.Series(x) for x in fcasts]
+
+    # add correct time index back to forecasts
+    for i in range(num_series):
+        fcasts[i].index = fcast_indexes[i]
+
+    return fcasts
+
 # function to forecast with a VAR model
 # define function for forecasting with a VAR model
+# def VAR_forecast(ts_data, h, param_grid, noisy_protection=False):
+#
+#     # get the length of each series
+#     lengths = [len(y) for y in ts_data]
+#
+#     # store the unique length values
+#     unique_lengths = np.unique(lengths)
+#
+#     # store the forecasts in an array of all forecasts using the stored series indices
+#     full_forecasts = np.zeros([len(ts_data), h])
+#
+#     for l in unique_lengths:
+#         # get the indexes of each series with the lth length
+#         Y_ids = np.nonzero(lengths == l)[0]
+#
+#         # store series in a list
+#         group = [ts_data[j].reset_index(drop=True) for j in Y_ids]
+#
+#         # convert list to TxK dataframe
+#         group = pd.concat(group, axis=1, ignore_index=True)
+#
+#         forecaster = VAR()
+#         forecaster.fit(group)
+#         y_pred = forecaster.predict(h)
+#
+#         # if noisy_protection==True:
+#         #     forecaster = VAR(maxlags=1)
+#         #     forecaster.fit(group)
+#         #     y_pred = forecaster.predict(h)
+#         # else:
+#         #     forecaster = VAR()
+#         #     cv = ExpandingWindowSplitter(fh=h, initial_window=int(np.floor(0.6*group.shape[0])), start_with_window=True)
+#         #     gscv = ForecastingGridSearchCV(forecaster, strategy="refit", cv=cv, param_grid=param_grid, scoring=MeanAbsoluteError())
+#         #     gscv.fit(group)
+#         #     print(gscv.best_params_)
+#         #     y_pred = gscv.predict(h)
+#
+#         # generate forecasts
+#
+#         # store forecasts in dataframe for all series
+#         full_forecasts[Y_ids,:] = y_pred.T
+#
+#     full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(full_forecasts.shape[0])]
+#
+#     for i in range(len(full_forecasts)):
+#         last_time = ts_data[i].index[-1]
+#         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
+#
+#     return full_forecasts
+
+# splitting function used in VAR forecast
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+
 def VAR_forecast(ts_data, h, param_grid, noisy_protection=False):
 
     # get the length of each series
@@ -46,36 +297,43 @@ def VAR_forecast(ts_data, h, param_grid, noisy_protection=False):
     # store the forecasts in an array of all forecasts using the stored series indices
     full_forecasts = np.zeros([len(ts_data), h])
 
-    for l in unique_lengths:
+    for k, l in enumerate(unique_lengths):
+
         # get the indexes of each series with the lth length
         Y_ids = np.nonzero(lengths == l)[0]
 
-        print("Group size: " + str(len(Y_ids)))
+        split_ids = split(Y_ids, 5)
 
-        # store series in a list
-        group = [ts_data[j].reset_index(drop=True) for j in Y_ids]
+        for i, j in enumerate(split_ids):
 
-        # convert list to TxK dataframe
-        group = pd.concat(group, axis=1, ignore_index=True)
+            # store series in a list
+            group = [ts_data[m].reset_index(drop=True) for m in j]
 
-        print("Group length: " + str(group.shape[0]))
+            # convert list to TxK dataframe
+            group = pd.concat(group, axis=1, ignore_index=True)
 
-        if noisy_protection==True:
-            forecaster = VAR(maxlags=1)
-            forecaster.fit(group)
-            y_pred = forecaster.predict(h)
-        else:
-            forecaster = VAR()
-            cv = ExpandingWindowSplitter(fh=h, initial_window=int(np.floor(0.6*group.shape[0])), start_with_window=True)
-            gscv = ForecastingGridSearchCV(forecaster, strategy="refit", cv=cv, param_grid=param_grid, scoring=MeanAbsoluteError())
-            gscv.fit(group)
-            print(gscv.best_params_)
-            y_pred = gscv.predict(h)
+            ####################################################
 
-        # generate forecasts
+            forecaster = VAR(endog=group)
+            results = forecaster.fit()
 
-        # store forecasts in dataframe for all series
-        full_forecasts[Y_ids,:] = y_pred.T
+            # # extract intercept coefficients
+            # intercepts = results.coefs_exog
+            # intercept_list.append(intercepts)
+
+            # number of lags in VAR model
+            lag_order = results.k_ar
+            # lag_list.append(lag_order)
+
+            # forecast nfs steps ahead using lag_order prior values
+            y_pred = results.forecast(np.array(group[-lag_order:]), steps=h)
+
+            # forecaster = VAR()
+            # forecaster.fit(group)
+            # y_pred = forecaster.predict(h)
+
+            # store forecasts in dataframe for all series
+            full_forecasts[j,:] = y_pred.T
 
     full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(full_forecasts.shape[0])]
 
@@ -86,7 +344,7 @@ def VAR_forecast(ts_data, h, param_grid, noisy_protection=False):
     return full_forecasts
 
 # general function for training a model and generating forecasts.
-def train_and_forecast(ts_data, horizon_length, forecasting_model, param_grid=None, last_window=None, noisy_protection=False):
+def train_and_forecast(ts_data, horizon_length, forecasting_model, param_grid=None, last_window=None, noisy_protection=False, rnn_options=None):
     """
     Performs model training and forecasting using the supplied model applied to
     the supplied time series data. Model-specific arguments have a default of
@@ -124,61 +382,72 @@ def train_and_forecast(ts_data, horizon_length, forecasting_model, param_grid=No
         fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
     # if using TES
     elif forecasting_model == "TES":
-        forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=12, use_boxcox=False)
+        forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=7, use_boxcox=False)
         fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
     # if using VAR
     elif forecasting_model == "VAR":
         fcasts = VAR_forecast(ts_data=ts_data, h=horizon_length, param_grid=param_grid, noisy_protection=noisy_protection)
     # if using ARIMA
     elif forecasting_model == "ARIMA":
-        forecaster = AutoARIMA(D=0, seasonal=True, sp=12, maxiter=10, suppress_warnings=True)
+        forecaster = AutoARIMA(seasonal=True, sp=12, maxiter=10, suppress_warnings=True)
         fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
     # if using univariate LGBM
     elif forecasting_model == "Univariate_LGBM":
         fcasts = univariate_lgbm_forecast(ts_data=ts_data, h=fh, param_grid=param_grid)
+    elif forecasting_model == "Multivariate_LGBM":
+        num_series = len(last_window)
+        best_params = multivariate_lgbm_cv(ts_data=ts_data, param_grid=param_grid)
+        fcasts = multivariate_lgbm_forecast(ts_data=ts_data, h=horizon_length, last_window=last_window, num_series=num_series, best_params=best_params)
+    elif forecasting_model == "RNN":
+        fcasts = RNN_forecast(ts_data=ts_data,
+                              h=horizon_length,
+                              input_chunk_length=rnn_options['input_chunk_length'],
+                              training_length=rnn_options['training_length'],
+                              max_samples_per_ts=rnn_options['max_samples_per_ts'],
+                              num_ensemble_models=rnn_options['num_ensemble_models'])
 
 ################################################################################
 
-    # if using an LGBM,
-    elif forecasting_model == "Multivariate_LGBM":
-
-        forecaster = lgb.LGBMRegressor()
-
-        # store the number of series
-        num_series = len(last_window)
-
-        # store the time indexes for the forecasts
-        fcast_indexes = [np.arange(last_window[i].index[-1]+1, last_window[i].index[-1]+horizon_length+1) for i in range(num_series)]
-
-        # separate training data and target
-        X_train, Y_train = ts_data.iloc[:,:-1], ts_data.iloc[:,-1]
-
-        # train global model
-        forecaster.fit(X_train, Y_train)
-
-        ## generate forecasts ##
-
-        # store forecasted value based on last window of training data
-        last_window = np.array(last_window)
-        last_prediction = forecaster.predict(last_window)
-
-        for i in range(horizon_length):
-            # add latest forecast
-            fcasts.append(last_prediction)
-            # roll window forward one period (places first value in window at the end)
-            last_window = np.roll(last_window, -1)
-            # replace the end value (used to be first value) with the latest forecast
-            last_window[:,-1] = last_prediction
-            # forecast for next period
-            last_prediction = forecaster.predict(last_window)
-
-        # combine forecasts into (num_series, horizon_length) shaped array
-        fcasts = np.concatenate([i.reshape(num_series, 1) for i in fcasts], axis=1)
-        fcasts = [pd.Series(x) for x in fcasts]
-
-        # add correct time index back to forecasts
-        for i in range(num_series):
-            fcasts[i].index = fcast_indexes[i]
+    # # if using an LGBM,
+    # elif forecasting_model == "Multivariate_LGBM":
+    #
+    #     forecaster = lgb.LGBMRegressor(objective="mae")
+    #
+    #     # store the number of series
+    #     num_series = len(last_window)
+    #
+    #     # store the time indexes for the forecasts
+    #     fcast_indexes = [np.arange(last_window[i].index[-1]+1, last_window[i].index[-1]+horizon_length+1) for i in range(num_series)]
+    #
+    #     # separate training data and target
+    #     X_train, Y_train = ts_data.iloc[:,:-1], ts_data.iloc[:,-1]
+    #
+    #     # train global model
+    #     forecaster.fit(X_train, Y_train)
+    #
+    #     ## generate forecasts ##
+    #
+    #     # store forecasted value based on last window of training data
+    #     last_window = np.array(last_window)
+    #     last_prediction = forecaster.predict(last_window)
+    #
+    #     for i in range(horizon_length):
+    #         # add latest forecast
+    #         fcasts.append(last_prediction)
+    #         # roll window forward one period (places first value in window at the end)
+    #         last_window = np.roll(last_window, -1)
+    #         # replace the end value (used to be first value) with the latest forecast
+    #         last_window[:,-1] = last_prediction
+    #         # forecast for next period
+    #         last_prediction = forecaster.predict(last_window)
+    #
+    #     # combine forecasts into (num_series, horizon_length) shaped array
+    #     fcasts = np.concatenate([i.reshape(num_series, 1) for i in fcasts], axis=1)
+    #     fcasts = [pd.Series(x) for x in fcasts]
+    #
+    #     # add correct time index back to forecasts
+    #     for i in range(num_series):
+    #         fcasts[i].index = fcast_indexes[i]
 
 ################################################################################
 
@@ -203,9 +472,6 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     ############## Comparison 1 ###############
     ##### Global MAPE and MdAPE
 
-    mape_global = mean_absolute_percentage_error(test_data, original_forecasts, symmetric=False, multioutput="uniform_average")
-    mape_global_protected = mean_absolute_percentage_error(test_data, protected_forecasts, symmetric=False, multioutput="uniform_average")
-
     mae_global = mean_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
     mdae_global = median_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
 
@@ -228,7 +494,7 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     collapsed_protected = pd.concat([row for i, row in protected_forecasts.iterrows()], ignore_index=True)
     collapsed_test = pd.concat([row for i, row in test_data.iterrows()], ignore_index=True)
 
-    # mean absolute percentage error for original forecasts (without adjustment)
+    # mean absolute error for original forecasts (without adjustment)
     mae_up = mean_absolute_error(collapsed_test[adjusted_up], collapsed_original[adjusted_up])
     mae_down = mean_absolute_error(collapsed_test[adjusted_down], collapsed_original[adjusted_down])
 
@@ -236,13 +502,13 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     mae_up_protected = mean_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
     mae_down_protected = mean_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
 
-    # median absolute percentage error for original forecasts (without adjustment)
-    mdae_up = median_absolute_error(collapsed_test[adjusted_up], collapsed_original[adjusted_up])
-    mdae_down = median_absolute_error(collapsed_test[adjusted_down], collapsed_original[adjusted_down])
-
-    # median absolute percentage error for protected forecasts (with adjustment)
-    mdae_up_protected = median_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
-    mdae_down_protected = median_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
+    # # median absolute error for original forecasts (without adjustment)
+    # mdae_up = median_absolute_error(collapsed_test[adjusted_up], collapsed_original[adjusted_up])
+    # mdae_down = median_absolute_error(collapsed_test[adjusted_down], collapsed_original[adjusted_down])
+    #
+    # # median absolute error for protected forecasts (with adjustment)
+    # mdae_up_protected = median_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
+    # mdae_down_protected = median_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
 
     ############################################################################
 
@@ -333,12 +599,6 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     # }
 
     results_dict = {
-        "Global MAPE": mape_global,
-        "Global Protected MAPE": mape_global_protected,
-        "Global MAE": mae_global,
-        "Global Protected MAE": mae_global_protected,
-        "Global MdAE": mdae_global,
-        "Global Protected MdAE": mdae_global_protected,
         "Original MAE Up": mae_up,
         "Protected MAE Up": mae_up_protected,
         "Original MAE Down": mae_down,
@@ -353,7 +613,7 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
 
     return results_dict
 
-def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_stationary=False, seasonality_type=None, sp=None, remove_seasonality=False, mean_normalize=False, log=False, param_grid=None, noisy_protection=False):
+def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_stationary=False, seasonality_type=None, sp=None, remove_seasonality=False, add_one=False, mean_normalize=False, detrend=False, log=False, param_grid=None, noisy_protection=False, rnn_options=None, round=False):
 
     transform_dict = {}
     # if reduced data is to be created,
@@ -363,16 +623,23 @@ def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_sta
     if remove_seasonality:
         transform_dict["deseasonalize"] = {"sp":sp, "seasonality_type":seasonality_type}
 
+    # if forecasting_model == "Multivariate_LGBM":
+    #     best_window_length = multivariate_lgbm_window_length(ts_data=Y, h=h, param_grid=param_grid)
+    #     transform_dict["windows"] = {"window_length":best_window_length}
+
     # perform pre-processing, output the processed time series, the last window
     # of data if using reduction, and the last window with the trend to use when
     # reversing per-window normalization
-    Y_processed, Y_last_window, Y_last_window_trend, full_lags = pre_process(ts_data=Y,
-                                                                             mean_normalize=mean_normalize,
-                                                                             log=log,
-                                                                             make_stationary=make_stationary,
-                                                                             sp=sp,
-                                                                             transform_dict=transform_dict)
-                                                                             
+
+    Y_processed, Y_last_window, Y_last_window_trend, pre_detrend, full_lags = pre_process(ts_data=Y,
+                                                                                          target_forecast_period=h,
+                                                                                          mean_normalize=mean_normalize,
+                                                                                          log=log,
+                                                                                          detrend=detrend,
+                                                                                          make_stationary=make_stationary,
+                                                                                          sp=sp,
+                                                                                          transform_dict=transform_dict)
+
     # Y_protected_processed, Y_protected_last_window, Y_protected_last_window_trend = pre_process(ts_data=Y_protected,
     #                                                                                             mean_normalize=mean_normalize,
     #                                                                                             log=log,
@@ -386,7 +653,8 @@ def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_sta
                                    forecasting_model=forecasting_model,
                                    last_window=Y_last_window,
                                    param_grid=param_grid,
-                                   noisy_protection=noisy_protection)
+                                   noisy_protection=noisy_protection,
+                                   rnn_options=rnn_options)
 
     # forecasts_protected = train_and_forecast(ts_data=Y_protected_processed,
     #                                          horizon_length=h,
@@ -398,13 +666,17 @@ def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_sta
     # post-process the forecasts
     forecasts = post_process(full_ts_data=Y,
                              forecasts=forecasts,
+                             target_forecast_period=h,
                              last_window_with_trend=Y_last_window_trend,
-                             full_lags=full_lags,
+                             pre_detrend=pre_detrend,
                              mean_normalize=mean_normalize,
+                             detrend=detrend,
                              log=log,
                              make_stationary=make_stationary,
                              sp=sp,
-                             transform_dict=transform_dict)
+                             transform_dict=transform_dict,
+                             full_lags=full_lags,
+                             round=round)
 
     # forecasts_protected = post_process(full_ts_data=Y_protected,
     #                                    forecasts=forecasts_protected,
@@ -423,29 +695,3 @@ def full_forecast_analysis(Y, h, forecasting_model, window_length=None, make_sta
     # results = forecast_results(test_data=Test, original_forecasts=forecasts_original, protected_forecasts=forecasts_protected)
 
     return forecasts
-
-# # generate results for all forecasting models under one protection method
-# def all_models_one_protection(full_data, h, sp=None, window_length=None, coding_type=None, coding_percentage=None, num_stdev=None, epsilon=None, bias_adjust_forecasts=True):
-#
-#     # create train and test data
-#     Y = [x.iloc[:-h] for x in full_data]
-#     Test = [x.iloc[-h:] for x in full_data]
-#
-#     # create protected version of Y
-#     Y_protected = apply_data_protection(sensitive_data=Y, coding_type=coding_type, coding_percentage=coding_percentage, num_stdev=num_stdev, epsilon=epsilon)
-#
-#     # define forecasting models
-#     ses = ExponentialSmoothing(use_boxcox=False)
-#     des = ExponentialSmoothing(trend="additive", use_boxcox=False)
-#     tes = ExponentialSmoothing(trend="additive", seasonal="additive", sp=sp, use_boxcox=False)
-#     lgbm = lgb.LGBMRegressor()
-#
-#     ses_results = full_forecast_analysis(Y=Y, Y_protected=Y_protected, Test=Test, forecasting_model=ses, h=h, truncate=True, log=True, coding_type=coding_type, coding_percentage=coding_percentage, num_stdev=num_stdev, epsilon=epsilon, bias_adjust_forecasts=bias_adjust_forecasts)
-#
-#     des_results = full_forecast_analysis(Y=Y, Y_protected=Y_protected, Test=Test, forecasting_model=des, h=h, truncate=True, log=True, coding_type=coding_type, coding_percentage=coding_percentage, num_stdev=num_stdev, epsilon=epsilon, bias_adjust_forecasts=bias_adjust_forecasts)
-#
-#     tes_results = full_forecast_analysis(Y=Y, Y_protected=Y_protected, Test=Test, forecasting_model=tes, h=h, truncate=True, log=True, coding_type=coding_type, coding_percentage=coding_percentage, num_stdev=num_stdev, epsilon=epsilon, bias_adjust_forecasts=bias_adjust_forecasts)
-#
-#     lgbm_results = full_forecast_analysis(Y=Y, Y_protected=Y_protected, Test=Test, forecasting_model=lgbm, h=h, truncate=True, mean_normalize=True, log=True, sp=sp, seasonality_type="additive", remove_seasonality=True, window_length=window_length, coding_type=coding_type, coding_percentage=coding_percentage, num_stdev=num_stdev, epsilon=epsilon, bias_adjust_forecasts=bias_adjust_forecasts)
-#
-#     return [ses_results, des_results, tes_results, lgbm_results]

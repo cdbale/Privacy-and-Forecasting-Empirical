@@ -1,0 +1,1841 @@
+---
+title: "Data-Exploration-M3-Monthly-Micro"
+author: "Cameron Bale"
+date: "6/3/2022"
+output: html_document
+---
+
+## This file contains exploratory analysis of the M3 Monthly Micro time series.
+
+Import libraries.
+```{r}
+library(tidyverse)
+library(tsfeatures)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(forecast)
+library(hrbrthemes)
+```
+
+Import data. Start with the full data, then use just the training data for examining features.
+```{r}
+ts_data <- read.csv("../../Data/Train/Clean/full_m3_monthly_micro_clean.csv")
+```
+
+Correlation statistics and histogram for the M3 monthly micro data. (This is the correlation of the series taken over the length of the shortest series.)
+```{r}
+ts_data <- as.list(as.data.frame(t(ts_data)))
+
+ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+
+ts_short <- lapply(ts_data, function(x) tail(x, 67))
+
+# ts_short <- ts_data[,1:67]
+
+ts_short <- as.data.frame(ts_short)
+
+cmat <- cor(ts_short)
+
+corrs <- cmat[upper.tri(cmat)]
+
+mean(abs(corrs))
+
+median(abs(corrs))
+
+hist(abs(corrs))
+```
+
+***
+Look at correlations in subset of wikipedia data.
+```{r}
+wiki_data <- read.csv("../../Data/Train/Clean/full_wikipedia_clean.csv")
+
+wiki_data <- as.data.frame(t(wiki_data))
+
+cmat_wiki <- cor(wiki_data)
+
+corrs_wiki <- cmat_wiki[upper.tri(cmat_wiki)]
+
+mean(abs(corrs_wiki))
+
+median(abs(corrs_wiki))
+
+hist(abs(corrs_wiki))
+```
+
+
+***
+
+Summary statistics.
+```{r}
+lengths = sapply(ts_data, length)
+
+# print the unique lengths
+print("Series lengths:")
+unique_lengths <- unique(lengths)
+unique_lengths
+
+# how many series correspond to each length
+print("Number of Series per Length:")
+number_series_per_length <- sapply(unique(lengths), function(x) sum(lengths==x))
+number_series_per_length
+
+# number of series
+print("Number of Series:")
+sum(number_series_per_length)
+
+# minimum value across all series
+print("Min value across all series:")
+min(sapply(ts_data, min))
+
+# maximum value across all series
+print("Max value across all series:")
+max(sapply(ts_data, max))
+```
+
+***
+
+## Extracting time series features. Examining feature distributions under strong protection.
+
+Import data. Start with the training data for `h=1`.
+```{r}
+# read in the data
+original_data <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
+
+# original_data <- read.csv("../../Data/Train/Clean/full_wikipedia_clean.csv")
+
+# convert to a list of series
+ts_data <- as.list(as.data.frame(t(original_data)))
+  
+# remove NA values from each series
+ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+  
+# convert each series to a TS object with appropriate seasonal frequency
+ts_data <- lapply(ts_data, function(x) ts(x, frequency=12))
+
+# ts_data <- lapply(ts_data, function(x) x+1)
+
+# take the log of the data
+ts_data <- lapply(ts_data, log)
+
+# calculate desired features
+ts_features <- tsfeatures(ts_data, features=c("entropy", "stl_features", "acf_features"))
+  
+f_orig <- ts_features %>% select(entropy, trend, seasonal_strength, x_acf1)
+
+# perform pca on desired features
+f_pca <- f_orig %>% prcomp(center=TRUE, scale=TRUE)
+
+# variable to indicate protected vs. original data
+is_protected <- rep(c(0,1), each=nrow(original_data))
+
+is_protected <- factor(is_protected, levels=c(0,1), labels=c("Original", "Protected"))
+```
+
+```{r}
+ts_features
+```
+
+```{r}
+ts_features %>%
+  ggplot(aes(x = entropy)) +
+  geom_density()
+```
+
+Convert projected original data to tibble.
+```{r}
+orig <- as_tibble(f_pca$x) %>%
+  bind_cols(f_orig)
+```
+
+View PCA summary.
+```{r}
+summary(f_pca)
+```
+
+View matrix of variable loadings.
+```{r}
+f_pca$rotation
+```
+
+***
+
+Function to import protected data and produce a side-by-side comparison of a protected series.
+```{r}
+protected_series_plot <- function(protection_method, series_number, which_to_plot, ylims, main_title){
+  
+  td_original <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
+  td_protected <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", protection_method, ".csv"))
+  
+  td_original <- as.list(as.data.frame(t(td_original)))
+  td_protected <- as.list(as.data.frame(t(td_protected)))
+  
+  td_original <- lapply(td_original, function(x) x[!is.na(x)])
+  td_protected <- lapply(td_protected, function(x) x[!is.na(x)])
+  
+  s_original <- td_original[[series_number]]
+  s_protected <- td_protected[[series_number]]
+  
+  s_original <- bind_cols("values"=s_original, "time"=1:length(s_original))
+  s_protected <- bind_cols("values"=s_protected, "time"=1:length(s_protected))
+  
+  is_protected <- rep(c(0,1), each=nrow(s_original))
+  
+  s <- bind_rows(s_original, s_protected) %>% bind_cols("protected"=is_protected)
+  
+  plt <- s %>%
+    filter(protected %in% which_to_plot) %>%
+    ggplot(aes(x=time, y=values, color=factor(protected))) +
+    geom_line(size=.7) +
+    geom_point() +
+    theme_classic() +
+    scale_colour_manual(labels = c("Original", "Protected"), values=c("#66CCFF", "#3399CC")) +
+    labs(x="Time",
+         y="Y",
+         title=main_title,
+         color="Series") +
+    ylims
+  
+  return(plt)
+  
+}
+```
+
+```{r}
+protected_series_plot("DP_1", 1, c(0), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
+```
+
+```{r}
+protected_series_plot("DP_1", 1, c(0,1), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
+```
+
+```{r}
+protected_series_plot("AN_1", 1, main_title = "Original vs. AN 1")
+```
+
+```{r}
+protected_series_plot("Top_0.4", 1, c(0), ylim(0, 10000), main_title = "Original Series vs. Top Coded Series (40%)")
+```
+
+```{r}
+protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top Coded Series (40%)")
+```
+
+```{r}
+protected_series_plot("Bottom_0.2", 1, main_title = "Original vs. Bottom 0.2")
+```
+
+***
+
+Plot change in accuracy for models across differential privacy parameters.
+```{r}
+all_dp <- read_csv("../../Outputs/Tables/DP.csv")
+```
+
+```{r}
+all_dp <- all_dp %>%
+  select(Model, Original_1, contains("h1_")) %>%
+  gather(key="epsilon", value="mae", -Model) %>%
+  mutate(epsilon = factor(epsilon, levels = c("h1_0.1", "h1_1", "h1_4.6", "h1_10", "h1_20", "Original_1"), labels = c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original")))
+```
+
+```{r}
+all_dp %>%
+  ggplot(aes(x = epsilon, y = mae, color=Model)) +
+  geom_point(size=3) +
+  geom_line()
+```
+
+***
+
+Function to import protected data and perform pca.
+```{r}
+perform_pca <- function(pca_object, protection_method){
+  
+  protected_data <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", protection_method, ".csv"))
+  
+  td <- as.list(as.data.frame(t(protected_data)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=12))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  features <- tsfeatures(td, features=c("entropy", "stl_features", "acf_features"))
+  
+  f <- features %>% select(entropy, trend, seasonal_strength, x_acf1)
+  
+  f_projected <- predict(pca_object, f)
+  
+  f_projected <- as_tibble(f_projected) %>% bind_cols(f)
+  
+  return(f_projected)
+  
+}
+```
+
+Get PCA results for strong protection.
+```{r}
+dp_strong <- perform_pca(f_pca, "DP_1")
+an_strong <- perform_pca(f_pca, "AN_2")
+top_strong <- perform_pca(f_pca, "Top_0.4")
+bottom_strong <- perform_pca(f_pca, "Bottom_0.4")
+```
+
+View distribution of entropy in feature spaces.
+```{r}
+dp_plot_strong <- orig %>%
+  bind_rows(dp_strong) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+dp_plot_strong
+```
+
+```{r}
+an_plot_strong <- orig %>%
+  bind_rows(an_strong) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+an_plot_strong
+```
+
+```{r}
+top_plot_strong <- orig %>%
+  bind_rows(top_strong) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+top_plot_strong
+```
+
+```{r}
+bottom_plot_strong <- orig %>%
+  bind_rows(bottom_strong) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+bottom_plot_strong
+```
+
+Combine entropy plots.
+```{r fig.width=10, fig.height=10}
+combined_spec_entropy_plot_strong <- ggarrange(dp_plot_strong, an_plot_strong, top_plot_strong, bottom_plot_strong,
+          ncol=2, nrow=2,
+          labels = c("A", "B", "C", "D"),
+          common.legend=TRUE, legend='bottom')
+
+combined_spec_entropy_plot_strong
+```
+
+Save spectral entropy plots.
+```{r}
+pdf("../../Outputs/figures/entropy_plot_strong_protection.pdf")
+combined_spec_entropy_plot_strong
+dev.off()
+
+png("../../Outputs/figures/entropy_plot_strong_protection.png")
+combined_spec_entropy_plot_strong
+dev.off()
+```
+
+***
+
+Repeat for weak protection.
+
+## Extracting time series features. Examining feature distributions under 'weak' protection.
+
+Get PCA results for weak protection.
+```{r}
+dp_weak <- perform_pca(f_pca, "DP_20")
+an_weak <- perform_pca(f_pca, "AN_0.5")
+top_weak <- perform_pca(f_pca, "Top_0.1")
+bottom_weak <- perform_pca(f_pca, "Bottom_0.1")
+```
+
+View distribution of entropy in feature spaces.
+```{r}
+dp_plot_weak <- orig %>%
+  bind_rows(dp_weak) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+dp_plot_weak
+```
+
+```{r}
+an_plot_weak <- orig %>%
+  bind_rows(an_weak) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+an_plot_weak
+```
+
+```{r}
+top_plot_weak <- orig %>%
+  bind_rows(top_weak) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+top_plot_weak
+```
+
+```{r}
+bottom_plot_weak <- orig %>%
+  bind_rows(bottom_weak) %>%
+  bind_cols(is_protected = factor(is_protected)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_protected) +
+  ylim(c(-3.5,2.5))+
+  xlim(c(-4,4)) +
+  labs(col="Spectral Entropy")
+
+bottom_plot_weak
+```
+
+Combine entropy plots.
+```{r fig.width=10, fig.height=10}
+combined_spec_entropy_plot_weak <- ggarrange(dp_plot_weak, an_plot_weak, top_plot_weak, bottom_plot_weak,
+          ncol=2, nrow=2,
+          labels = c("A", "B", "C", "D"),
+          common.legend=TRUE, legend='bottom')
+
+combined_spec_entropy_plot_weak
+```
+
+Save spectral entropy plots.
+```{r}
+pdf("../../Outputs/figures/entropy_plot_weak_protection.pdf")
+combined_spec_entropy_plot_weak
+dev.off()
+
+png("../../Outputs/figures/entropy_plot_weak_protection.png")
+combined_spec_entropy_plot_weak
+dev.off()
+```
+
+***
+
+## View distributions of time series features using boxplots.
+
+Create data for plotting.
+```{r}
+method <- c("Original", "DP", "AN", "Top", "Bottom")
+method <- rep(method, each=474)
+method <- factor(method, levels=c("Original", "DP", "AN", "Top", "Bottom"), labels = c("Original", "DP", "AN", "Top", "Bottom"))
+```
+
+Create data containing time series characteristic under all protection methods.
+```{r}
+bp_data_strong <- orig %>%
+  bind_rows(dp_strong, an_strong, top_strong, bottom_strong) %>%
+  select(entropy, trend, seasonal_strength, x_acf1) %>%
+  bind_cols(method=factor(method))
+```
+
+Collapse data for plotting.
+```{r}
+gathered_bp_data_strong <- bp_data_strong %>%
+  gather(key = "Characteristic", value = "Value", -method) %>%
+  mutate(Characteristic = factor(Characteristic, 
+                                 levels=c("entropy", "trend", "seasonal_strength", "x_acf1"),
+                                 labels=c("Spectral Entropy", "Strength of Trend", "Strength of Seasonality", "ACF")))
+```
+
+Plot for DP characteristics under strong protection.
+```{r}
+attributes_plot_strong <- gathered_bp_data_strong %>%
+  filter(method %in% c("Original", "DP")) %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic) +
+  ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       title = "Distributions of Time Series Characteristics In Original Data vs. DP (\u03f5 = 1) Data")
+
+attributes_plot_strong
+```
+
+Plot for Top/bottom coding characteristics under strong protection.
+```{r}
+attributes_plot_strong <- gathered_bp_data_strong %>%
+  filter(method %in% c("Original", "Top", "Bottom")) %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic) +
+  ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       title = "Time Series Characteristics in Original Series vs. Top/Bottom-Coded (40%)")
+
+attributes_plot_strong
+```
+
+Save characteristics plot under strong protection.
+```{r}
+pdf("../../Outputs/figures/characteristics_plot_strong.pdf")
+attributes_plot_strong
+dev.off()
+
+png("../../Outputs/figures/characteristics_plot_strong.png")
+attributes_plot_strong
+dev.off()
+```
+
+ANOVA test for difference in mean entropy under strong protection.
+```{r}
+anova_strong <- gathered_bp_data_strong %>%
+  filter(Characteristic=="Spectral Entropy") %>%
+  aov(Value ~ method, data=.)
+
+summary(anova_strong)
+
+TukeyHSD(anova_strong)
+```
+
+ANOVA test for difference in mean strength of trend under strong protection.
+```{r}
+anova_strong <- gathered_bp_data_strong %>%
+  filter(Characteristic=="Strength of Trend") %>%
+  aov(Value~method, data=.)
+
+summary(anova_strong)
+
+TukeyHSD(anova_strong)
+```
+
+ANOVA test for difference in mean strength of seasonality under strong protection.
+```{r}
+anova_strong <- gathered_bp_data_strong %>%
+  filter(Characteristic=="Strength of Seasonality") %>%
+  aov(Value~method, data=.)
+
+summary(anova_strong)
+
+TukeyHSD(anova_strong)
+```
+
+ANOVA test for difference in mean ACF under strong protection.
+```{r}
+anova_strong <- gathered_bp_data_strong %>%
+  filter(Characteristic=="ACF") %>%
+  aov(Value~method, data=.)
+
+summary(anova_strong)
+
+TukeyHSD(anova_strong)
+```
+
+***
+
+Repeat for weak protection.
+```{r}
+bp_data_weak <- orig %>%
+  bind_rows(dp_weak, an_weak, top_weak, bottom_weak) %>%
+  select(entropy, trend, seasonal_strength, x_acf1) %>%
+  bind_cols(method=factor(method)) %>%
+  filter(method != "AN")
+```
+
+Collapse data for plotting.
+```{r}
+gathered_bp_data_weak <- bp_data_weak %>%
+  gather(key = "Characteristic", value = "Value", -method) %>%
+  mutate(Characteristic = factor(Characteristic, 
+                                 levels=c("entropy", "trend", "seasonal_strength", "x_acf1"),
+                                 labels=c("Spectral Entropy", "Strength of Trend", "Strength of Seasonality", "ACF")))
+```
+
+Plot for characteristics under strong protection.
+```{r}
+attributes_plot_weak <- gathered_bp_data_weak %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic) +
+  ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       title = "Time Series Characteristics Under Weak Data Protection")
+
+attributes_plot_weak
+```
+
+Save characteristics plot under weak protection.
+```{r}
+pdf("../../Outputs/figures/characteristics_plot_weak.pdf")
+attributes_plot_weak
+dev.off()
+
+png("../../Outputs/figures/characteristics_plot_weak.png")
+attributes_plot_weak
+dev.off()
+```
+
+ANOVA test for difference in mean entropy under weak protection.
+```{r}
+anova_weak <- gathered_bp_data_weak %>%
+  filter(Characteristic=="Spectral Entropy") %>%
+  aov(Value ~ method, data=.)
+
+summary(anova_weak)
+
+TukeyHSD(anova_weak)
+```
+
+ANOVA test for difference in mean strength of trend under strong protection.
+```{r}
+anova_weak <- gathered_bp_data_weak %>%
+  filter(Characteristic=="Strength of Trend") %>%
+  aov(Value~method, data=.)
+
+summary(anova_weak)
+
+TukeyHSD(anova_weak)
+```
+
+ANOVA test for difference in mean strength of seasonality under strong protection.
+```{r}
+anova_weak <- gathered_bp_data_weak %>%
+  filter(Characteristic=="Strength of Seasonality") %>%
+  aov(Value~method, data=.)
+
+summary(anova_weak)
+
+TukeyHSD(anova_weak)
+```
+
+ANOVA test for difference in mean ACF under strong protection.
+```{r}
+anova_weak <- gathered_bp_data_weak %>%
+  filter(Characteristic=="ACF") %>%
+  aov(Value~method, data=.)
+
+summary(anova_weak)
+
+TukeyHSD(anova_weak)
+```
+
+***
+
+Examine adjustment direction and magnitude of adjustment as they relate to changes in forecast accuracy.
+```{r}
+adj_results <- read_csv("../../Outputs/Tables/adjustment_results.csv")
+```
+
+Reformat data.
+```{r}
+adj_results <- adj_results %>%
+  gather(key="name", value="value", -Values) %>%
+  mutate(name = gsub("Multivariate_LGBM", "LGBM", name)) %>%
+  separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
+  separate(Values, c("Measure", "Direction"), sep="_") %>%
+  spread(key="Measure", value="value")
+```
+
+Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "DP", Parameter==20) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction)) %>%
+  filter(Direction %in% c("Up", "Down"),
+         Model %in% c("SES", "DES"))
+```
+
+Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Top", Parameter==0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction)) %>%
+  filter(Direction %in% c("None"),
+         Model %in% c("SES", "DES", "TES"))
+```
+
+Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Bottom", Parameter==0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction)) %>%
+  filter(Direction %in% c("Up", "Down")) %>%
+  filter(Model %in% c("SES", "DES", "TES"))
+```
+
+Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
+```{r}
+adj_results %>%
+  filter(Model %in% c("SES", "DES", "TES"), Horizon == "h1", Protection == "Top", Parameter==0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction)) %>%
+  filter(Direction %in% c("Up", "Down"))
+```
+
+```{r}
+adj_results %>%
+  filter(Model %in% c("SES", "DES", "TES"), Horizon == "h1", Protection == "Bottom", Parameter==0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction)) %>%
+  filter(Direction %in% c("Up", "Down"))
+```
+
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Top", Parameter == 0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Bottom", Parameter == 0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+*** 
+
+Same tables as above but for weak protection.
+
+Differential privacy.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "DP", Parameter == 20) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Additive noise.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "AN", Parameter == 0.5) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Top coding.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Top", Parameter == 0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Bottom coding.
+```{r}
+adj_results %>%
+  filter(Horizon == "h1", Protection == "Bottom", Parameter == 0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+***
+
+### Repeat for h=18.
+
+Repeat for h = 18.
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "DP", Parameter == 0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "AN", Parameter == 2) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "Top", Parameter == 0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "Bottom", Parameter == 0.4) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+*** 
+
+Same tables as above but for weak protection.
+
+Differential privacy.
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "DP", Parameter == 20) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Additive noise.
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "AN", Parameter == 0.5) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Top coding.
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "Top", Parameter == 0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+Bottom coding.
+```{r}
+adj_results %>%
+  filter(Horizon == "h18", Protection == "Bottom", Parameter == 0.1) %>%
+  select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
+  arrange(Model, desc(Direction))
+```
+
+
+
+
+
+<!-- Examine accuracy plotted on PCs for SES, TES. Correlation for RNN. -->
+<!-- ```{r} -->
+<!-- adj_results <- read_csv("../../Outputs/Tables/DP_ts_specific.csv") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- adj_results %>% -->
+<!--   select(SES_DP_0.1) %>% -->
+<!--   bind_cols(dp_strong) %>% -->
+<!--   ggplot(aes(x = PC1, y = PC2, color=log(SES_DP_0.1))) + -->
+<!--   geom_point() -->
+
+<!-- orig1 <- orig %>%  -->
+<!--   bind_cols("MAE" = adj_results$TES_original) -->
+
+<!-- orig2 <- orig %>% -->
+<!--   bind_cols("MAE" = adj_results$RNN_original) -->
+
+<!-- dp_strong1 <- dp_strong %>% -->
+<!--   bind_cols("MAE" = adj_results$TES_DP_0.1) -->
+
+<!-- dp_strong2 <- dp_strong %>% -->
+<!--   bind_cols("MAE" = adj_results$RNN_DP_0.1) -->
+
+<!-- orig1 %>%  -->
+<!--   bind_rows(orig2) %>% -->
+<!--   bind_cols(is_rnn = factor(rep(c("TES","RNN"), each=474))) %>% -->
+<!--   ggplot(aes(x=PC1, y=PC2)) + -->
+<!--   geom_point(aes(col=log(MAE)), size=2) + -->
+<!--   facet_wrap(~is_rnn) + -->
+<!--   ylim(c(-3.5,2.5))+ -->
+<!--   xlim(c(-4,4)) + -->
+<!--   labs(col="Log MAE") -->
+
+<!-- dp_strong1 %>%  -->
+<!--   bind_rows(dp_strong2) %>% -->
+<!--   bind_cols(is_rnn = factor(rep(c("TES","RNN"), each=474))) %>% -->
+<!--   ggplot(aes(x=PC1, y=PC2, color=log(MAE))) + -->
+<!--   geom_point(size=2) + -->
+<!--   facet_wrap(~is_rnn) + -->
+<!--   labs(col="Log MAE") + -->
+<!--   scale_colour_gradient(low="green", high="red") -->
+
+<!-- orig1 %>%  -->
+<!--   bind_rows(dp_strong1) %>% -->
+<!--   bind_cols(is_protected = factor(is_protected)) %>% -->
+<!--   ggplot(aes(x=PC1, y=PC2)) + -->
+<!--   geom_point(aes(col=log(MAE)), size=2) + -->
+<!--   facet_wrap(~is_protected) + -->
+<!--   ylim(c(-3.5,2.5))+ -->
+<!--   xlim(c(-4,4)) + -->
+<!--   labs(col="Log MAE") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- dp_strong -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- orig -->
+<!-- ``` -->
+
+
+
+***
+
+##Examine how exponential smoothing parameters change under 'strong' data protection.
+
+Function to import and process differentially private training data.
+```{r}
+dp_data_process <- function(dp_param){
+  dp <- read_csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", dp_param, ".csv"))
+  
+  dp <- as.list(as.data.frame(t(dp)))
+  
+  dp <- lapply(dp, function(x) x[!is.na(x)])
+  
+  dp <- lapply(dp, function(x) ts(x, frequency=12))
+  
+  dp <- lapply(dp, function(x) ifelse(x >= 1, x, 1))
+  
+  dp <- lapply(dp, log)
+  
+  return(dp)
+}
+```
+
+```{r}
+dp_0_1 <- dp_data_process("DP_0.1")
+dp_1 <- dp_data_process("DP_1")
+dp_4_6 <- dp_data_process("DP_4.6")
+dp_10 <- dp_data_process("DP_10")
+dp_20 <- dp_data_process("DP_20")
+```
+
+Which series to plot.
+```{r}
+snum = 3
+```
+
+Fit exponential smoothing models on the first series.
+```{r}
+mod_ses <- ets(dp_1[[snum]], model="ANN")
+mod_des <- ets(dp_1[[snum]], model="AAN")
+mod_tes <- ets(dp_1[[snum]], model="AAA")
+```
+
+Import exponential smoothing forecasts.
+```{r}
+# ses_forecasts <- read_csv("../../Outputs/Forecasts/SES_h1_DP_1.csv")
+# ses_fitted <- c(mod_ses$fitted, log(ses_forecasts$`2`))
+# 
+# des_forecasts <- read_csv("../../Outputs/Forecasts/DES_h1_DP_1.csv")
+# des_fitted <- c(des_fvals, log(des_forecasts$`2`))
+# 
+# des_fitted
+```
+
+Plot SES vs. data.
+```{r}
+ses_dp <- tibble(y = dp_1[[snum]], 
+                 y_hat_ses = mod_ses$fitted, 
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+  scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="SES") +
+  theme(plot.title=element_text(size=12))
+
+des_dp <- tibble(y = dp_1[[snum]], 
+                 y_hat_des = mod_des$fitted,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DES")+
+  theme(plot.title=element_text(size=12))
+
+tes_dp <- tibble(y = dp_1[[snum]], 
+                 y_hat_tes = mod_tes$fitted,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="TES")+
+  theme(plot.title=element_text(size=12))
+
+mae <- function(y, yhat){
+  return(mean(abs(y - yhat)))
+}
+
+prot_y <- dp_1[[snum]]
+
+mae_vals <- tibble("SES"=mae(prot_y, mod_ses$fitted), "DES"=mae(prot_y, mod_des$fitted), "TES"=mae(prot_y, mod_tes$fitted)) %>%
+  gather(key="Model", value="MAE")
+
+mae_plot <- mae_vals %>%
+  ggplot(aes(x = factor(Model, levels=c("SES", "DES", "TES")), y = MAE)) +
+  geom_col(fill = "#3399CC") +
+  labs(x = "Model") +
+  geom_text(aes(label = round(MAE, 2)), vjust=-0.5) +
+  ylim(0, 3)
+
+combined_exp_smooth_plot_protected <- ggarrange(ses_dp, des_dp, tes_dp, mae_plot,
+          ncol=2, nrow=2,
+          labels = c("", "", "", ""),
+          common.legend=TRUE, legend='bottom')
+
+annotate_figure(combined_exp_smooth_plot_protected, top = text_grob("Exponential Smoothing Fitted Values Using Protected Data (DP (\u03f5 = 1))", size=14, face="bold"))
+```
+
+```{r}
+ses_dp <- tibble(y = ts_data[[snum]], 
+                 y_hat_ses = mod_ses$fitted,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y=y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="SES") +
+  theme(plot.title=element_text(size=12)) +
+  ylim(4, 10)
+
+des_dp <- tibble(y = ts_data[[snum]], 
+                 y_hat_des = mod_des$fitted,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DES") +
+  theme(plot.title=element_text(size=12)) +
+  ylim(4, 10)
+
+tes_dp <- tibble(y = ts_data[[snum]], 
+                 y_hat_tes = mod_tes$fitted,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="TES") +
+  theme(plot.title=element_text(size=12))+
+  ylim(4, 10)
+
+mae <- function(y, yhat){
+  return(mean(abs(y - yhat)))
+}
+
+real_y <- ts_data[[snum]]
+
+mae_vals <- tibble("SES"=mae(real_y, mod_ses$fitted), "DES"=mae(real_y, mod_des$fitted), "TES"=mae(real_y, mod_tes$fitted)) %>%
+  gather(key="Model", value="MAE")
+
+mae_plot <- mae_vals %>%
+  ggplot(aes(x = factor(Model, levels=c("SES", "DES", "TES")), y = MAE)) +
+  geom_col(fill = "#3399CC") +
+  labs(x = "Model") +
+  geom_text(aes(label = round(MAE, 2)), vjust=-0.5) +
+  ylim(0, 2)
+
+combined_exp_smooth_plot <- ggarrange(ses_dp, des_dp, tes_dp, mae_plot,
+          ncol=2, nrow=2,
+          labels = c("", "", ""),
+          common.legend=TRUE, legend='bottom')
+
+annotate_figure(combined_exp_smooth_plot, top = text_grob("Original Series vs. Exponential Smoothing Fitted Values (DP (\u03f5 = 1))", size=14, face="bold"))
+
+# red color: "#FF0000"
+```
+
+Adding RNN fitted values.
+```{r}
+rnn_forecasts <- read_csv("../../Outputs/Forecasts/RNN_h1_DP_1.csv")
+rnn_fitted <- read_csv("../../Outputs/Tables/rnn_dp_1_fitted_vals.csv")
+
+beginning <- matrix(nrow=24, ncol=5)
+
+colnames(beginning) <- c(0, 1, 2, 3, 4)
+
+rnn_fitted <- as_tibble(beginning) %>% bind_rows(rnn_fitted)
+```
+
+```{r}
+# f <- log(rnn_forecasts$`2`)
+# 
+# rnn <- c(rnn_fitted$`2`, f)
+# 
+# length(rnn)
+# 
+# length(dp_1[[snum]])
+```
+
+```{r}
+tibble(y = ts_data[[snum]], 
+                 y_hat_des = mod_des$fitted,
+                 y_hat_rnn = rnn_fitted$`2`,
+                 x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "DES", "RNN"), values=c("#66CCFF", "#3399CC", "#FF0000")) +
+  labs(y = "log(Y)",
+       x = "Time",
+       color="",
+       title=" RNN and DES Fitted Values from DP (\u03f5 = 1) vs. Original Data") +
+  ylim(4, 10)
+```
+
+
+
+```{r}
+tibble(y = dp_1[[snum]], 
+       y_hat_rnn = rnn_fitted$`2`, x = 1:length(rnn_fitted$`2`)) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="SES")+
+  theme(plot.title=element_text(size=12))
+```
+
+```{r}
+tibble(y = ts_data[[snum]], 
+                 y_hat_rnn = rnn_fitted$`2`, x = 1:length(rnn_fitted$`2`)) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="SES")+
+  theme(plot.title=element_text(size=12))
+```
+
+
+
+
+
+
+
+
+
+Look at how level changes as epsilon increases.
+```{r}
+ses_0_1 <- ets(dp_0_1[[snum]], model="ANN")
+ses_4_6 <- ets(dp_4_6[[snum]], model="ANN")
+ses_10 <- ets(dp_10[[snum]], model="ANN")
+ses_20 <- ets(dp_20[[snum]], model="ANN")
+ses_orig <- ets(ts_data[[snum]], model="ANN")
+```
+
+```{r}
+eps <- rep(c("0.1", "1", "4.6", "10", "20", "original"), each=length(ts_data[[snum]])+1)
+ses_data <- as_tibble(ses_0_1$states) %>%
+  bind_rows(as_tibble(mod_ses$states)) %>%
+  bind_rows(as_tibble(ses_4_6$states)) %>%
+  bind_rows(as_tibble(ses_10$states)) %>%
+  bind_rows(as_tibble(ses_20$states)) %>%
+  bind_rows(as_tibble(ses_orig$states)) %>%
+  bind_cols("eps" = factor(eps, 
+                           levels=c("0.1", "1", "4.6", "10", "20", "original"),
+                           labels=c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original")))
+```
+
+```{r}
+levels_plot <- ses_data %>%
+  ggplot(aes(x=eps, y=l)) +
+  geom_boxplot(fill = "#3399CC") +
+  labs(x = "",
+       y = "Level Component")
+```
+
+Look at how trend changes as epsilon increases.
+```{r}
+des_0_1 <- ets(dp_0_1[[snum]], model="AAN")
+des_4_6 <- ets(dp_4_6[[snum]], model="AAN")
+des_10 <- ets(dp_10[[snum]], model="AAN")
+des_20 <- ets(dp_20[[snum]], model="AAN")
+des_orig <- ets(ts_data[[snum]], model="AAN")
+```
+
+```{r}
+des_data <- as_tibble(des_0_1$states) %>%
+  bind_rows(as_tibble(mod_des$states)) %>%
+  bind_rows(as_tibble(des_4_6$states)) %>%
+  bind_rows(as_tibble(des_10$states)) %>%
+  bind_rows(as_tibble(des_20$states)) %>%
+  bind_rows(as_tibble(des_orig$states)) %>%
+  bind_cols("eps" = factor(eps, 
+                           levels=c("0.1", "1", "4.6", "10", "20", "original"),
+                           labels=c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original")))
+```
+
+```{r}
+trend_plot <- des_data %>%
+  select(b, eps) %>%
+  # gather(key="season", value="value", -eps) %>%
+  ggplot(aes(x=eps, y=b)) +
+  geom_boxplot(fill = "#3399CC") +
+  labs(x = "",
+       y = "Trend Component")
+  
+```
+
+Look at how seasonal parameters change as epsilon increases.
+```{r}
+tes_0_1 <- ets(dp_0_1[[snum]], model="AAA")
+tes_4_6 <- ets(dp_4_6[[snum]], model="AAA")
+tes_10 <- ets(dp_10[[snum]], model="AAA")
+tes_20 <- ets(dp_20[[snum]], model="AAA")
+tes_orig <- ets(ts_data[[snum]], model="AAA")
+```
+
+Plot seasonal parameters.
+```{r}
+tes_data <- as_tibble(tes_0_1$states) %>%
+  bind_rows(as_tibble(mod_tes$states)) %>%
+  bind_rows(as_tibble(tes_4_6$states)) %>%
+  bind_rows(as_tibble(tes_10$states)) %>%
+  bind_rows(as_tibble(tes_20$states)) %>%
+  bind_rows(as_tibble(tes_orig$states)) %>%
+  bind_cols("eps" = factor(eps, 
+                           levels=c("0.1", "1", "4.6", "10", "20", "original"),
+                           labels=c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original")))
+```
+
+
+```{r}
+seasonal_plot <- tes_data %>%
+  select(s1:eps) %>%
+  gather(key="season", value="value", -eps) %>%
+  ggplot(aes(x=eps, y=value)) +
+  geom_boxplot(fill = "#3399CC") +
+  labs(x = "",
+       y = "Seasonality Components")
+```
+
+Plot tes seasonal parameters for the specific series.
+```{r}
+tes_data %>%
+  mutate(eps_num = as.numeric(eps)) %>%
+  select(-eps) %>%
+  select(s1:eps_num) %>%
+  gather(key="seasonal", value="value", -eps_num) %>%
+  ggplot(aes(x=eps_num, y=value, color=seasonal)) +
+  geom_line()
+```
+
+
+
+***
+
+***
+
+
+Functions to extract SES and DES parameters.
+```{r}
+ses_alpha <- function(x){
+  val <- ets(x, model="ANN")$par['alpha']
+  names(val) <- "ses_alpha"
+  return(val)
+}
+
+des_alpha <- function(x){
+  val <- ets(x, model="AAN")$par['alpha']
+  names(val) <- "des_alpha"
+  return(val)
+}
+
+des_beta <- function(x){
+  val <- ets(x, model="AAN")$par['beta']
+  names(val) <- "des_beta"
+  return(val)
+}
+```
+
+Function to extract exponential smoothing parameter features.
+```{r}
+extract_es_features <- function(protection_method, original=FALSE){
+  
+  if (original){
+    ts_file <- "../../Data/Train/Clean/m3_monthly_micro_h1.csv"
+  } else {
+    ts_file <- paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", protection_method, ".csv")
+  }
+  
+  ts_data <- read.csv(ts_file)
+  
+  td <- as.list(as.data.frame(t(ts_data)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=12))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  features <- tsfeatures(td, features=c("ses_alpha", "des_alpha", "des_beta", "hw_parameters"), parallel=TRUE)
+  
+  return(features)
+  
+}
+```
+
+Extract exponential smoothing features for strong protection.
+```{r}
+orig_es <- extract_es_features(protection_method = T, original = TRUE)
+dp_es_strong <- extract_es_features(protection_method = "DP_0.1")
+an_es_strong <- extract_es_features(protection_method = "DP_1")
+top_es_strong <- extract_es_features(protection_method = "DP_4.6")
+bottom_es_strong <- extract_es_features(protection_method = "DP_10")
+dp2_es_strong <- extract_es_features(protection_method = "DP_20")
+```
+
+Combine features into tibble for plotting.
+```{r}
+new_eps <- rep(c("orig", "0.1", "1", "4.6", "10", "20"), each=nrow(dp_es_strong))
+
+new_eps <- factor(new_eps, levels=c("0.1", "1", "4.6", "10", "20", "orig"), labels = c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original"))
+
+combined_es_strong <- orig_es %>%
+  bind_rows(dp_es_strong, an_es_strong, top_es_strong, bottom_es_strong, dp2_es_strong) %>%
+  bind_cols(eps=new_eps)
+```
+
+Plot SES parameter.
+```{r}
+ses_plot_strong <- combined_es_strong %>%
+  ggplot(aes(x=eps, y=ses_alpha)) +
+  geom_boxplot(fill="#3399CC") +
+  labs(x = "",
+       y = "Alpha (\u03B1)")
+
+ses_plot_strong
+```
+
+```{r}
+levels_vs_alpha_plot <- ggarrange(levels_plot, ses_plot_strong,
+          ncol=2, nrow=1,
+          labels = c("A", "B"),
+          common.legend=FALSE, legend='bottom')
+
+levels_vs_alpha_plot
+```
+
+Save plot.
+```{r}
+# pdf("../../Outputs/figures/ses_plot_strong.pdf")
+# ses_plot_strong
+# dev.off()
+# 
+# png("../../Outputs/figures/ses_plot_strong.png")
+# ses_plot_strong
+# dev.off()
+```
+
+Plot DES parameters.
+```{r}
+des_plot_strong <- combined_es_strong %>%
+  select(des_beta, eps) %>%
+  filter(des_beta < 0.03) %>%
+  # gather(key="parameter", value="value", -eps) %>%
+  # mutate(parameter = factor(parameter, levels=c("des_alpha", "des_beta"), labels=c("Alpha", "Beta"))) %>%
+  ggplot(aes(x=eps, y=des_beta)) +
+  # facet_wrap(~parameter) +
+  geom_boxplot(fill="#3399CC") +
+  # ylim(-0.5, 1) +
+  labs(x = "",
+       y = "Beta (\u03b2)")
+
+des_plot_strong
+```
+
+```{r}
+trend_vs_beta_plot <- ggarrange(trend_plot, des_plot_strong,
+          ncol=2, nrow=1,
+          labels = c("A", "B"),
+          common.legend=FALSE, legend='bottom')
+
+trend_vs_beta_plot
+```
+
+Save plot.
+```{r}
+# pdf("../../Outputs/figures/des_plot_strong.pdf")
+# des_plot_strong
+# dev.off()
+# 
+# png("../../Outputs/figures/des_plot_strong.png")
+# des_plot_strong
+# dev.off()
+```
+
+Plot TES parameters.
+```{r}
+tes_plot_strong <- combined_es_strong %>%
+  select(gamma, eps) %>%
+  filter(gamma < 2e-04) %>%
+  # gather(key="parameter", value="value", -method) %>%
+  # mutate(parameter = factor(parameter, levels=c("alpha", "beta", "gamma"), labels=c("Alpha", "Beta", "Gamma"))) %>%
+  ggplot(aes(x=eps, y=gamma)) +
+  # facet_wrap(~parameter) +
+  geom_boxplot(fill="#3399CC") +
+  # ylim(-0.5, 1) +
+  labs(x = "",
+       y = "Gamma (\u03b3)")
+
+tes_plot_strong
+```
+
+```{r}
+seasons_vs_gamma_plot <- ggarrange(seasonal_plot, tes_plot_strong,
+          ncol=2, nrow=1,
+          labels = c("A", "B"),
+          common.legend=FALSE, legend='bottom')
+
+seasons_vs_gamma_plot
+```
+
+Save plot.
+```{r}
+# pdf("../../Outputs/figures/tes_plot_strong.pdf")
+# tes_plot_strong
+# dev.off()
+# 
+# png("../../Outputs/figures/tes_plot_strong.png")
+# tes_plot_strong
+# dev.off()
+```
+
+***
+
+## Examine how auto-ARIMA adapts to data protection.
+
+Read in auto-ARIMA parameters.
+```{r}
+ar_params <- read_csv("../../Outputs/Tables/arima_params.csv")
+ar_fv <- read_csv("../../Outputs/Tables/arima_fitted_vals_original.csv")
+ar_fv_p <- read_csv("../../Outputs/Tables/arima_fitted_vals_protected.csv")
+```
+
+```{r}
+ar_fv <- as.list(ar_fv)
+
+ar_fv <- lapply(ar_fv, function(x) x[!is.na(x)])
+
+ar_fv_p <- as.list(ar_fv_p)
+
+ar_fv_p <- lapply(ar_fv_p, function(x) x[!is.na(x)])
+```
+
+```{r}
+ar_1_fv_plot <- tibble(y = dp_1[[snum]], 
+                y_hat = ar_fv_p[[snum]], x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Original Series", "Auto-ARIMA Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DP (\u03f5 = 1)") +
+  ylim(0,11)
+
+ar_orig_fv_plot <- tibble(y = ts_data[[snum]], 
+                          y_hat = c(NA, ar_fv[[snum]]), x = 1:length(ts_data[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Original Series", "Auto-ARIMA Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="Original") +
+  ylim(0,11)
+
+# ar_4_6_fv_plot <- tibble(y = dp_4_6[[snum]], 
+#                  y_hat_des = ar_fv_p$`4.6_2`, x = 1:length(dp_1[[snum]])) %>%
+#   gather(key='data', value='y', -x) %>%
+#   ggplot(aes(x=x, y = y, color=data)) +
+#   geom_line() +
+#   geom_point() +
+#     scale_colour_manual(labels = c("Y", "DES Y-hat"), values=c("#66CCFF", "#3399CC")) +
+#   labs(y = "log(Y)",
+#        x = "",
+#        color="")
+# 
+# ar_4_6_fv_plot
+# 
+# ar_20_fv_plot <- tibble(y = dp_20[[snum]], 
+#                  y_hat_tes = ar_fv_p$`20_2`, x = 1:length(dp_1[[snum]])) %>%
+#   gather(key='data', value='y', -x) %>%
+#   ggplot(aes(x=x, y = y, color=data)) +
+#   geom_line() +
+#   geom_point() +
+#     scale_colour_manual(labels = c("Y", "TES Y-hat"), values=c("#66CCFF", "#3399CC")) +
+#   labs(y = "log(Y)",
+#        x = "",
+#        color="")
+# 
+# ar_20_fv_plot
+
+# mse_vals <- tibble("SES"=mod_ses$mse, "DES"=mod_des$mse, "TES"=mod_tes$mse) %>%
+#   gather(key="Model", value="MSE")
+# 
+# mse_plot <- mse_vals %>%
+#   ggplot(aes(x = factor(Model, levels=c("SES", "DES", "TES")), y = MSE)) +
+#   geom_col(fill = "#3399CC") +
+#   labs(x = "Model") +
+#   geom_text(aes(label = round(MSE, 2)), vjust=1.1)
+
+ar_combined_fv_plots <- ggarrange(ar_1_fv_plot, ar_orig_fv_plot,
+          ncol=2, nrow=1,
+          labels = c("", ""),
+          common.legend=TRUE, legend='bottom')
+
+ar_combined_fv_plots
+```
+
+What happened to the parameters for this series? It went from first differencing with a single moving average parameter and an intercept to an intercept only.
+```{r}
+ar_params %>%
+  filter(eps == 1) %>%
+  slice(3)
+
+ar_params %>%
+  filter(eps == 1000) %>%
+  slice(3)
+```
+
+What is the makeup of parameters in the original vs. the protected data?
+```{r}
+summarized_params <- ar_params %>%
+  mutate_at(.vars = c("p", "d", "q", "P", "D", "Q"), .funs = function(x) x > 0) %>%
+  group_by(eps) %>%
+  summarize_at(.vars = c("p", "d", "q", "P", "D", "Q", "intercept"), mean) %>%
+  gather(key="parameter", value="proportion", -eps) %>%
+  mutate(parameter = factor(parameter, levels = c("intercept", "p", "d", "q", "P", "D", "Q"), labels = c("Intercept", "p", "d", "q", "P", "D", "Q")),
+         eps = factor(eps, levels=c("1000", "1"), labels=c("Original", "DP (\u03f5 = 1)")))
+
+ar_params %>%
+  mutate(num_non_intercept = p+d+q+P+D+Q,
+         int_only = ((intercept==1) & (num_non_intercept==0))) %>%
+  group_by(eps) %>%
+  summarize(avg = mean(int_only))
+
+summarized_params %>%
+  ggplot(aes(x=parameter, y=proportion)) +
+  geom_col(fill = "#3399CC") +
+  facet_grid(rows = vars(eps)) +
+  geom_text(aes(label = round(proportion, 2)), vjust=-.45) +
+  labs(y = "Proportion of Models",
+       x = "Auto-ARIMA Parameter") +
+  ylim(0, 1.19)
+  # scale_y_continuous(breaks=seq(0.0, 1.5, by = 0.2))
+```
+
+***
+
+***
+
+Examine how VAR models are affected by data protection.
+```{r}
+var_coefs <- read_csv("../../Outputs/Tables/var_coefs_dp.csv")
+var_ints <- read_csv("../../Outputs/Tables/var_ints_dp.csv")
+var_fit <- read_csv("../../Outputs/Tables/var_fitted_vals.csv")
+```
+
+```{r}
+names(var_ints) <- c("1", "2", "3", "4", "5", "6")
+var_ints <- var_ints %>%
+  mutate(eq = 1:5) %>%
+  gather(key = "eps", value="intercept", -eq) %>%
+  mutate(eps = factor(as.numeric(eps), levels = c(1, 2, 3, 4, 5, 6), labels = c("0.1", "1", "4.6", "10", "20", "Original")),
+         num_eps = as.numeric(eps))
+```
+
+```{r}
+var_ints %>%
+  ggplot(aes(x=num_eps, y=intercept, color=factor(eq))) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6), labels=c("0.1", "1", "4.6", "10", "20", "Original")) +
+  labs(x = "Epsilon")
+```
+
+```{r}
+var_coefs <- var_coefs %>%
+  gather(key="name", value="value") %>%
+  separate(name, c("useless", "column")) %>%
+  mutate(eps = rep(c("0.1", "1", "4.6", "10", "20", "Original"), each=25),
+         equation = rep(rep(c(1, 2, 3, 4, 5), each=5), 6)) %>%
+  rename("coefficient"=value) %>%
+  select(eps, equation, coefficient)
+```
+
+```{r}
+var_coefs %>%
+  mutate(eps = factor(eps, levels=c("0.1", "1", "4.6", "10", "20", "Original"), labels = c("0.1", "1", "4.6", "10", "20", "Original"))) %>%
+  mutate(num_eps = as.numeric(eps)) %>%
+  filter(equation==3) %>%
+  mutate(cnum = rep(c(1,2,3,4,5), 6)) %>%
+  ggplot(aes(x=num_eps, y=coefficient, color=factor(cnum))) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6), labels=c("0.1", "1", "4.6", "10", "20", "Original")) +
+  labs(x = "Epsilon")
+```
+
+
+```{r}
+var_coefs %>%
+  filter(eps %in% c("0.1", "1", "4.6")) %>%
+  ggplot(aes(x=factor(equation), y=coefficient)) +
+  geom_boxplot(aes(fill=factor(eps)))
+```
+
+```{r}
+var_coefs %>%
+  filter(eps %in% c("10", "20", "Original")) %>%
+  ggplot(aes(x=factor(equation), y=coefficient)) +
+  geom_boxplot(aes(fill=factor(eps)))
+```
+
+```{r}
+fv_0_1 <- var_fit %>%
+  filter(level_0 == 0.1) %>%
+  select("2") %>%
+  pull()
+
+fv_1 <- var_fit %>%
+  filter(level_0 == 1) %>%
+  select("2") %>%
+  pull()
+
+fv_0_1 <- c(NA, fv_0_1)
+fv_1 <- c(NA, fv_1)
+
+tibble(y = dp_0_1[[snum]], 
+                y_hat = fv_0_1, 
+                x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DP (\u03f5 = 1)") +
+  ylim(0,12) +
+  geom_hline(yintercept = 6.68)
+
+tibble(y = dp_1[[snum]], 
+                y_hat = fv_1, 
+                x = 1:length(dp_1[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DP (\u03f5 = 1)") +
+  ylim(0,12) +
+  geom_hline(yintercept = 5.74)
+
+
+
+
+var_orig <- tibble(y = ts_data[[snum]], 
+                   y_hat = c(NA, ar_fv[[snum]]), 
+                   x = 1:length(ts_data[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "Y-hat"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="Original") +
+  ylim(0,10)
+
+ar_combined_fv_plots <- ggarrange(ar_1_fv_plot, ar_orig_fv_plot,
+          ncol=2, nrow=1,
+          labels = c("", ""),
+          common.legend=TRUE, legend='bottom')
+
+ar_combined_fv_plots
+```
+
+```{r}
+mean(dp_0_1[[snum]])
+
+mean(dp_1[[snum]])
+```
+
+
+
+
+***
+
+## Examine how exponential smoothing parameters change under weak protection.
+
+Extract exponential smoothing features.
+```{r}
+dp_es_weak <- extract_es_features(protection_method = "DP_20")
+an_es_weak <- extract_es_features(protection_method = "AN_0.5")
+top_es_weak <- extract_es_features(protection_method = "Top_0.1")
+bottom_es_weak <- extract_es_features(protection_method = "Bottom_0.1")
+```
+
+Combine features into tibble for plotting.
+```{r}
+combined_es_weak <- orig_es %>%
+  bind_rows(dp_es_weak, an_es_weak, top_es_weak, bottom_es_weak) %>%
+  bind_cols(method=method)
+```
+
+Plot SES parameter.
+```{r}
+ses_plot_weak <- combined_es_weak %>%
+  ggplot(aes(x=method, y=log(ses_alpha))) +
+  geom_boxplot(fill="#3399CC") +
+  # ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       y = "Log Alpha")
+
+ses_plot_weak
+```
+
+Save plot.
+```{r}
+pdf("../../Outputs/figures/ses_plot_weak.pdf")
+ses_plot_weak
+dev.off()
+
+png("../../Outputs/figures/ses_plot_weak.png")
+ses_plot_weak
+dev.off()
+```
+
+Plot DES parameters.
+```{r}
+des_plot_weak <- combined_es_weak %>%
+  select(des_alpha, des_beta, method) %>%
+  gather(key="parameter", value="value", -method) %>%
+  mutate(parameter = factor(parameter, levels=c("des_alpha", "des_beta"), labels=c("Alpha", "Beta"))) %>%
+  ggplot(aes(x=method, y=log(value))) +
+  facet_wrap(~parameter) +
+  geom_boxplot(fill="#3399CC") +
+  # ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       y = "Log Value")
+
+des_plot_weak
+```
+
+Save plot.
+```{r}
+pdf("../../Outputs/figures/des_plot_weak.pdf")
+des_plot_weak
+dev.off()
+
+png("../../Outputs/figures/des_plot_weak.png")
+des_plot_weak
+dev.off()
+```
+
+Plot TES parameters.
+```{r}
+tes_plot_weak <- combined_es_weak %>%
+  select(alpha, beta, gamma, method) %>%
+  gather(key="parameter", value="value", -method) %>%
+  mutate(parameter = factor(parameter, levels=c("alpha", "beta", "gamma"), labels=c("Alpha", "Beta", "Gamma"))) %>%
+  ggplot(aes(x=method, y=log(value))) +
+  facet_wrap(~parameter) +
+  geom_boxplot(fill="#3399CC") +
+  # ylim(-0.5, 1) +
+  labs(x = "Protection Method",
+       y = "Log Value")
+
+tes_plot_weak
+```
+
+Save plot.
+```{r}
+pdf("../../Outputs/figures/tes_plot_weak.pdf")
+tes_plot_weak
+dev.off()
+
+png("../../Outputs/figures/tes_plot_weak.png")
+tes_plot_weak
+dev.off()
+```
+
+***
