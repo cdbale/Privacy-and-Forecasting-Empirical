@@ -1,0 +1,5 @@
+* broke on VAR additive noise 1.5
+
+* commenting out VAR and running from additive noise 2 on
+
+* go back and run VAR for additive noise 1.5 on
