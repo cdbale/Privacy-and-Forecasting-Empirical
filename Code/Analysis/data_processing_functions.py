@@ -53,12 +53,6 @@ def find_lags(ts_data, sp):
 
     mode_d = stats.mode(d_list)[0][0]
 
-    # if max_d > 2: max_d = 2
-    # if max_D > 2: max_D = 2
-
-    # print("mode_d: " + str(mode_d))
-    # print("mode_D: " + str(mode_D))
-
     return mode_d, mode_D
 
 # function to perform seasonal and first differencing to make stationary series
@@ -67,93 +61,122 @@ def find_lags(ts_data, sp):
 # applied to maintain length equality.
 ################## original ######################
 
-# splitting function used in VAR forecast
-def split(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+# # splitting function used in VAR forecast
+# def split(a, n):
+#     k, m = divmod(len(a), n)
+#     return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
 
-def difference_to_stationarity(ts_data, sp):
-    # get the length of each series
-    lengths = [len(y) for y in ts_data]
+# function to conduct first differencing on time series
+def difference_to_stationarity(ts_data):
 
-    # store the unique length values
-    unique_lengths = np.unique(lengths)
+    # list to store differenced series
+    differenced_series = []
 
-    # list to store stationary series
-    stationary_series = []
-    full_lags = {}
+    # for each series, conduct first differencing, and append to
+    # differenced_series list
+    for i, y in enumerate(ts_data):
 
-    for k, l in enumerate(unique_lengths):
-        full_lags[str(k)] = []
-        # get the indexes of each series with the lth length
-        Y_ids = np.nonzero(lengths == l)[0]
+        differ = Differencer(lags=1)
+        y_transformed = differ.fit_transform(y)
+        differenced_series.append(y_transformed)
 
-        split_ids = split(Y_ids, 5)
+    return differenced_series
 
-        for i, j in enumerate(split_ids):
+# def difference_to_stationarity(ts_data, sp):
+#     # get the length of each series
+#     lengths = [len(y) for y in ts_data]
+#
+#     # store the unique length values
+#     unique_lengths = np.unique(lengths)
+#
+#     # list to store stationary series
+#     stationary_series = []
+#     full_lags = {}
+#
+#     for k, l in enumerate(unique_lengths):
+#         full_lags[str(k)] = []
+#         # get the indexes of each series with the lth length
+#         Y_ids = np.nonzero(lengths == l)[0]
+#
+#         split_ids = split(Y_ids, 5)
+#
+#         for i, j in enumerate(split_ids):
+#
+#             # store series in a list
+#             group = [ts_data[m].reset_index(drop=True) for m in j]
+#
+#             d, D = find_lags(group, sp=sp)
+#
+#             lags = []
+#             # add seasonal differences
+#             for s in range(D):
+#                 lags.append(sp)
+#             # add first differences
+#             for t in range(d):
+#                 lags.append(1)
+#
+#             full_lags[str(k)].append(lags)
+#
+#             if len(lags) > 0:
+#                 differ = Differencer(lags=lags)
+#                 for y in group:
+#                     y_transformed = differ.fit_transform(y)
+#                     stationary_series.append(y_transformed)
+#             else:
+#                 for y in group:
+#                     stationary_series.append(y)
+#
+#     return stationary_series, full_lags
 
-            # store series in a list
-            group = [ts_data[m].reset_index(drop=True) for m in j]
+# function to reverse first differencing
+def reverse_difference_to_stationarity(forecasts, ts_data):
 
-            d, D = find_lags(group, sp=sp)
-
-            lags = []
-            # add seasonal differences
-            for s in range(D):
-                lags.append(sp)
-            # add first differences
-            for t in range(d):
-                lags.append(1)
-
-            full_lags[str(k)].append(lags)
-
-            if len(lags) > 0:
-                differ = Differencer(lags=lags)
-                for y in group:
-                    y_transformed = differ.fit_transform(y)
-                    stationary_series.append(y_transformed)
-            else:
-                for y in group:
-                    stationary_series.append(y)
-
-    return stationary_series, full_lags
-
-# function to reverse `difference_to_stationarity` function above.
-################ original ################
-def reverse_difference_to_stationarity(forecasts, full_lags, ts_data, sp):
-    # list to store forecasts
+    # list to store reversed forecasts
     reversed_forecasts = []
 
-    # get the length of each series
-    lengths = [len(y) for y in ts_data]
-
-    # store the unique length values
-    unique_lengths = np.unique(lengths)
-
-    for k, l in enumerate(unique_lengths):
-
-        # get the indexes of each series with the lth length
-        Y_ids = np.nonzero(lengths == l)[0]
-
-        split_ids = split(Y_ids, 5)
-
-        for i, j in enumerate(split_ids):
-
-            # store series in a list
-            group = [forecasts[m] for m in j]
-
-            lags = full_lags[str(k)][i]
-
-            if len(lags) > 0:
-                differ = Differencer(lags=lags)
-                for p, f in enumerate(group):
-                    f_transformed = differ.fit(ts_data[j[p]]).inverse_transform(f)
-                    reversed_forecasts.append(f_transformed)
-            else:
-                for f in group:
-                    reversed_forecasts.append(f)
+    for i, f in enumerate(forecasts):
+        differ = Differencer(lags=1)
+        f_transformed = differ.fit(ts_data[i]).inverse_transform(f)
+        reversed_forecasts.append(f_transformed)
 
     return reversed_forecasts
+
+# # function to reverse `difference_to_stationarity` function above.
+# ################ original ################
+# def reverse_difference_to_stationarity(forecasts, full_lags, ts_data, sp):
+#     # list to store forecasts
+#     reversed_forecasts = []
+#
+#     # get the length of each series
+#     lengths = [len(y) for y in ts_data]
+#
+#     # store the unique length values
+#     unique_lengths = np.unique(lengths)
+#
+#     for k, l in enumerate(unique_lengths):
+#
+#         # get the indexes of each series with the lth length
+#         Y_ids = np.nonzero(lengths == l)[0]
+#
+#         split_ids = split(Y_ids, 5)
+#
+#         for i, j in enumerate(split_ids):
+#
+#             # store series in a list
+#             group = [forecasts[m] for m in j]
+#
+#             lags = full_lags[str(k)][i]
+#
+#             if len(lags) > 0:
+#                 differ = Differencer(lags=lags)
+#                 for p, f in enumerate(group):
+#                     f_transformed = differ.fit(ts_data[j[p]]).inverse_transform(f)
+#                     reversed_forecasts.append(f_transformed)
+#             else:
+#                 for f in group:
+#                     reversed_forecasts.append(f)
+#
+#     return reversed_forecasts
 
 # function to take seasonal and first differences to achieve stationarity
 # Testing for the number of differences.
@@ -263,71 +286,71 @@ def reverse_difference_to_stationarity(forecasts, full_lags, ts_data, sp):
 #
 #     return reversed_forecasts
 
-def reduce_train_test(train_data, window_length, target_forecast_period):
-    cv = SlidingWindowSplitter(window_length=window_length, fh=target_forecast_period, start_with_window=True)
-    X = []
-    target = []
-    for input_window, output_window in cv.split(train_data):
-        X.append(train_data[input_window].reset_index(drop=True))
-        target.append(train_data[output_window].reset_index(drop=True))
+# def reduce_train_test(train_data, window_length, target_forecast_period):
+#     cv = SlidingWindowSplitter(window_length=window_length, fh=target_forecast_period, start_with_window=True)
+#     X = []
+#     target = []
+#     for input_window, output_window in cv.split(train_data):
+#         X.append(train_data[input_window].reset_index(drop=True))
+#         target.append(train_data[output_window].reset_index(drop=True))
+#
+#     X = np.array(pd.concat(X, axis=1).T)
+#     target = np.array(pd.concat(target, axis=0))
+#
+#     return X, target
 
-    X = np.array(pd.concat(X, axis=1).T)
-    target = np.array(pd.concat(target, axis=0))
+# def reduce_train_test_global(train_data, window_length, target_forecast_period):
+#     # slightly modified code from the M4 competition
+#     # adapted from code in sktime tutorial.
+#     """
+#     Splits the series into train and test sets.
+#
+#     :param train_data: a 2-d numpy array with series as rows.
+#     :param window_length: window_length.
+#     :param h: number of out of sample points (forecast horizon length).
+#     :return X_train, Y_train: reduced training datasets.
+#     """
+#
+#     # store number of time series
+#     num_series = len(train_data)
+#
+#     # empty lists for training data
+#     X_train = []
+#     Y_train = []
+#
+#     for series in train_data:
+#         x_train, y_train = reduce_train_test(series, window_length, target_forecast_period)
+#         X_train.append(x_train)
+#         Y_train.append(y_train)
+#
+#     # last_x = [x[-1,:] for x in X_train]
+#     # last_y = [y[-1] for y in Y_train]
+#
+#     # testing this line
+#     last_window = [i.iloc[-window_length:] for i in train_data]
+#
+#     # last_window = [pd.Series(np.concatenate([last_x[i][1:], np.expand_dims(last_y[i], axis=0)])) for i in range(len(last_x))]
+#
+#     X_train = np.concatenate(X_train)
+#     Y_train = np.concatenate(Y_train)
+#
+#     # concatenate outcome with features
+#     combined = pd.DataFrame(np.hstack([X_train, Y_train.reshape(X_train.shape[0],1)]))
+#
+#     # perform per-window trend normalization (detrending) for training data and
+#     # last window
+#     detrender = Detrender()
+#     last_window_dt = [detrender.fit_transform(x) for x in last_window]
+#     combined = combined.apply(lambda x: detrender.fit_transform(x), axis=1)
+#
+#     # add correct time index back to last_window
+# #     for i in range(num_series):
+# #         last_window[i].index = train_data[i].index[-window_length:]
+# #         last_window_dt[i].index = train_data[i].index[-window_length:]
+#
+#     return combined, last_window_dt, last_window
 
-    return X, target
-
-def reduce_train_test_global(train_data, window_length, target_forecast_period):
-    # slightly modified code from the M4 competition
-    # adapted from code in sktime tutorial.
-    """
-    Splits the series into train and test sets.
-
-    :param train_data: a 2-d numpy array with series as rows.
-    :param window_length: window_length.
-    :param h: number of out of sample points (forecast horizon length).
-    :return X_train, Y_train: reduced training datasets.
-    """
-
-    # store number of time series
-    num_series = len(train_data)
-
-    # empty lists for training data
-    X_train = []
-    Y_train = []
-
-    for series in train_data:
-        x_train, y_train = reduce_train_test(series, window_length, target_forecast_period)
-        X_train.append(x_train)
-        Y_train.append(y_train)
-
-    # last_x = [x[-1,:] for x in X_train]
-    # last_y = [y[-1] for y in Y_train]
-
-    # testing this line
-    last_window = [i.iloc[-window_length:] for i in train_data]
-
-    # last_window = [pd.Series(np.concatenate([last_x[i][1:], np.expand_dims(last_y[i], axis=0)])) for i in range(len(last_x))]
-
-    X_train = np.concatenate(X_train)
-    Y_train = np.concatenate(Y_train)
-
-    # concatenate outcome with features
-    combined = pd.DataFrame(np.hstack([X_train, Y_train.reshape(X_train.shape[0],1)]))
-
-    # perform per-window trend normalization (detrending) for training data and
-    # last window
-    detrender = Detrender()
-    last_window_dt = [detrender.fit_transform(x) for x in last_window]
-    combined = combined.apply(lambda x: detrender.fit_transform(x), axis=1)
-
-    # add correct time index back to last_window
-#     for i in range(num_series):
-#         last_window[i].index = train_data[i].index[-window_length:]
-#         last_window_dt[i].index = train_data[i].index[-window_length:]
-
-    return combined, last_window_dt, last_window
-
-# function to perform reduction on global training data
+# # function to perform reduction on global training data
 # def reduce_train_test_global(train_data, window_length):
 #     # slightly modified code from the M4 competition
 #     # adapted from code in sktime tutorial.
@@ -386,7 +409,7 @@ def reduce_train_test_global(train_data, window_length, target_forecast_period):
 #     return combined, last_window_dt, last_window
 
 # pre-process the data using various pre-processing steps
-def pre_process(ts_data, target_forecast_period, add_one=False, mean_normalize=False, log=False, detrend=False, make_stationary=False, sp=None, transform_dict={}):
+def pre_process(ts_data, target_forecast_period, mean_normalize=False, log=False, standardize=False, detrend=False, make_stationary=False, sp=None, transform_dict={}):
     """
     Performs various pre-processing steps. Data independent steps are implemented
     using boolean values. Data-dependent steps are implemented using a transform_dict
@@ -418,15 +441,12 @@ def pre_process(ts_data, target_forecast_period, add_one=False, mean_normalize=F
     full_lags = None
     pre_detrend = None
 
-    # add one to wikipedia data
-    if add_one:
-        processed = [x+1 for x in processed]
-
     # Step 1: truncate any values less than 1 - this only comes into play for
-    # data protected using random noise
+    # data protected using random noise - we do this because we know the M3
+    # monthly micro data is strictly positive
     processed = [pd.Series([i if i >= 1 else 1 for i in x]) for x in processed]
 
-    # Step 2: mean normalize (used for global LGBM)
+    # Step 2: mean normalize
     if mean_normalize:
         processed = [x.divide(np.mean(x)) for x in processed]
 
@@ -434,44 +454,55 @@ def pre_process(ts_data, target_forecast_period, add_one=False, mean_normalize=F
     if log:
         processed = [np.log(x) for x in processed]
 
+    # Step 4: make stationary series using differencing
     if make_stationary:
-        processed, full_lags = difference_to_stationarity(processed, sp)
+        processed = difference_to_stationarity(processed)
 
+    # Step 5: standardize by subtracting the mean and dividing by the standard
+    # deviation
+    if standardize:
+        processed = [(x - np.mean(x))/np.std(x, ddof=1) for x in processed]
+
+    # if there are parameters in the transformation dictionary...
     if len(transform_dict) > 0:
 
-        # Step 4: conditional deseasonalization
+        # Step 5: conditional deseasonalization
         if "deseasonalize" in transform_dict:
             transformer = ConditionalDeseasonalizer(sp=transform_dict["deseasonalize"]["sp"], model=transform_dict["deseasonalize"]["seasonality_type"])
             # deseasonalize each series
             processed = [transformer.fit_transform(row) for row in processed]
 
-        # Step 5: reduction (rolling window transformation)
-        if "windows" in transform_dict:
+        # # Step 6: reduction (rolling window transformation)
+        # if "windows" in transform_dict:
+        #     # outputs the processed training data, the last window of the
+        #     # training data that was detrended, and the last window of the
+        #     # training data with the trend left in
+        #     processed, last_window_dt, last_window = reduce_train_test_global(train_data=processed, window_length=transform_dict["windows"]["window_length"], target_forecast_period=target_forecast_period)
 
-            # outputs the processed training data, the last window of the
-            # training data that was detrended, and the last window of the
-            # training data with the trend left in
-            processed, last_window_dt, last_window = reduce_train_test_global(train_data=processed, window_length=transform_dict["windows"]["window_length"], target_forecast_period=target_forecast_period)
-
-
+    # Step 7: detrend the data
     if detrend:
         detrender = Detrender()
         pre_detrend = processed.copy()
         processed = [detrender.fit_transform(row) for row in processed]
 
-    return processed, last_window_dt, last_window, pre_detrend, full_lags
-
+    return processed, last_window_dt, last_window, pre_detrend
 
 # post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, target_forecast_period, last_window_with_trend=None, pre_detrend=None, full_lags=None, add_one=False, mean_normalize=False, detrend=False, log=False, make_stationary=False, sp=None, round=False, transform_dict={}):
+def post_process(full_ts_data, forecasts, target_forecast_period, last_window_with_trend=None, pre_detrend=None, full_lags=None, mean_normalize=False, detrend=False, log=False, make_stationary=False, sp=None, transform_dict={}):
 
+    if forecasts is None:
+        return None
+
+    # create processed copy of forecasts, store the number of series
     processed = forecasts
     num_series = len(forecasts)
 
+    # add trend back in if we removed it
     if detrend:
         detrender = Detrender()
         processed = [detrender.fit(pre_detrend[i]).inverse_transform(row) for i, row in enumerate(processed)]
 
+    # if there are transformation dictionary parameters
     if len(transform_dict) > 0:
 
         # reverse window normalization
@@ -487,8 +518,8 @@ def post_process(full_ts_data, forecasts, target_forecast_period, last_window_wi
 
     # reverse seasonal and first differencing
     if make_stationary:
-        temp_ts_data, _, _, _, _ = pre_process(full_ts_data, target_forecast_period, log=True)
-        processed = reverse_difference_to_stationarity(processed, full_lags, temp_ts_data, sp)
+        temp_ts_data, _, _, _ = pre_process(full_ts_data, target_forecast_period, log=True)
+        processed = reverse_difference_to_stationarity(processed, temp_ts_data)
 
     # reverse the log with bias correction
     if log:
@@ -498,17 +529,14 @@ def post_process(full_ts_data, forecasts, target_forecast_period, last_window_wi
         # bias adjusted forecasts
         sigma2 = [np.var(x) for x in processed]
         processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
+
+        # use the below version if debugging - it allows you to return the original
+        # data values when testing the pre-process function
         # processed = [np.exp(processed[i]) for i in range(num_series)]
 
     if mean_normalize:
-        ts_data, _ , _, _, _ = pre_process(full_ts_data, target_forecast_period, mean_normalize=False, log=False, transform_dict={})
-        processed = [x * np.mean(ts_data[i]) for i,x in enumerate(processed)]
-
-    if add_one:
-        processed = [x - 1 for x in processed]
-
-    if round:
-        processed = [np.round(x) for x in processed]
+        # ts_data, _ , _, _ = pre_process(full_ts_data, target_forecast_period, mean_normalize=False, log=False, transform_dict={})
+        processed = [x * np.mean(full_ts_data[i]) for i, x in enumerate(processed)]
 
     # make sure forecasts are non-negative
     processed = [pd.Series([x if x >=0 else 0 for x in y]) for y in processed]

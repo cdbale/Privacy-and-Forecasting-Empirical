@@ -7,10 +7,10 @@ import numpy as np
 import os
 
 # results file path
-results_path = "../../Outputs/Results/Wikipedia/"
+results_path = "../../Outputs/Results/"
 
 # forecasts file path
-forecasts_path = "../../Outputs/Forecasts/Wikipedia/"
+forecasts_path = "../../Outputs/Forecasts/"
 
 # names of results files
 result_files = os.listdir(results_path)
@@ -88,4 +88,4 @@ for p in protection_methods.items():
 
     data = pd.DataFrame(data_dict)
 
-    data.to_csv("../../Outputs/Tables/Wikipedia/" + p[0] + ".csv", index=False)
+    data.to_csv("../../Outputs/Tables/" + p[0] + ".csv", index=False)

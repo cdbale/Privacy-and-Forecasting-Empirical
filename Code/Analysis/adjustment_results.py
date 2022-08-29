@@ -15,7 +15,6 @@ def AvgRelMAE(test_series, original_fcasts, protected_fcasts, t):
     trim_val = int(t*len(nlogr))
     nlogr = nlogr[trim_val:]
     nlogr = nlogr[:-trim_val]
-    # return np.exp((1/np.sum(n))*np.sum(nlogr))
     return (1 - np.exp((1/np.sum(n))*np.sum(nlogr))) * 100
 
 # results file path

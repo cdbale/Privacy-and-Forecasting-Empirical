@@ -15,7 +15,6 @@ library(ggplot2)
 library(ggpubr)
 library(gridExtra)
 library(forecast)
-library(hrbrthemes)
 ```
 
 Import data. Start with the full data, then use just the training data for examining features.
@@ -45,25 +44,6 @@ median(abs(corrs))
 
 hist(abs(corrs))
 ```
-
-***
-Look at correlations in subset of wikipedia data.
-```{r}
-wiki_data <- read.csv("../../Data/Train/Clean/full_wikipedia_clean.csv")
-
-wiki_data <- as.data.frame(t(wiki_data))
-
-cmat_wiki <- cor(wiki_data)
-
-corrs_wiki <- cmat_wiki[upper.tri(cmat_wiki)]
-
-mean(abs(corrs_wiki))
-
-median(abs(corrs_wiki))
-
-hist(abs(corrs_wiki))
-```
-
 
 ***
 
@@ -103,8 +83,6 @@ Import data. Start with the training data for `h=1`.
 # read in the data
 original_data <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
 
-# original_data <- read.csv("../../Data/Train/Clean/full_wikipedia_clean.csv")
-
 # convert to a list of series
 ts_data <- as.list(as.data.frame(t(original_data)))
   
@@ -114,14 +92,64 @@ ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
 # convert each series to a TS object with appropriate seasonal frequency
 ts_data <- lapply(ts_data, function(x) ts(x, frequency=12))
 
-# ts_data <- lapply(ts_data, function(x) x+1)
-
 # take the log of the data
-ts_data <- lapply(ts_data, log)
+# ts_data <- lapply(ts_data, log)
 
-# calculate desired features
-ts_features <- tsfeatures(ts_data, features=c("entropy", "stl_features", "acf_features"))
-  
+# binarize_mean feature was returning an error that it wasn't giving a named feature vector
+
+cv <- function(series){
+  return(sd(series)/mean(series))
+}
+
+# simple outlier detection indicators, one for when an outlier occurs at forecast origin, within 5, and within 10 time periods
+
+# for top coding, we want to see if it corrects positive outliers
+# tsoutliers will find the outliers for us
+# we can determine if they are positive based on whether they are greater than the mean
+
+outlier_detection <- function(series){
+  outliers <- tsoutliers(series)$index
+  within_1 <- 1 * (length(series) %in% outliers)
+  within_5 <- 1 * any((outliers > (length(series)-5)))
+  within_10 <- 1 * any((outliers > (length(series)-10)))
+  features <- c(within_1, within_5, within_10)
+  names(features) <- c("Outlier_within_1", "Outlier_within_5", "Outlier_within_10")
+  return(features)
+}
+
+outlier_detection_1 <- function(series){
+  outliers <- tsoutliers(series)$index
+  return(1 * (length(series) %in% outliers))
+}
+
+outlier_detection_5 <- function(series){
+  outliers <- tsoutliers(series)$index
+  return(1 * any((outliers > (length(series)-5))))
+}
+
+outlier_detection_10 <- function(series){
+  outliers <- tsoutliers(series)$index
+  return(1 * any((outliers > (length(series)-10))))
+}
+
+# # calculate desired features
+# ts_features <- tsfeatures(ts_data, features=c("cv", "outlier_detection", "acf_features", "arch_stat",
+#                                               "crossing_points", "entropy", "flat_spots", "heterogeneity",
+#                                               "hurst", "hw_parameters", "lumpiness", "max_kl_shift",
+#                                               "max_level_shift", "max_var_shift", "nonlinearity",
+#                                               "pacf_features", "stability", "stl_features", "unitroot_kpss",
+#                                               "unitroot_pp", "compengine"))
+
+ts_features <- tsfeatures(ts_data, features=c("acf_features", "entropy", "stl_features"))
+```
+
+Save extracted features.
+```{r}
+# write.csv(ts_features, "../../Data/Train/Clean/m3_features.csv")
+```
+
+
+```{r}
 f_orig <- ts_features %>% select(entropy, trend, seasonal_strength, x_acf1)
 
 # perform pca on desired features
@@ -211,19 +239,11 @@ protected_series_plot("DP_1", 1, c(0,1), ylim(-60000,50000), main_title = "Origi
 ```
 
 ```{r}
-protected_series_plot("AN_1", 1, main_title = "Original vs. AN 1")
+protected_series_plot("Top_0.4", 1, c(0), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
 ```
 
 ```{r}
-protected_series_plot("Top_0.4", 1, c(0), ylim(0, 10000), main_title = "Original Series vs. Top Coded Series (40%)")
-```
-
-```{r}
-protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top Coded Series (40%)")
-```
-
-```{r}
-protected_series_plot("Bottom_0.2", 1, main_title = "Original vs. Bottom 0.2")
+protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
 ```
 
 ***
@@ -285,6 +305,377 @@ an_strong <- perform_pca(f_pca, "AN_2")
 top_strong <- perform_pca(f_pca, "Top_0.4")
 bottom_strong <- perform_pca(f_pca, "Bottom_0.4")
 ```
+
+```{r}
+top_1 <- perform_pca(f_pca, "Top_0.4")
+top_2 <- perform_pca(f_pca, "Top_0.4")
+top_4 <- perform_pca(f_pca, "Top_0.4")
+```
+
+Create data for plotting.
+```{r}
+method <- c("Original", "Top 0.1", "Top 0.2", "Top 0.4")
+method <- rep(method, each=474)
+method <- factor(method, levels=c("Original", "Top 0.1", "Top 0.2", "Top 0.4"), labels = c("Original", "Top 0.1", "Top 0.2", "Top 0.4"))
+```
+
+Create data containing time series characteristic under all protection methods.
+```{r}
+top_coding_features <- orig %>%
+  bind_rows(top_1, top_2, top_4) %>%
+  select(entropy, trend, seasonal_strength, x_acf1) %>%
+  bind_cols(method=factor(method))
+```
+
+Collapse data for plotting.
+```{r}
+gathered_tc_features <- top_coding_features %>%
+  gather(key = "Characteristic", value = "Value", -method) %>%
+  mutate(Characteristic = factor(Characteristic, 
+                                 levels=c("entropy", "trend", "seasonal_strength", "x_acf1"),
+                                 labels=c("Spectral Entropy", "Strength of Trend", "Strength of Seasonality", "ACF")))
+```
+
+Plot for DP characteristics under strong protection.
+```{r}
+attributes_plot_strong <- gathered_tc_features %>%
+  # mutate(new_method = ifelse(method=="DP", "Differential Privacy", "Original"),
+  #        new_method = factor(new_method, levels=c("Original", "Differential Privacy"))) %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic, scales = "free_y") +
+  labs(x = "Protection Method",
+       title = "Distributions of Time Series Characteristics In Original Data vs. Top-Coded Data")
+
+attributes_plot_strong
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+***
+
+Compare distributions of features for series that were adjusted up vs. down for TES under Top coding.
+```{r}
+tes_up <- read_csv("../../Data/Adjustment Data/tes_up_original.csv")
+tes_up_protected <- read_csv("../../Data/Adjustment Data/tes_up_protected.csv")
+```
+
+```{r}
+perform_pca_modified <- function(pca_object, new_data){
+  
+  td <- as.list(as.data.frame(t(new_data)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=12))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  features <- tsfeatures(td, features=c("entropy", "stl_features", "acf_features"))
+  
+  f <- features %>% select(entropy, trend, seasonal_strength, x_acf1)
+  
+  f_projected <- predict(pca_object, f)
+  
+  f_projected <- as_tibble(f_projected) %>% bind_cols(f)
+  
+  return(f_projected)
+  
+}
+```
+
+```{r}
+pca_tes_up <- perform_pca_modified(f_pca, tes_up)
+pca_tes_up_protected <- perform_pca_modified(f_pca, tes_up_protected)
+```
+
+```{r}
+is_sample <- rep(c(0,1,2), times=c(nrow(orig), nrow(pca_tes_up), nrow(pca_tes_up_protected)))
+
+orig %>%
+  bind_rows(pca_tes_up, pca_tes_up_protected) %>%
+  bind_cols(is_sample = as.factor(is_sample)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_sample) # +
+  # ylim(c(-3.5,2.5))+
+  # xlim(c(-4,4)) +
+  # labs(col="Spectral Entropy")
+```
+
+```{r}
+# convert to a list of series
+tes_up <- as.list(as.data.frame(t(tes_up)))
+  
+# remove NA values from each series
+tes_up <- lapply(tes_up, function(x) x[!is.na(x)])
+  
+# convert each series to a TS object with appropriate seasonal frequency
+tes_up <- lapply(tes_up, function(x) ts(x, frequency=12))
+
+# ts_data <- lapply(ts_data, function(x) x+1)
+
+# take the log of the data
+tes_up <- lapply(tes_up, log)
+```
+
+```{r}
+t_list <- list()
+
+for (i in 1:length(tes_up)){
+  mod_tes <- ets(tes_up[[i]], model="AAN")
+  
+  temp <- as_tibble(mod_tes$states)
+  
+  t_list[[i]] <- temp$l + temp$b
+}
+```
+
+Get vector of slopes.
+```{r}
+slopes <- c()
+
+for (i in 1:length(t_list)){
+  series <- t_list[[i]]
+  rise <- tail(series, 1) - series[1]
+  run <- length(series)
+  slope <- rise/run
+  slopes <- c(slopes, slope)
+}
+```
+
+```{r}
+as_tibble(slopes) %>%
+  ggplot(aes(y=value)) +
+  geom_boxplot()
+```
+
+```{r}
+mean(slopes < 0)
+```
+
+Compare distributions of features for series that were adjusted up vs. down for TES under Top coding.
+```{r}
+tes_down <- read_csv("../../Data/Adjustment Data/tes_down_original.csv")
+tes_down_protected <- read_csv("../../Data/Adjustment Data/tes_down_protected.csv")
+```
+
+```{r}
+pca_tes_down <- perform_pca_modified(f_pca, tes_down)
+pca_tes_down_protected <- perform_pca_modified(f_pca, tes_down_protected)
+```
+
+```{r}
+is_sample <- rep(c(0,1,2), times=c(nrow(orig), nrow(pca_tes_down), nrow(pca_tes_down_protected)))
+
+orig %>%
+  bind_rows(pca_tes_down, pca_tes_down_protected) %>%
+  bind_cols(is_sample = as.factor(is_sample)) %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point(aes(col=entropy), size=2) +
+  facet_wrap(~is_sample) # +
+  # ylim(c(-3.5,2.5))+
+  # xlim(c(-4,4)) +
+  # labs(col="Spectral Entropy")
+```
+
+```{r}
+# convert to a list of series
+tes_down_protected <- as.list(as.data.frame(t(tes_down_protected)))
+tes_down <- as.list(as.data.frame(t(tes_down)))
+  
+# remove NA values from each series
+tes_down_protected <- lapply(tes_down_protected, function(x) x[!is.na(x)])
+tes_down <- lapply(tes_down, function(x) x[!is.na(x)])
+  
+# convert each series to a TS object with appropriate seasonal frequency
+tes_down_protected <- lapply(tes_down_protected, function(x) ts(x, frequency=12))
+tes_down <- lapply(tes_down, function(x) ts(x, frequency=12))
+
+# ts_data <- lapply(ts_data, function(x) x+1)
+
+# take the log of the data
+tes_down_protected <- lapply(tes_down_protected, log)
+tes_down <- lapply(tes_down, log)
+```
+
+Read in TES 0.4 data.
+```{r}
+td_protected <- read.csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_Top_0.4.csv")
+
+# convert to a list of series
+td_protected <- as.list(as.data.frame(t(td_protected)))
+  
+# remove NA values from each series
+td_protected <- lapply(td_protected, function(x) x[!is.na(x)])
+  
+# convert each series to a TS object with appropriate seasonal frequency
+td_protected <- lapply(td_protected, function(x) ts(x, frequency=12))
+
+# ts_data <- lapply(ts_data, function(x) x+1)
+
+# take the log of the data
+td_protected <- lapply(td_protected, log)
+```
+
+```{r}
+snum <- 1
+top_ses <- ets(tes_down[[snum]], model="ANN")
+top_ses_protected <- ets(tes_down_protected[[snum]], model="ANN")
+top_des <- ets(tes_down[[snum]], model="AAN")
+top_des_protected <- ets(tes_down_protected[[snum]], model="AAN")
+top_tes <- ets(tes_down[[snum]], model="AAA")
+top_tes_protected<- ets(tes_down_protected[[snum]], model="AAA")
+```
+
+
+```{r}
+ses_top <- tibble(y = tes_down[[snum]], 
+                  y_hat_ses = top_ses$fitted,
+                  y_hat_ses_protected = top_ses_protected$fitted,
+                  x = 1:length(tes_down[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y=y, color=data)) +
+  geom_line() +
+  geom_point() +
+    # scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="SES") +
+  theme(plot.title=element_text(size=12)) +
+  ylim(4, 10)
+
+des_top <- tibble(y = tes_down[[snum]], 
+                  y_hat_des = top_des$fitted,
+                  y_hat_des_protected = top_des_protected$fitted,
+                  x = 1:length(tes_down[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    # scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="DES") +
+  theme(plot.title=element_text(size=12)) +
+  ylim(4, 10)
+
+tes_top <- tibble(y = tes_down[[snum]], 
+                 y_hat_tes = top_tes$fitted,
+                 y_hat_tes_protected = top_tes_protected$fitted,
+                 x = 1:length(tes_down[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    # scale_colour_manual(labels = c("Original Data", "Protected Fitted Values"), values=c("#66CCFF", "#3399CC")) +
+  labs(y = "log(Y)",
+       x = "",
+       color="",
+       title="TES") +
+  theme(plot.title=element_text(size=12))+
+  ylim(4, 10)
+
+# mae <- function(y, yhat){
+#   return(mean(abs(y - yhat)))
+# }
+# 
+# real_y <- ts_data[[snum]]
+# 
+# mae_vals <- tibble("SES"=mae(real_y, mod_ses$fitted), "DES"=mae(real_y, mod_des$fitted), "TES"=mae(real_y, mod_tes$fitted)) %>%
+#   gather(key="Model", value="MAE")
+# 
+# mae_plot <- mae_vals %>%
+#   ggplot(aes(x = factor(Model, levels=c("SES", "DES", "TES")), y = MAE)) +
+#   geom_col(fill = "#3399CC") +
+#   labs(x = "Model") +
+#   geom_text(aes(label = round(MAE, 2)), vjust=-0.5) +
+#   ylim(0, 2)
+
+combined_exp_smooth_plot <- ggarrange(ses_top, des_top, tes_top,
+          ncol=2, nrow=2,
+          labels = c("", "", ""),
+          common.legend=TRUE, legend='bottom')
+
+annotate_figure(combined_exp_smooth_plot, top = text_grob("Original Series vs. Exponential Smoothing Fitted Values (DP (\u03f5 = 1))", size=14, face="bold"))
+
+# red color: "#FF0000"
+```
+
+
+
+
+```{r}
+# convert to a list of series
+tes_down <- as.list(as.data.frame(t(tes_down)))
+  
+# remove NA values from each series
+tes_down <- lapply(tes_down, function(x) x[!is.na(x)])
+  
+# convert each series to a TS object with appropriate seasonal frequency
+tes_down <- lapply(tes_down, function(x) ts(x, frequency=12))
+
+# ts_data <- lapply(ts_data, function(x) x+1)
+
+# take the log of the data
+tes_down <- lapply(tes_down, log)
+```
+
+```{r}
+t_list <- list()
+
+for (i in 1:length(tes_down)){
+  mod_tes <- ets(tes_down[[i]], model="AAN")
+  
+  temp <- as_tibble(mod_tes$states)
+  
+  t_list[[i]] <- temp$l + temp$b
+}
+```
+
+Get vector of slopes.
+```{r}
+slopes <- c()
+
+for (i in 1:length(t_list)){
+  series <- t_list[[i]]
+  rise <- tail(series, 1) - series[1]
+  run <- length(series)
+  slope <- rise/run
+  slopes <- c(slopes, slope)
+}
+```
+
+```{r}
+as_tibble(slopes) %>%
+  ggplot(aes(y=value)) +
+  geom_boxplot()
+```
+
+```{r}
+mean(slopes > 0)
+```
+
+
+***
 
 View distribution of entropy in feature spaces.
 ```{r}
@@ -488,7 +879,9 @@ Plot for DP characteristics under strong protection.
 ```{r}
 attributes_plot_strong <- gathered_bp_data_strong %>%
   filter(method %in% c("Original", "DP")) %>%
-  ggplot(aes(x=method, y=Value)) +
+  mutate(new_method = ifelse(method=="DP", "Differential Privacy", "Original"),
+         new_method = factor(new_method, levels=c("Original", "Differential Privacy"))) %>%
+  ggplot(aes(x=new_method, y=Value)) +
   geom_boxplot(fill="#3399CC") +
   facet_wrap(~Characteristic) +
   ylim(-0.5, 1) +
@@ -678,8 +1071,7 @@ adj_results %>%
   filter(Horizon == "h1", Protection == "DP", Parameter==20) %>%
   select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
   arrange(Model, desc(Direction)) %>%
-  filter(Direction %in% c("Up", "Down"),
-         Model %in% c("SES", "DES"))
+  filter(Direction %in% c("Up", "Down"))
 ```
 
 Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
@@ -688,8 +1080,7 @@ adj_results %>%
   filter(Horizon == "h1", Protection == "Top", Parameter==0.4) %>%
   select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
   arrange(Model, desc(Direction)) %>%
-  filter(Direction %in% c("None"),
-         Model %in% c("SES", "DES", "TES"))
+  filter(Direction %in% c("Up", "Down"))
 ```
 
 Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
@@ -698,14 +1089,13 @@ adj_results %>%
   filter(Horizon == "h1", Protection == "Bottom", Parameter==0.4) %>%
   select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
   arrange(Model, desc(Direction)) %>%
-  filter(Direction %in% c("Up", "Down")) %>%
-  filter(Model %in% c("SES", "DES", "TES"))
+  filter(Direction %in% c("Up", "Down"))
 ```
 
 Make tables with average proportion of adjusted direction, average magnitude of adjustment, and mean AvgRelMAE.
 ```{r}
 adj_results %>%
-  filter(Model %in% c("SES", "DES", "TES"), Horizon == "h1", Protection == "Top", Parameter==0.1) %>%
+  filter(Horizon == "h1", Protection == "Top", Parameter==0.1) %>%
   select(Model, Direction, Prop, Magnitude, AvgRelMAE) %>%
   arrange(Model, desc(Direction)) %>%
   filter(Direction %in% c("Up", "Down"))
@@ -1101,8 +1491,11 @@ annotate_figure(combined_exp_smooth_plot, top = text_grob("Original Series vs. E
 ```
 
 Adding RNN fitted values.
+
+RNN median fitted values.
 ```{r}
 rnn_forecasts <- read_csv("../../Outputs/Forecasts/RNN_h1_DP_1.csv")
+
 rnn_fitted <- read_csv("../../Outputs/Tables/rnn_dp_1_fitted_vals.csv")
 
 beginning <- matrix(nrow=24, ncol=5)
@@ -1112,21 +1505,67 @@ colnames(beginning) <- c(0, 1, 2, 3, 4)
 rnn_fitted <- as_tibble(beginning) %>% bind_rows(rnn_fitted)
 ```
 
+Actual RNN fitted values across models.
 ```{r}
-# f <- log(rnn_forecasts$`2`)
-# 
-# rnn <- c(rnn_fitted$`2`, f)
-# 
-# length(rnn)
-# 
-# length(dp_1[[snum]])
+snum=3
+rnn_s3_fitted <- read_csv("../../Outputs/Tables/rnn_dp_1_series_3_fitted_vals.csv")
+
+beginning <- matrix(nrow=24, ncol=10)
+
+colnames(beginning) <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+rnn_s3_fitted <- as_tibble(beginning) %>% bind_rows(rnn_s3_fitted)
+```
+
+```{r}
+combined_s3_fitted <- rnn_s3_fitted %>%
+  mutate(x = 1:nrow(rnn_s3_fitted),
+         y = ts_data[[snum]]) %>%
+  gather(key='model', value='fitted_value', -x)
+```
+```{r}
+unique(combined_s3_fitted$model)
+```
+
+
+
+Plot of all 10 models' fitted values for series 3.
+```{r}
+combined_s3_fitted %>%
+  mutate(model = factor(model, levels = c("y", '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'), labels = c("Y", "RNN 1", "RNN 2", "RNN 3", "RNN 4", "RNN 5", "RNN 6", "RNN 7", "RNN 8", "RNN 9", "RNN 10"))) %>%
+  ggplot(aes(x=x, y=fitted_value, color=model)) +
+  geom_line() +
+  geom_point() +
+  scale_colour_manual(values=c("#66CCFF", "#3399CC", "#008080", "#800080", "#008000", "#800000", "#808080", "#00FFFF", "#FFFF00", "#00FF00", "#FFFFFF", "#000000")) +
+  ylim(4, 10) +
+  labs(y = "log(Y)",
+       title = "All RNN Fitted Values From DP (\u03f5 = 1) vs. Original Data",
+       x = 'Time',
+       color="")
+```
+
+Plot of median fitted values.
+```{r}
+tibble(y = ts_data[[snum]],
+                 y_hat_rnn = rnn_fitted$`2`,
+                 x = 1:length(ts_data[[snum]])) %>%
+  gather(key='data', value='y', -x) %>%
+  ggplot(aes(x=x, y = y, color=data)) +
+  geom_line() +
+  geom_point() +
+    scale_colour_manual(labels = c("Y", "RNN"), values=c("#66CCFF", "#FF0000")) +
+  labs(y = "log(Y)",
+       x = "Time",
+       color="",
+       title="Median RNN Fitted Values from DP (\u03f5 = 1) vs. Original Data") +
+  ylim(4, 10)
 ```
 
 ```{r}
 tibble(y = ts_data[[snum]], 
                  y_hat_des = mod_des$fitted,
                  y_hat_rnn = rnn_fitted$`2`,
-                 x = 1:length(dp_1[[snum]])) %>%
+                 x = 1:length(ts_data[[snum]])) %>%
   gather(key='data', value='y', -x) %>%
   ggplot(aes(x=x, y = y, color=data)) +
   geom_line() +
@@ -1135,9 +1574,11 @@ tibble(y = ts_data[[snum]],
   labs(y = "log(Y)",
        x = "Time",
        color="",
-       title=" RNN and DES Fitted Values from DP (\u03f5 = 1) vs. Original Data") +
+       title="DES and Median RNN Fitted Values from DP (\u03f5 = 1) vs. Original Data") +
   ylim(4, 10)
 ```
+
+
 
 
 
@@ -1288,6 +1729,15 @@ tes_data %>%
 
 
 ***
+
+***
+
+## Find examples of series which improve under exponential smoothing and top/bottom coding and why.
+
+```{r}
+
+```
+
 
 ***
 
@@ -1551,7 +2001,7 @@ ar_orig_fv_plot <- tibble(y = ts_data[[snum]],
 #   labs(x = "Model") +
 #   geom_text(aes(label = round(MSE, 2)), vjust=1.1)
 
-ar_combined_fv_plots <- ggarrange(ar_1_fv_plot, ar_orig_fv_plot,
+ar_combined_fv_plots <- ggarrange(ar_orig_fv_plot, ar_1_fv_plot,
           ncol=2, nrow=1,
           labels = c("", ""),
           common.legend=TRUE, legend='bottom')
