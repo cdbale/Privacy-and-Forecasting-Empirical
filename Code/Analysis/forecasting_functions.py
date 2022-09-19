@@ -27,7 +27,7 @@ from LGBM_functions import *
 from darts import TimeSeries
 
 # function for forecasting with LSTM-RNN
-def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models):
+def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models, model_save_folder=None):
 
     num_series = len(ts_data)
 
@@ -67,7 +67,9 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
                        batch_size_=int(best_params['params']['batch_size_']),
                        n_epochs_=int(best_params['params']['n_epochs_']),
                        dropout_=best_params['params']['dropout_'],
-                       L2_penalty_=best_params['params']['L2_penalty_'])
+                       L2_penalty_=best_params['params']['L2_penalty_'],
+                       save_models=True,
+                       model_save_folder=model_save_folder)
 
     fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
 
@@ -354,7 +356,8 @@ def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, para
                               input_chunk_length=options['input_chunk_length'],
                               training_length=options['training_length'],
                               max_samples_per_ts=options['max_samples_per_ts'],
-                              num_ensemble_models=options['num_ensemble_models'])
+                              num_ensemble_models=options['num_ensemble_models'],
+                              model_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
 
     return fcasts
 

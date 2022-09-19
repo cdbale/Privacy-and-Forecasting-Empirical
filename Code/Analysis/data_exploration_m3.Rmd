@@ -93,12 +93,16 @@ ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
 ts_data <- lapply(ts_data, function(x) ts(x, frequency=12))
 
 # take the log of the data
-# ts_data <- lapply(ts_data, log)
+ts_data <- lapply(ts_data, log)
 
 # binarize_mean feature was returning an error that it wasn't giving a named feature vector
 
 cv <- function(series){
   return(sd(series)/mean(series))
+}
+
+series_mean <- function(x){
+  return(mean(x))
 }
 
 # simple outlier detection indicators, one for when an outlier occurs at forecast origin, within 5, and within 10 time periods
@@ -132,15 +136,7 @@ outlier_detection_10 <- function(series){
   return(1 * any((outliers > (length(series)-10))))
 }
 
-# # calculate desired features
-# ts_features <- tsfeatures(ts_data, features=c("cv", "outlier_detection", "acf_features", "arch_stat",
-#                                               "crossing_points", "entropy", "flat_spots", "heterogeneity",
-#                                               "hurst", "hw_parameters", "lumpiness", "max_kl_shift",
-#                                               "max_level_shift", "max_var_shift", "nonlinearity",
-#                                               "pacf_features", "stability", "stl_features", "unitroot_kpss",
-#                                               "unitroot_pp", "compengine"))
-
-ts_features <- tsfeatures(ts_data, features=c("acf_features", "entropy", "stl_features"))
+ts_features <- tsfeatures(ts_data, features=c("series_mean", "stability", "stl_features", "hurst", "max_var_shift"), scale=FALSE)
 ```
 
 Save extracted features.
@@ -150,7 +146,7 @@ Save extracted features.
 
 
 ```{r}
-f_orig <- ts_features %>% select(entropy, trend, seasonal_strength, x_acf1)
+f_orig <- ts_features %>% select(series_mean, trend, curvature, hurst, stability, max_var_shift)
 
 # perform pca on desired features
 f_pca <- f_orig %>% prcomp(center=TRUE, scale=TRUE)
@@ -163,12 +159,6 @@ is_protected <- factor(is_protected, levels=c(0,1), labels=c("Original", "Protec
 
 ```{r}
 ts_features
-```
-
-```{r}
-ts_features %>%
-  ggplot(aes(x = entropy)) +
-  geom_density()
 ```
 
 Convert projected original data to tibble.
@@ -235,7 +225,7 @@ protected_series_plot("DP_1", 1, c(0), ylim(-60000,50000), main_title = "Origina
 ```
 
 ```{r}
-protected_series_plot("DP_1", 1, c(0,1), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
+dp_example <- protected_series_plot("DP_1", 1, c(0,1), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
 ```
 
 ```{r}
@@ -243,7 +233,24 @@ protected_series_plot("Top_0.4", 1, c(0), ylim(0, 10000), main_title = "Original
 ```
 
 ```{r}
-protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
+top_example <- protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
+```
+
+```{r}
+knts_example1 <- protected_series_plot("k-nts_5", 1, c(0,1), ylim(0, 15000), main_title = "")
+
+knts_example2 <- protected_series_plot("k-nts_10", 1, c(0,1), ylim(0, 15000), main_title = "")
+
+knts_example3 <- protected_series_plot("k-nts_15", 1, c(0,1), ylim(0, 15000), main_title = "")
+```
+
+```{r fig.height=6}
+library(gridExtra)
+plt <- ggarrange(knts_example1, knts_example2, knts_example3,
+                 labels=c("k = 5", "k = 10", "k = 15"),
+                 nrow=3, common.legend=TRUE, legend="bottom")
+
+annotate_figure(plt, top=text_grob("Comparison of Original and k-nTS Protected Series", face="bold", size=14))
 ```
 
 ***
@@ -285,9 +292,9 @@ perform_pca <- function(pca_object, protection_method){
   
   td <- lapply(td, log)
   
-  features <- tsfeatures(td, features=c("entropy", "stl_features", "acf_features"))
+  features <- tsfeatures(td, features=c("series_mean", "stability", "stl_features", "hurst", "max_var_shift"), scale=FALSE)
   
-  f <- features %>% select(entropy, trend, seasonal_strength, x_acf1)
+  f <- features %>% select(series_mean, trend, curvature, hurst, stability, max_var_shift)
   
   f_projected <- predict(pca_object, f)
   
@@ -298,18 +305,27 @@ perform_pca <- function(pca_object, protection_method){
 }
 ```
 
-Get PCA results for strong protection.
+Top coding.
 ```{r}
-dp_strong <- perform_pca(f_pca, "DP_1")
-an_strong <- perform_pca(f_pca, "AN_2")
-top_strong <- perform_pca(f_pca, "Top_0.4")
-bottom_strong <- perform_pca(f_pca, "Bottom_0.4")
+top_1 <- perform_pca(f_pca, "Top_0.1")
+top_2 <- perform_pca(f_pca, "Top_0.2")
+top_4 <- perform_pca(f_pca, "Top_0.4")
 ```
 
+Differential privacy.
 ```{r}
-top_1 <- perform_pca(f_pca, "Top_0.4")
-top_2 <- perform_pca(f_pca, "Top_0.4")
-top_4 <- perform_pca(f_pca, "Top_0.4")
+dp_01 <- perform_pca(f_pca, "DP_0.1")
+dp_1 <- perform_pca(f_pca, "DP_1") 
+dp_46 <- perform_pca(f_pca, "DP_4.6")
+dp_10 <- perform_pca(f_pca, "DP_10")
+dp_20 <- perform_pca(f_pca, "DP_20")
+```
+
+k-nTS.
+```{r}
+knts_5 <- perform_pca(f_pca, "k-nts_5")
+knts_10 <- perform_pca(f_pca, "k-nts_10") 
+knts_15 <- perform_pca(f_pca, "k-nts_15")
 ```
 
 Create data for plotting.
@@ -323,7 +339,7 @@ Create data containing time series characteristic under all protection methods.
 ```{r}
 top_coding_features <- orig %>%
   bind_rows(top_1, top_2, top_4) %>%
-  select(entropy, trend, seasonal_strength, x_acf1) %>%
+  select(series_mean, trend, curvature, hurst, stability, max_var_shift) %>%
   bind_cols(method=factor(method))
 ```
 
@@ -332,8 +348,9 @@ Collapse data for plotting.
 gathered_tc_features <- top_coding_features %>%
   gather(key = "Characteristic", value = "Value", -method) %>%
   mutate(Characteristic = factor(Characteristic, 
-                                 levels=c("entropy", "trend", "seasonal_strength", "x_acf1"),
-                                 labels=c("Spectral Entropy", "Strength of Trend", "Strength of Seasonality", "ACF")))
+                                 levels=c("series_mean", "trend", "curvature", "stability", "max_var_shift", "hurst"),
+                                 labels=c("Mean", "Strength of Trend", "Curvature Coefficient", "Stability",
+                                          "Max Variance Shift", "Hurst Coefficient")))
 ```
 
 Plot for DP characteristics under strong protection.
@@ -345,17 +362,139 @@ attributes_plot_strong <- gathered_tc_features %>%
   geom_boxplot(fill="#3399CC") +
   facet_wrap(~Characteristic, scales = "free_y") +
   labs(x = "Protection Method",
-       title = "Distributions of Time Series Characteristics In Original Data vs. Top-Coded Data")
+       title = "Distributions of Time Series Characteristics In Original Data vs. Top-Coded Data") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 
 attributes_plot_strong
 ```
 
+Repeat for differential privacy.
 
+Create data for plotting.
+```{r}
+method <- c("Original", "\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1")
+method <- rep(method, each=474)
+method <- factor(method, levels=c("Original", "\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"), labels=c("Original", "\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"))
+```
 
+Create data containing time series characteristic under all protection methods.
+```{r}
+dp_features <- orig %>%
+  bind_rows(dp_20, dp_10, dp_46, dp_1, dp_01) %>%
+  select(series_mean, trend, curvature, hurst, stability, max_var_shift) %>%
+  bind_cols(method=factor(method))
+```
 
+Collapse data for plotting.
+```{r}
+gathered_dp_features <- dp_features %>%
+  gather(key = "Characteristic", value = "Value", -method) %>%
+  mutate(Characteristic = factor(Characteristic, 
+                                 levels=c("series_mean", "trend", "curvature", "stability", "max_var_shift", "hurst"),
+                                 labels=c("Mean", "Strength of Trend", "Curvature Coefficient", "Stability",
+                                          "Max Variance Shift", "Hurst Coefficient")))
+```
 
+Plot for DP characteristics under strong protection.
+```{r}
+attributes_plot_strong <- gathered_dp_features %>%
+  # mutate(new_method = ifelse(method=="DP", "Differential Privacy", "Original"),
+  #        new_method = factor(new_method, levels=c("Original", "Differential Privacy"))) %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic, scales = "free_y") +
+  labs(x = "Protection Method",
+       title = "Distributions of Time Series Characteristics In Original Data vs. DP Data") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
 
+attributes_plot_strong
+```
 
+Repeat for k_nts.
+
+Create data for plotting.
+```{r}
+method <- c("Original", "k = 5", "k = 10", "k = 15")
+method <- rep(method, each=474)
+method <- factor(method, levels=c("Original", "k = 5", "k = 10", "k = 15"), labels=c("Original", "k = 5", "k = 10", "k = 15"))
+```
+
+Create data containing time series characteristic under all protection methods.
+```{r}
+knts_features <- orig %>%
+  bind_rows(knts_5, knts_10, knts_15) %>%
+  select(series_mean, trend, curvature, hurst, stability, max_var_shift) %>%
+  bind_cols(method=factor(method))
+```
+
+Collapse data for plotting.
+```{r}
+gathered_knts_features <- knts_features %>%
+  gather(key = "Characteristic", value = "Value", -method) %>%
+  mutate(Characteristic = factor(Characteristic, 
+                                 levels=c("series_mean", "trend", "curvature", "stability", "max_var_shift", "hurst"),
+                                 labels=c("Mean", "Strength of Trend", "Curvature Coefficient", "Stability",
+                                          "Max Variance Shift", "Hurst Coefficient")))
+```
+
+Plot for DP characteristics under strong protection.
+```{r}
+attributes_plot_strong <- gathered_knts_features %>%
+  # mutate(new_method = ifelse(method=="DP", "Differential Privacy", "Original"),
+  #        new_method = factor(new_method, levels=c("Original", "Differential Privacy"))) %>%
+  ggplot(aes(x=method, y=Value)) +
+  geom_boxplot(fill="#3399CC") +
+  facet_wrap(~Characteristic, scales = "free_y") +
+  labs(x = "Protection Method",
+       title = "Distributions of Time Series Characteristics In Original Data vs. k-nTS Data") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+attributes_plot_strong
+```
+
+Examine changes in SES alpha parameter.
+```{r}
+alphas <- read_csv("../../Outputs/Results/Model Parameters/ses_alphas.csv")
+```
+
+```{r}
+alphas <- alphas %>%
+  gather(key="name", value="values") %>%
+  mutate(name = gsub("k-nts", "knts", name)) %>%
+  separate(name, c("Protection", "Parameter"), sep="_") %>%
+  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
+```
+
+Visualize changes in alpha value.
+```{r}
+dp_alpha <- alphas %>%
+  filter(Protection %in% c("DP", "original")) %>%
+  mutate(Parameter = factor(Parameter, levels=c("Original", "20", "10", "4.6", "1", "0.1"), labels=c("Original", "\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"))) %>%
+  ggplot(aes(x=Parameter, y=values)) +
+  geom_boxplot() +
+  ylab("SES Alpha") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+top_alpha <- alphas %>%
+  filter(Protection %in% c("Top", "original")) %>%
+  mutate(Parameter = factor(Parameter, levels=c("Original", "0.1", "0.2", "0.4"), labels = c("Original", "Top 0.1", "Top 0.2", "Top 0.4")))  %>%
+  ggplot(aes(x=Parameter, y=values)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+knts_alpha <- alphas %>%
+  filter(Protection %in% c("knts", "original")) %>%
+  mutate(Parameter = factor(Parameter, levels=c("Original", "5", "10", "15"), labels = c("Original", "k = 5", "k = 10", "k = 15")))  %>%
+  ggplot(aes(x=Parameter, y=values)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+plt <- ggarrange(dp_alpha, top_alpha, knts_alpha,
+                 # labels=c("k = 5", "k = 10", "k = 15"),
+                 ncol=3)
+
+annotate_figure(plt, top=text_grob("SES Alpha Parameter Comparison", face="bold", size=14))
+```
 
 
 
@@ -387,7 +526,7 @@ perform_pca_modified <- function(pca_object, new_data){
   
   td <- lapply(td, log)
   
-  features <- tsfeatures(td, features=c("entropy", "stl_features", "acf_features"))
+  features <- tsfeatures(td, features=c("entropy", "stl_features", "acf_features"), scale=FALSE)
   
   f <- features %>% select(entropy, trend, seasonal_strength, x_acf1)
   
@@ -1785,7 +1924,7 @@ extract_es_features <- function(protection_method, original=FALSE){
   
   td <- lapply(td, log)
   
-  features <- tsfeatures(td, features=c("ses_alpha", "des_alpha", "des_beta", "hw_parameters"), parallel=TRUE)
+  features <- tsfeatures(td, features=c("ses_alpha", "des_alpha", "des_beta", "hw_parameters"), parallel=TRUE, scale=FALSE)
   
   return(features)
   

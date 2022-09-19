@@ -441,6 +441,8 @@ def pre_process(ts_data, target_forecast_period, mean_normalize=False, log=False
     full_lags = None
     pre_detrend = None
 
+    # print(processed)
+
     # Step 1: truncate any values less than 1 - this only comes into play for
     # data protected using random noise - we do this because we know the M3
     # monthly micro data is strictly positive

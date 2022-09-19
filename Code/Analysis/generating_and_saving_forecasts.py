@@ -10,27 +10,30 @@ import csv
 import os
 
 # whether to forecast using original data
-forecast_for_confidential = True
+forecast_for_confidential = False
 
 # forecast horizons
-horizons = [1, 18]
+# horizons = [1, 18]
+horizons = [1]
 
 # dictionary containing string name for each protection method and list of
 # parameters for each method
-protection_methods = {"Top": [0.10, 0.20, 0.40],
-                      "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.5, 1, 1.5, 2],
-                      "DP": [0.1, 1, 4.6, 10, 20]}
+protection_methods = {"k_nts": [5, 10, 15]}
+                      # "Top": [0.10, 0.20, 0.40],
+                      # "Bottom": [0.10, 0.20, 0.40],
+                      # "AN": [0.5, 1, 1.5, 2],
+                      # "DP": [0.1, 1, 4.6, 10, 20]}
+
+# protection_methods = {}
 
 # dictionary containing string names of forecasting models and sub-dictionaries
 # of model-specific parameters
 forecasting_models = {# "SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
                       # "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None}}
-                      # "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None}}
+                      # "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      # "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
                       # "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid": None, "options": {'max_samples_per_ts': None, 'window_length': 25}},
                       "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "standardize":True, "detrend":False, "param_grid": None, "options": {"pre_processing": False}}}
-                      # "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":"additive", "sp":7, "remove_seasonality":True, "mean_normalize":True, "log":True, "detrend":False, "param_grid": {'learning_rate': [0.025, 0.05, 0.075, 0.10], 'num_boost_round': [100, 500, 1000, 1200, 1500]}, "rnn_options":None},
                       # "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
 
 forecasts_path = "../../Outputs/Forecasts/"
@@ -65,40 +68,20 @@ for H in horizons:
         metadata = {'protection_method': "original", 'protection_parameter': "none"}
 
         for m in forecasting_models.items():
-            # if multivariate LGBM, we train one model for each step in the horizon
-            if False: # m[0] == "Multivariate_LGBM":
-                fcasts_original = [full_forecast_analysis(Y=Y,
-                                                          h=i,
-                                                          forecasting_model=m[0],
-                                                          window_length=m[1]["window_length"],
-                                                          make_stationary=m[1]["make_stationary"],
-                                                          seasonality_type=m[1]["seasonality_type"],
-                                                          sp=m[1]["sp"],
-                                                          remove_seasonality=m[1]["remove_seasonality"],
-                                                          mean_normalize=m[1]["mean_normalize"],
-                                                          log=m[1]["log"],
-                                                          detrend=m[1]["detrend"],
-                                                          param_grid=m[1]["param_grid"],
-                                                          options=m[1]["options"],
-                                                          metadata=metadata) for i in range(1, H+1)]
 
-                # combine fcast dataframes into one
-                fcasts_original = pd.concat(fcasts_original, axis=0)
-
-            else:
-                fcasts_original = full_forecast_analysis(Y=Y,
-                                                         h=H,
-                                                         forecasting_model=m[0],
-                                                         make_stationary=m[1]["make_stationary"],
-                                                         seasonality_type=m[1]["seasonality_type"],
-                                                         sp=m[1]["sp"],
-                                                         remove_seasonality=m[1]["remove_seasonality"],
-                                                         mean_normalize=m[1]["mean_normalize"],
-                                                         log=m[1]["log"],
-                                                         detrend=m[1]["detrend"],
-                                                         param_grid=m[1]["param_grid"],
-                                                         options=m[1]["options"],
-                                                         metadata=metadata)
+            fcasts_original = full_forecast_analysis(Y=Y,
+                                                     h=H,
+                                                     forecasting_model=m[0],
+                                                     make_stationary=m[1]["make_stationary"],
+                                                     seasonality_type=m[1]["seasonality_type"],
+                                                     sp=m[1]["sp"],
+                                                     remove_seasonality=m[1]["remove_seasonality"],
+                                                     mean_normalize=m[1]["mean_normalize"],
+                                                     log=m[1]["log"],
+                                                     detrend=m[1]["detrend"],
+                                                     param_grid=m[1]["param_grid"],
+                                                     options=m[1]["options"],
+                                                     metadata=metadata)
 
             if fcasts_original is None:
                 continue
@@ -135,40 +118,24 @@ for H in horizons:
                 Y_protected = apply_data_protection(Y, num_stdev=param)
             elif p[0] == "DP":
                 Y_protected = apply_data_protection(Y, epsilon=param)
+            elif p[0] == "k_nts":
+                Y_protected = apply_data_protection(Y, k=param)
 
             # forecast using each model on the current protected data
             for m in forecasting_models.items():
-                if False: #m[0] == "Multivariate_LGBM":
-                    fcasts_protected = [full_forecast_analysis(Y=Y_protected,
-                                                               h=i,
-                                                               forecasting_model=m[0],
-                                                               make_stationary=m[1]["make_stationary"],
-                                                               seasonality_type=m[1]["seasonality_type"],
-                                                               sp=m[1]["sp"],
-                                                               remove_seasonality=m[1]["remove_seasonality"],
-                                                               mean_normalize=m[1]["mean_normalize"],
-                                                               log=m[1]["log"],
-                                                               param_grid=m[1]["param_grid"],
-                                                               options=m[1]["options"],
-                                                               metadata=metadata) for i in range(1, H+1)]
-
-                    # combine fcast dataframes into one
-                    fcasts_protected = pd.concat(fcasts_protected, axis=0)
-
-                else:
-                    fcasts_protected = full_forecast_analysis(Y=Y_protected,
-                                                              h=H,
-                                                              forecasting_model=m[0],
-                                                              make_stationary=m[1]["make_stationary"],
-                                                              seasonality_type=m[1]["seasonality_type"],
-                                                              sp=m[1]["sp"],
-                                                              remove_seasonality=m[1]["remove_seasonality"],
-                                                              mean_normalize=m[1]["mean_normalize"],
-                                                              log=m[1]["log"],
-                                                              detrend=m[1]["detrend"],
-                                                              param_grid=m[1]["param_grid"],
-                                                              options=m[1]["options"],
-                                                              metadata=metadata)
+                fcasts_protected = full_forecast_analysis(Y=Y_protected,
+                                                          h=H,
+                                                          forecasting_model=m[0],
+                                                          make_stationary=m[1]["make_stationary"],
+                                                          seasonality_type=m[1]["seasonality_type"],
+                                                          sp=m[1]["sp"],
+                                                          remove_seasonality=m[1]["remove_seasonality"],
+                                                          mean_normalize=m[1]["mean_normalize"],
+                                                          log=m[1]["log"],
+                                                          detrend=m[1]["detrend"],
+                                                          param_grid=m[1]["param_grid"],
+                                                          options=m[1]["options"],
+                                                          metadata=metadata)
 
                 if fcasts_protected is None:
                     continue

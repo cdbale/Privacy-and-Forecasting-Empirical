@@ -22,16 +22,51 @@ eds <- read_csv(paste0(ed_file_path, "all_distributions.csv"))
 
 eds <- eds %>% gather(key="name", value="values") %>%
   mutate(name = gsub("Multivariate_LGBM", "LGBM", name),
+         name = gsub("k_nts", "knts", name),
          name = substring(name, 1, nchar(name)-4)) %>%
   separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
-  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter),
-         Parameter = factor(Parameter, levels=c('Original', '0.1', '0.2', '0.4'), labels=c('Original', "Top 0.1", "Top 0.2", "Top 0.4")))
+  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
 
-eds %>%
-  filter(Horizon=="h1", Protection %in% c("original", "Top")) %>%
-  ggplot(aes(x=values, fill=Protection)) +
-  geom_density() +
-  facet_wrap(~Model)
+average_error_ranks <- eds %>%
+  group_by(Protection, Model) %>%
+  summarize(avg_error = mean(values), .groups="drop") %>%
+  arrange(Protection, avg_error) %>%
+  group_by(Protection) %>%
+  mutate(rank = 1:n())
+
+error_variance_ranks <- eds %>%
+  group_by(Protection, Model) %>%
+  summarize(error_variance = var(values), .groups="drop") %>%
+  arrange(Protection, error_variance) %>%
+  group_by(Protection) %>%
+  mutate(rank = 1:n())
+
+ranks1 <- average_error_ranks %>%
+  filter(Protection != "original") %>%
+  group_by(Model) %>%
+  summarize(avg_rank = mean(rank)) %>%
+  arrange(avg_rank)
+
+ranks2 <- error_variance_ranks %>%
+  filter(Protection != "original") %>%
+  group_by(Model) %>%
+  summarize(avg_rank = mean(rank)) %>%
+  arrange(avg_rank)
+
+##############################################
+
+## plot error distributions
+
+limited_eds <- eds %>%
+  filter(Protection != "original") %>%
+  mutate(error_upper_limit = quantile(values, 0.95)) %>%
+  filter(values <= error_upper_limit)
+
+limited_eds %>%
+  ggplot(aes(x=Model, y=values)) +
+  geom_boxplot() +
+  facet_wrap(~Protection) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 # calculate the error variance normalized by the smallest variance per protection method parameter
 

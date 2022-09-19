@@ -4,6 +4,7 @@ from darts.models.forecasting.rnn_model import RNNModel
 import numpy as np
 import pandas as pd
 from sktime.performance_metrics.forecasting import mean_absolute_error
+import os
 
 def train_RNN(train_data,
               h,
@@ -17,7 +18,9 @@ def train_RNN(train_data,
               batch_size_,
               n_epochs_,
               dropout_,
-              L2_penalty_):
+              L2_penalty_,
+              save_models=False,
+              model_save_folder=None):
 
     num_series = len(train_data)
 
@@ -45,14 +48,17 @@ def train_RNN(train_data,
         # fit the model
         RNN.fit(series=train_data, max_samples_per_ts=max_samples_per_ts)
 
+        if save_models:
+            newpath = "../../Outputs/RNN_models/" + model_save_folder + "/"
+            if not os.path.exists(newpath):
+                os.makedirs(newpath)
+            RNN.save_model(newpath + "rnn_mod_" + str(m) + "_.pth.tar")
+
         # generate forecasts
         fcasts = RNN.predict(n=h, series=train_data)
 
         # convert to series
         fcasts = [x.pd_series().reset_index(drop=True) for x in fcasts]
-
-        # convert to dataframe
-        # f = f.pd_dataframe()
 
         fcasts = pd.DataFrame(fcasts).T
 

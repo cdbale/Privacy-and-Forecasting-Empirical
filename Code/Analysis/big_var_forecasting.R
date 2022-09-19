@@ -106,13 +106,16 @@ plot(results)
 # specify the gran vectors for each set of series
 # find the file names
 
-protection_methods <- c("original", "Top", "Bottom", "AN", "DP")
+# protection_methods <- c("original", "Top", "Bottom", "AN", "DP")
+protection_methods <- c("k_nts")
 
-protection_parameters <- list(c('none'), c(0.10, 0.20, 0.40), c(0.10, 0.20, 0.40), c(0.5, 1, 1.5, 2), c(0.1, 1, 4.6, 10, 20))
+# protection_parameters <- list(c('none'), c(0.10, 0.20, 0.40), c(0.10, 0.20, 0.40), c(0.5, 1, 1.5, 2), c(0.1, 1, 4.6, 10, 20))
+protection_parameters <- list(c(5, 10, 15))
 
 gran_vecs <- list(c(70, 10), c(4000, 10), c(6000, 10))
 
-h_vec <- c(1, 18)
+# h_vec <- c(1, 18)
+h_vec <- c(1)
 
 sparse_fracs <- list(list(), list(), list())
 

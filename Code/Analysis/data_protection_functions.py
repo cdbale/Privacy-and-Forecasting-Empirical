@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 
 # generic function to protect time series data
-def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=None, num_stdev=None, epsilon=None):
+def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=None, num_stdev=None, epsilon=None, k=None):
     """
     Applies data protection for an assortment of protection methods. Supplying
     method specific parameters will apply the corresponding protection, e.g.,
@@ -23,6 +23,7 @@ def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=No
         - Bottom coding
         - Additive noise
         - Differential privacy
+        - k-nts
 
     :param sensitive_data: pandas dataframe containing confidential time series
         in rows, time periods in columns.
@@ -51,9 +52,22 @@ def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=No
         P = DP_protection(sensitive_data, epsilon)
         return P
 
+    elif k is not None:
+        P = k_nts_protection(k=k)
+        return P
+
     else:
         print("No protection method selected.")
         return None
+
+def k_nts_protection(k):
+
+    P = pd.read_csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_" + str(k) + ".csv", header=None, skiprows=1)
+
+    # convert to a list of series, and drop missing values
+    P = [x.dropna() for _, x in P.iterrows()]
+
+    return P
 
 # protect time series using top or bottom coding
 def coding_protection(sensitive_data, coding_type, coding_percentage):

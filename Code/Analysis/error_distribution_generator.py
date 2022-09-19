@@ -21,13 +21,15 @@ models = ["SES", "DES", "TES", "ARIMA", "VAR", "Multivariate_LGBM", "RNN"]
 
 # protection methods dictionary
 protection_methods = {"original": [""],
+                      "k_nts": [5, 10, 15],
                       "Top": [0.10, 0.20, 0.40],
                       "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.5, 1, 1.5, 2]}
-                      # "DP": [0.1, 1, 4.6, 10, 20]}
+                      "AN": [0.5, 1, 1.5, 2],
+                      "DP": [0.1, 1, 4.6, 10, 20]}
 
 # forecast horizons
-H = [1, 18]
+# H = [1, 18]
+H = [1]
 
 distribution_dict = {}
 

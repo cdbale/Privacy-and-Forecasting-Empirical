@@ -21,7 +21,8 @@ fcast_files = os.listdir(forecasts_path)
 models = ["SES", "DES", "TES", "ARIMA", "VAR", "Multivariate_LGBM", "RNN"]
 
 # protection methods dictionary
-protection_methods = {"Top": [0.10, 0.20, 0.40],
+protection_methods = {"k_nts": [5, 10, 15],
+                      "Top": [0.10, 0.20, 0.40],
                       "Bottom": [0.10, 0.20, 0.40],
                       "AN": [0.5, 1, 1.5, 2],
                       "DP": [0.1, 1, 4.6, 10, 20]}
