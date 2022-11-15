@@ -179,6 +179,23 @@ f_pca$rotation
 
 ***
 
+```{r}
+temp <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_3.csv"))
+temp
+```
+
+```{r}
+ts_data[1,]
+```
+
+
+```{r}
+temp1 <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_5.csv"))
+
+temp1
+```
+
+
 Function to import protected data and produce a side-by-side comparison of a protected series.
 ```{r}
 protected_series_plot <- function(protection_method, series_number, which_to_plot, ylims, main_title){
@@ -237,18 +254,22 @@ top_example <- protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_
 ```
 
 ```{r}
-knts_example1 <- protected_series_plot("k-nts_5", 1, c(0,1), ylim(0, 15000), main_title = "")
+knts_example1 <- protected_series_plot("k-nts_3", 155, c(0,1), ylim(0, 10000), main_title = "")
 
-knts_example2 <- protected_series_plot("k-nts_10", 1, c(0,1), ylim(0, 15000), main_title = "")
+knts_example2 <- protected_series_plot("k-nts_5", 155, c(0,1), ylim(0, 10000), main_title = "")
 
-knts_example3 <- protected_series_plot("k-nts_15", 1, c(0,1), ylim(0, 15000), main_title = "")
+knts_example3 <- protected_series_plot("k-nts_7", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example4 <- protected_series_plot("k-nts_10", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example5 <- protected_series_plot("k-nts_15", 155, c(0,1), ylim(0, 10000), main_title = "")
 ```
 
 ```{r fig.height=6}
 library(gridExtra)
-plt <- ggarrange(knts_example1, knts_example2, knts_example3,
-                 labels=c("k = 5", "k = 10", "k = 15"),
-                 nrow=3, common.legend=TRUE, legend="bottom")
+plt <- ggarrange(knts_example1, knts_example2, knts_example3, knts_example4, knts_example5,
+                 labels=c("k = 3", "k = 5", "k = 7", "k = 10", "k = 15"),
+                 nrow=5, common.legend=TRUE, legend="bottom")
 
 annotate_figure(plt, top=text_grob("Comparison of Original and k-nTS Protected Series", face="bold", size=14))
 ```
@@ -452,49 +473,6 @@ attributes_plot_strong <- gathered_knts_features %>%
 attributes_plot_strong
 ```
 
-Examine changes in SES alpha parameter.
-```{r}
-alphas <- read_csv("../../Outputs/Results/Model Parameters/ses_alphas.csv")
-```
-
-```{r}
-alphas <- alphas %>%
-  gather(key="name", value="values") %>%
-  mutate(name = gsub("k-nts", "knts", name)) %>%
-  separate(name, c("Protection", "Parameter"), sep="_") %>%
-  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
-```
-
-Visualize changes in alpha value.
-```{r}
-dp_alpha <- alphas %>%
-  filter(Protection %in% c("DP", "original")) %>%
-  mutate(Parameter = factor(Parameter, levels=c("Original", "20", "10", "4.6", "1", "0.1"), labels=c("Original", "\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"))) %>%
-  ggplot(aes(x=Parameter, y=values)) +
-  geom_boxplot() +
-  ylab("SES Alpha") +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-
-top_alpha <- alphas %>%
-  filter(Protection %in% c("Top", "original")) %>%
-  mutate(Parameter = factor(Parameter, levels=c("Original", "0.1", "0.2", "0.4"), labels = c("Original", "Top 0.1", "Top 0.2", "Top 0.4")))  %>%
-  ggplot(aes(x=Parameter, y=values)) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-
-knts_alpha <- alphas %>%
-  filter(Protection %in% c("knts", "original")) %>%
-  mutate(Parameter = factor(Parameter, levels=c("Original", "5", "10", "15"), labels = c("Original", "k = 5", "k = 10", "k = 15")))  %>%
-  ggplot(aes(x=Parameter, y=values)) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-
-plt <- ggarrange(dp_alpha, top_alpha, knts_alpha,
-                 # labels=c("k = 5", "k = 10", "k = 15"),
-                 ncol=3)
-
-annotate_figure(plt, top=text_grob("SES Alpha Parameter Comparison", face="bold", size=14))
-```
 
 
 

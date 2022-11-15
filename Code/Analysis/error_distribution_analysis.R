@@ -10,14 +10,6 @@ library(tidytext)
 # path to files with error distributions
 ed_file_path <- "../../Outputs/Results/Error_Distributions/"
 
-# # store all file names and import
-# fnames <- list.files(path=ed_file_path)
-# files <- lapply(fnames, function(x) read.csv(paste0(ed_file_path, x)))
-# 
-# eds <- do.call(bind_cols, files)
-# 
-# colnames(eds) <- fnames
-
 eds <- read_csv(paste0(ed_file_path, "all_distributions.csv"))
 
 eds <- eds %>% gather(key="name", value="values") %>%
@@ -34,12 +26,18 @@ average_error_ranks <- eds %>%
   group_by(Protection) %>%
   mutate(rank = 1:n())
 
+average_error_ranks %>%
+  filter(Protection == "original")
+
 error_variance_ranks <- eds %>%
   group_by(Protection, Model) %>%
   summarize(error_variance = var(values), .groups="drop") %>%
   arrange(Protection, error_variance) %>%
   group_by(Protection) %>%
   mutate(rank = 1:n())
+
+error_variance_ranks %>%
+  filter(Protection == "original")
 
 ranks1 <- average_error_ranks %>%
   filter(Protection != "original") %>%
@@ -52,6 +50,10 @@ ranks2 <- error_variance_ranks %>%
   group_by(Model) %>%
   summarize(avg_rank = mean(rank)) %>%
   arrange(avg_rank)
+
+ranks1
+
+ranks2
 
 ##############################################
 
@@ -87,9 +89,6 @@ normalized_error_variances %>%
   scale_x_reordered() +
   labs(x="Model",
        y="Normalized Error Variance")
-
-
-
 
 
 

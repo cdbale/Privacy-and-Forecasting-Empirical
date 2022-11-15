@@ -1,0 +1,27 @@
+### Code Directory ###
+
+- Run saving_protected_datasets.py for additive noise and differential privacy (no knts)
+	for periods t-2 and t-1
+
+Next two steps can run at the same time.
+
+- Run generating_and_saving_forecasts.py for period t-2
+	- For additive noise and differential privacy only
+
+- Run k-nts.R to protect data up through period t-1
+
+- Run error_distribution_generator.py for period t-2
+	- get error distributions for models forecasting additive noise and differential privacy data sets
+
+- Run k-nts-plus.R using RReliefF and random forest to select the features whose changes are most
+	predictive of forecast accurracy for additive noise and differential privacy data in t-2,
+	which generates protected data up through period t-1
+
+- Run generating_and_saving_forecasts.py for period t-1
+	- Include data from all privacy methods
+
+- Run results_generator.py
+
+- Run error_distribution_generator.py (with h=1)
+
+- Run results analysis files

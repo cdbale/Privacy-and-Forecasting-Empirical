@@ -20,16 +20,17 @@ fcast_files = os.listdir(forecasts_path)
 models = ["SES", "DES", "TES", "ARIMA", "VAR", "Multivariate_LGBM", "RNN"]
 
 # protection methods dictionary
-protection_methods = {"original": [""],
-                      "k_nts": [5, 10, 15],
-                      "Top": [0.10, 0.20, 0.40],
-                      "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.5, 1, 1.5, 2],
-                      "DP": [0.1, 1, 4.6, 10, 20]}
+protection_methods = {# "Top": [0.10, 0.20, 0.40],
+                      # "Bottom": [0.10, 0.20, 0.40],
+                      "original": [""],
+                      "AN": [0.25, 0.5, 1, 1.5, 2],
+                      "DP": [0.1, 1, 4.6, 10, 20],
+                      "k_nts": [3, 5, 7, 10, 15],
+                      "k_nts_plus": [3, 5, 7, 10, 15]}
 
 # forecast horizons
-# H = [1, 18]
 H = [1]
+# H = [2]
 
 distribution_dict = {}
 
@@ -62,25 +63,5 @@ for m in models:
         print("Distribution calculated for " + m + " for horizon " + str(h))
 
 data = pd.DataFrame(distribution_dict)
-data.to_csv(results_path + "Error_Distributions/all_distributions.csv", index=False)
-# for h in H:
-#
-#         horizon_fcasts = [f for f in fcast_files if str(h)+"_" in f]
-#
-#         for m in models:
-#
-#             model_fcasts = [f for f in horizon_fcasts if m in f]
-#
-#             for p in protection_methods.items():
-#
-#                 protection_method = p[0]
-#
-#                 protection_parameters = p[1]
-#
-#                 method_fcasts = [f for f in model_fcasts if protection_method in f]
-#
-#                 for param in p[1]:
-#
-#                     param_fcasts = [f for f in method_fcasts if str(param) in f]
-#
-#                     print(param_fcasts)
+
+data.to_csv(results_path + "Error_Distributions/all_distributions_h" + str(h) + ".csv", index=False)

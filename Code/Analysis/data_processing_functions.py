@@ -529,12 +529,15 @@ def post_process(full_ts_data, forecasts, target_forecast_period, last_window_wi
         # bias adjusted forecasts are y = exp(w)[1 + sigma^2_h/2]
         # where sigma^2_h/2 is the h-step forecast variance
         # bias adjusted forecasts
-        sigma2 = [np.var(x) for x in processed]
-        processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
+
+        # This bias-corrected back-adjustment is inappropriate for MAE - the
+        # median minimizes the expected MAE, so we use the median forecast
+        # sigma2 = [np.var(x) for x in processed]
+        # processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
 
         # use the below version if debugging - it allows you to return the original
         # data values when testing the pre-process function
-        # processed = [np.exp(processed[i]) for i in range(num_series)]
+        processed = [np.exp(processed[i]) for i in range(num_series)]
 
     if mean_normalize:
         # ts_data, _ , _, _ = pre_process(full_ts_data, target_forecast_period, mean_normalize=False, log=False, transform_dict={})

@@ -5,7 +5,6 @@
 
 ################################################################################
 
-# import rpy2.robjects as robjects
 import subprocess
 import pickle
 import pandas as pd
@@ -29,97 +28,141 @@ from darts import TimeSeries
 # function for forecasting with LSTM-RNN
 def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models, model_save_folder=None):
 
-    num_series = len(ts_data)
+    series_lengths = [len(x) for x in ts_data]
 
-    # convert to type np.float32 to speed up training
-    processed = [x.astype(np.float32) for x in ts_data]
+    unique_lengths = np.unique(series_lengths)
 
-    # convert index to a RangeIndex
-    for i in range(len(processed)):
-        processed[i].index = pd.RangeIndex(start=0, stop=processed[i].shape[0])
+    full_fcasts = {}
 
-    # create and remove validation set from processed
-    validation = [x.iloc[-h:] for x in processed]
-    validation = pd.DataFrame([x.reset_index(drop=True) for x in validation]).T
-    processed_noval = [x.iloc[:-h] for x in processed]
+    for length in unique_lengths:
 
-    # convert to TimeSeries objects for RNN model
-    processed = [TimeSeries.from_series(x) for x in processed]
-    processed_noval = [TimeSeries.from_series(x) for x in processed_noval]
+        tsd = [ts_data[i] for i,l in enumerate(series_lengths) if l == length]
+        tsi = [i for i,l in enumerate(series_lengths) if l == length]
 
-    best_params = optimize_RNN(train_data=processed_noval,
-                               validation_data=validation,
-                               h=h,
-                               num_ensemble_models=num_ensemble_models,
-                               input_chunk_length=input_chunk_length,
-                               training_length=training_length,
-                               max_samples_per_ts=max_samples_per_ts)
+        num_series = len(tsd)
 
-    fcasts = train_RNN(train_data=processed,
-                       h=h,
-                       num_ensemble_models=num_ensemble_models,
-                       input_chunk_length=input_chunk_length,
-                       training_length=training_length,
-                       max_samples_per_ts=max_samples_per_ts,
-                       learning_rate_=best_params['params']['learning_rate_'],
-                       n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
-                       hidden_dim_=int(best_params['params']['hidden_dim_']),
-                       batch_size_=int(best_params['params']['batch_size_']),
-                       n_epochs_=int(best_params['params']['n_epochs_']),
-                       dropout_=best_params['params']['dropout_'],
-                       L2_penalty_=best_params['params']['L2_penalty_'],
-                       save_models=True,
-                       model_save_folder=model_save_folder)
+        # convert to type np.float32 to speed up training
+        processed = [x.astype(np.float32) for x in tsd]
 
-    fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+        # convert index to a RangeIndex
+        for i in range(len(processed)):
+            processed[i].index = pd.RangeIndex(start=0, stop=processed[i].shape[0])
 
-    fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
+        # create and remove validation set from processed
+        validation = [x.iloc[-h:] for x in processed]
+        validation = pd.DataFrame([x.reset_index(drop=True) for x in validation]).T
+        processed_noval = [x.iloc[:-h] for x in processed]
 
-    # add correct time index back to forecasts
-    for i in range(num_series):
-        fcasts[i].index = fcast_indexes[i]
+        # convert to TimeSeries objects for RNN model
+        processed = [TimeSeries.from_series(x) for x in processed]
+        processed_noval = [TimeSeries.from_series(x) for x in processed_noval]
+
+        best_params = optimize_RNN(train_data=processed_noval,
+                                   validation_data=validation,
+                                   h=h,
+                                   num_ensemble_models=num_ensemble_models,
+                                   input_chunk_length=input_chunk_length,
+                                   training_length=training_length,
+                                   max_samples_per_ts=max_samples_per_ts)
+
+        fcasts = train_RNN(train_data=processed,
+                           h=h,
+                           num_ensemble_models=num_ensemble_models,
+                           input_chunk_length=input_chunk_length,
+                           training_length=training_length,
+                           max_samples_per_ts=max_samples_per_ts,
+                           learning_rate_=best_params['params']['learning_rate_'],
+                           n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
+                           hidden_dim_=int(best_params['params']['hidden_dim_']),
+                           batch_size_=int(best_params['params']['batch_size_']),
+                           n_epochs_=int(best_params['params']['n_epochs_']),
+                           dropout_=best_params['params']['dropout_'],
+                           L2_penalty_=best_params['params']['L2_penalty_'],
+                           save_models=True,
+                           model_save_folder=model_save_folder+"_"+str(length))
+
+        fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+
+        fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
+
+        # add correct time index back to forecasts
+        for i in range(num_series):
+            fcasts[i].index = fcast_indexes[i]
+
+        # store sub-group forecasts in matrix of all forecasts
+        for i,j in enumerate(tsi):
+            full_fcasts[j] = fcasts[i]
+
+    fcasts = [full_fcasts[i] for i in range(len(ts_data))]
 
     return fcasts
 
 # function for forecasting with LGBM
-def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
+def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
 
-    # store number of series
-    num_series = len(ts_data)
+    series_lengths = [len(x) for x in ts_data]
 
-    # convert index to a RangeIndex
-    for i in range(len(ts_data)):
-        ts_data[i].index = pd.RangeIndex(start=0, stop=ts_data[i].shape[0])
+    unique_lengths = np.unique(series_lengths)
 
-    # create and remove validation set from training data
-    validation = [x.iloc[-h:] for x in ts_data]
-    validation = pd.DataFrame([x.reset_index(drop=True) for x in validation]).T
-    ts_data_noval = [x.iloc[:-h] for x in ts_data]
+    full_fcasts = {}
 
-    # convert to TimeSeries objects
-    ts_data_ts = [TimeSeries.from_series(x) for x in ts_data]
-    ts_data_noval_ts = [TimeSeries.from_series(x) for x in ts_data_noval]
+    for length in unique_lengths:
 
-    best_params = optimize_LGBM(train_data=ts_data_noval_ts,
-                                validation_data=validation,
-                                h=h,
-                                lags=lags,
-                                max_samples_per_ts=max_samples_per_ts)
+        tsd = [ts_data[i] for i,l in enumerate(series_lengths) if l == length]
+        tsi = [i for i,l in enumerate(series_lengths) if l == length]
 
-    fcasts = train_LGBM(train_data=ts_data_ts,
-                        h=h,
-                        lags=lags,
-                        max_samples_per_ts=max_samples_per_ts,
-                        learning_rate_=best_params['params']['learning_rate_'],
-                        num_boost_rounds_=int(best_params['params']['num_boost_rounds_']))
+        # store number of series
+        num_series = len(tsd)
 
-    fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+        # convert to type np.float32 to speed up training
+        processed = [x.astype(np.float32) for x in tsd]
 
-    fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
+        # convert index to a RangeIndex
+        for i in range(len(processed)):
+            processed[i].index = pd.RangeIndex(start=0, stop=processed[i].shape[0])
 
-    # add correct time index back to forecasts
-    for i in range(num_series):
-        fcasts[i].index = fcast_indexes[i]
+        # create and remove validation set from processed
+        validation = [x.iloc[-h:] for x in processed]
+        validation = pd.DataFrame([x.reset_index(drop=True) for x in validation]).T
+        processed_noval = [x.iloc[:-h] for x in processed]
+
+        # convert to TimeSeries objects for RNN model
+        processed = [TimeSeries.from_series(x) for x in processed]
+        processed_noval = [TimeSeries.from_series(x) for x in processed_noval]
+
+        best_params = optimize_LGBM(train_data=processed_noval,
+                                    validation_data=validation,
+                                    h=h,
+                                    lags=lags,
+                                    max_samples_per_ts=max_samples_per_ts)
+
+        fcasts = train_LGBM(train_data=processed,
+                            h=h,
+                            lags=lags,
+                            max_samples_per_ts=max_samples_per_ts,
+                            learning_rate_=best_params['params']['learning_rate_'],
+                            num_boost_rounds_=int(best_params['params']['num_boost_rounds_']),
+                            num_leaves_=int(best_params['params']['num_leaves_']),
+                            bagging_freq_=best_params['params']['bagging_freq_'],
+                            bagging_frac_=best_params['params']['bagging_frac_'],
+                            lambda_l2_=best_params['params']['lambda_l2_'],
+                            min_data_in_leaf_=int(best_params['params']['min_data_in_leaf_']),
+                            save_models=True,
+                            model_save_folder=model_save_folder+"_"+str(length))
+
+        fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+
+        fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
+
+        # add correct time index back to forecasts
+        for i in range(num_series):
+            fcasts[i].index = fcast_indexes[i]
+
+        # store sub-group forecasts in matrix of all forecasts
+        for i,j in enumerate(tsi):
+            full_fcasts[j] = fcasts[i]
+
+    fcasts = [full_fcasts[i] for i in range(len(ts_data))]
 
     return fcasts
 
@@ -199,102 +242,109 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
 #
 #     return fcasts
 
-
 #############################
 ### VAR forecasting functions
 #############################
 
-def VAR_forecast(ts_data, h, metadata, pre_processing_stage):
+# def VAR_forecast(ts_data, h, metadata, pre_processing_stage):
+#
+#     num_series = len(ts_data)
+#
+#     if pre_processing_stage:
+#         # save the ts_data so the R script can access it
+#         ts_df = pd.DataFrame(ts_data)
+#         ts_df.to_csv("../../Data/VAR_R_Datasets/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv", index=False)
+#
+#         return None
+#
+#     else:
+#
+#         # read in the forecasts from the R script
+#         fcasts_df = pd.read_csv("../../Outputs/R_VAR_Output/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv")
+#
+#         fcasts = []
+#
+#         for i, f in fcasts_df.iterrows():
+#             fcasts.append(f)
+#
+#         # make sure the forecasts have the correct time index
+#         fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
+#
+#         # add correct time index back to forecasts
+#         for i in range(num_series):
+#             fcasts[i].index = fcast_indexes[i]
+#
+#         return fcasts
+
+# splitting function used in VAR forecast
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+
+def VAR_forecast(ts_data, h, param_save_folder=None):
 
     num_series = len(ts_data)
 
-    if pre_processing_stage:
-        # save the ts_data so the R script can access it
-        ts_df = pd.DataFrame(ts_data)
-        ts_df.to_csv("../../Data/VAR_R_Datasets/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv", index=False)
+    # get the length of each series
+    lengths = [len(y) for y in ts_data]
 
-        return None
+    # store the unique length values
+    unique_lengths = np.unique(lengths)
 
-    else:
+    # store the forecasts in an array of all forecasts using the stored series indices
+    full_forecasts = np.zeros([num_series, h])
 
-        # read in the forecasts from the R script
-        fcasts_df = pd.read_csv("../../Outputs/R_VAR_Output/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv")
+    for k, l in enumerate(unique_lengths):
 
-        fcasts = []
+        # get the indexes of each series with the lth length
+        Y_ids = np.nonzero(lengths == l)[0]
 
-        for i, f in fcasts_df.iterrows():
-            fcasts.append(f)
+        split_ids = split(Y_ids, 5)
 
-        # make sure the forecasts have the correct time index
-        fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
+        for i, j in enumerate(split_ids):
 
-        # add correct time index back to forecasts
-        for i in range(num_series):
-            fcasts[i].index = fcast_indexes[i]
+            # store series in a list
+            group = [ts_data[m].reset_index(drop=True) for m in j]
 
-        return fcasts
+            # convert list to TxK dataframe
+            group = pd.concat(group, axis=1, ignore_index=True)
 
-# # splitting function used in VAR forecast
-# def split(a, n):
-#     k, m = divmod(len(a), n)
-#     return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
-#
-# def VAR_forecast(ts_data, h, param_grid, noisy_protection=False):
-#
-#     # get the length of each series
-#     lengths = [len(y) for y in ts_data]
-#
-#     # store the unique length values
-#     unique_lengths = np.unique(lengths)
-#
-#     # store the forecasts in an array of all forecasts using the stored series indices
-#     full_forecasts = np.zeros([len(ts_data), h])
-#
-#     for k, l in enumerate(unique_lengths):
-#
-#         # get the indexes of each series with the lth length
-#         Y_ids = np.nonzero(lengths == l)[0]
-#
-#         split_ids = split(Y_ids, 5)
-#
-#         for i, j in enumerate(split_ids):
-#
-#             # store series in a list
-#             group = [ts_data[m].reset_index(drop=True) for m in j]
-#
-#             # convert list to TxK dataframe
-#             group = pd.concat(group, axis=1, ignore_index=True)
-#
-#             ####################################################
-#
-#             forecaster = VAR(endog=group)
-#             results = forecaster.fit()
-#
-#             # # extract intercept coefficients
-#             # intercepts = results.coefs_exog
-#             # intercept_list.append(intercepts)
-#
-#             # number of lags in VAR model
-#             lag_order = results.k_ar
-#             # lag_list.append(lag_order)
-#
-#             # forecast nfs steps ahead using lag_order prior values
-#             y_pred = results.forecast(np.array(group[-lag_order:]), steps=h)
-#
-#             # forecaster = VAR()
-#             # forecaster.fit(group)
-#             # y_pred = forecaster.predict(h)
-#
-#             # store forecasts in dataframe for all series
-#             full_forecasts[j,:] = y_pred.T
-#
-#     full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(full_forecasts.shape[0])]
-#
-#     for i in range(len(full_forecasts)):
-#         last_time = ts_data[i].index[-1]
-#         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
-#
-#     return full_forecasts
+            ####################################################
+
+            forecaster = VAR(endog=group)
+            results = forecaster.fit()
+
+            # extract intercept coefficients
+            intercepts = results.coefs_exog
+            pd_intercepts = pd.DataFrame(intercepts)
+            newpath = "../../Outputs/VAR Params/" + param_save_folder + "/"
+            if not os.path.exists(newpath):
+                os.makedirs(newpath)
+            pd_intercepts.to_csv(newpath + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
+
+            # extract lag coefficients
+            lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
+            lag_coefs.to_csv(newpath + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
+
+            # number of lags in VAR model
+            lag_order = results.k_ar
+
+            # generate forecasts
+            if lag_order == 0:
+                y_pred = np.repeat(intercepts, h, axis=1).T
+            else:
+                y_pred = results.forecast(group.values[-lag_order:], h)
+
+            # store forecasts in dataframe for all series
+            full_forecasts[j,:] = y_pred.T
+
+    full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(num_series)]
+
+    for i in range(num_series):
+        last_time = ts_data[i].index[-1]
+        full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
+
+    return full_forecasts
 
 # general function for training a model and generating forecasts.
 def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, param_grid=None, last_window=None, options=None, metadata=None):
@@ -339,7 +389,8 @@ def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, para
         fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
     # if using VAR
     elif forecasting_model == "VAR":
-        fcasts = VAR_forecast(ts_data=ts_data, h=horizon_length, metadata=metadata, pre_processing_stage=options["pre_processing"])
+        fcasts = VAR_forecast(ts_data=ts_data, h=horizon_length,
+                              param_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     # if using ARIMA
     elif forecasting_model == "ARIMA":
         forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
@@ -349,7 +400,11 @@ def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, para
         # best_params = multivariate_lgbm_cv(ts_data=ts_data, param_grid=param_grid)
         # fcasts = multivariate_lgbm_forecast(ts_data=ts_data, h=horizon_length, last_window=last_window, num_series=num_series, best_params=best_params)
         lags = options['window_length']
-        fcasts = LGBM_forecast(ts_data=ts_data, h=horizon_length, lags=lags, max_samples_per_ts=options['max_samples_per_ts'])
+        fcasts = LGBM_forecast(ts_data=ts_data,
+                               h=horizon_length,
+                               lags=lags,
+                               max_samples_per_ts=options['max_samples_per_ts'],
+                               model_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     elif forecasting_model == "RNN":
         fcasts = RNN_forecast(ts_data=ts_data,
                               h=horizon_length,

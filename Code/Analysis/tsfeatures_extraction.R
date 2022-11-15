@@ -2,6 +2,9 @@
 
 ## Author: Cameron Bale
 
+library(e1071)
+library(plotly)
+library(GGally)
 library(tidyverse)
 library(tsfeatures)
 library(ggplot2)
@@ -41,12 +44,19 @@ series_variance <- function(x){
   return(var(x))
 }
 
-fv <- c("series_mean", "series_variance", "entropy", 
-        "stability", "lumpiness", "max_level_shift",
-        "max_var_shift", "max_kl_shift", "crossing_points", 
-        "flat_spots", "hurst", "stl_features", "acf_features", "nonlinearity")
+#######################################################
+
+fv <- c("entropy", "stl_features", "skewness", 
+        "kurtosis", "hurst", "series_mean", "series_variance")
 
 orig_features <- extract_features(original_data, sp=12, feature_vector=fv)
+
+plot_features <- orig_features %>%
+  select(entropy, hurst, skewness, kurtosis, e_acf1, trend, seasonal_strength, series_mean, series_variance)
+
+colnames(plot_features) <- c("SpecEntropy", "Hurst", "Skewness", "Kurtosis", "E_acf", "Trend", "Seasonality", "SeriesMean", "SeriesVariance")
+
+ggpairs(plot_features)
 
 write.csv(orig_features, file="../../Data/Train/Clean/tsfeatures/tsfeatures_h1.csv", row.names=FALSE)
 
@@ -59,42 +69,3 @@ for (f in file_names){
   features <- extract_features(data_set, sp=12, feature_vector=fv)
   write.csv(features, file=paste0("../../Data/Train/Clean/tsfeatures/", sub(".*micro_", "", f)), row.names=FALSE)
 }
-
-
-
-
-
-
-
-# # define a function to calculate the coefficient of variation
-# cv <- function(series){
-#   return(sd(series)/mean(series))
-# }
-
-# simple outlier detection function
-# one for when an outlier occurs at forecast origin, 
-# within 5, and within 10 time periods
-
-# for top coding, we want to see if it corrects positive outliers
-# tsoutliers will find the outliers for us
-# we can determine if they are positive based on whether they are greater than the mean
-
-# positive_outlier_detection <- function(series){
-#   outliers <- tsoutliers(series)$index
-#   pos_outliers <- s[outliers] > mean(s)
-#   outliers <- outliers[pos_outliers]
-#   within_1 <- 1 * (length(series) %in% outliers)
-#   within_5 <- 1 * any((outliers > (length(series)-5)))
-#   within_10 <- 1 * any((outliers > (length(series)-10)))
-#   features <- c(within_1, within_5, within_10)
-#   names(features) <- c("Outlier_within_1", "Outlier_within_5", "Outlier_within_10")
-#   return(features)
-# }
-
-# calculate desired features
-# ts_features <- tsfeatures(ts_data, features=c("cv", "positive_outlier_detection", 
-#                                               "entropy", "stl_features", "acf_features",
-#                                               "nonlinearity"),
-#                           scale=FALSE)
-
-

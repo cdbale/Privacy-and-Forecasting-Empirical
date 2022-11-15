@@ -13,28 +13,28 @@ import os
 forecast_for_confidential = False
 
 # forecast horizons
-# horizons = [1, 18]
 horizons = [1]
 
 # dictionary containing string name for each protection method and list of
 # parameters for each method
-protection_methods = {"k_nts": [5, 10, 15]}
-                      # "Top": [0.10, 0.20, 0.40],
+protection_methods = {# "Top": [0.10, 0.20, 0.40],
                       # "Bottom": [0.10, 0.20, 0.40],
-                      # "AN": [0.5, 1, 1.5, 2],
+                      # "AN": [0.25, 0.5, 1, 1.5, 2],
                       # "DP": [0.1, 1, 4.6, 10, 20]}
+                      # "k_nts": [3, 5, 7, 10, 15]}
+                      "k_nts_plus": [3, 5, 7, 10, 15]}
 
 # protection_methods = {}
 
 # dictionary containing string names of forecasting models and sub-dictionaries
 # of model-specific parameters
-forecasting_models = {# "SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid": None, "options": {'max_samples_per_ts': None, 'window_length': 25}},
-                      "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "standardize":True, "detrend":False, "param_grid": None, "options": {"pre_processing": False}}}
-                      # "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
+forecasting_models = {"SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid": None, "options": {'max_samples_per_ts': None, 'window_length': 25}},
+                      "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid": None, "options": None},
+                      "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
 
 forecasts_path = "../../Outputs/Forecasts/"
 results_path = "../../Outputs/Results/"
@@ -51,10 +51,18 @@ full_data = [x.dropna() for _, x in full_data.iterrows()]
 
 # loop over horizons
 for H in horizons:
+
+    # total number of test periods to reserve from end of series
+    num_fcasts = len(horizons)
+
     # create training data excluding test horizon
     Y = [x.iloc[:-H] for x in full_data]
     # create test data
-    Test = [x.iloc[-H:] for x in full_data]
+    if H == 1:
+        Test = [x.iloc[-H:] for x in full_data]
+    else:
+        Test = [x.iloc[-H:-(H-1)] for x in full_data]
+
     Test = pd.DataFrame([x.reset_index(drop=True) for x in Test]).T
 
     # save test data
@@ -70,7 +78,7 @@ for H in horizons:
         for m in forecasting_models.items():
 
             fcasts_original = full_forecast_analysis(Y=Y,
-                                                     h=H,
+                                                     h=1,
                                                      forecasting_model=m[0],
                                                      make_stationary=m[1]["make_stationary"],
                                                      seasonality_type=m[1]["seasonality_type"],
@@ -120,11 +128,13 @@ for H in horizons:
                 Y_protected = apply_data_protection(Y, epsilon=param)
             elif p[0] == "k_nts":
                 Y_protected = apply_data_protection(Y, k=param)
+            elif p[0] == "k_nts_plus":
+                Y_protected = apply_data_protection(Y, k=param, plus=True)
 
             # forecast using each model on the current protected data
             for m in forecasting_models.items():
                 fcasts_protected = full_forecast_analysis(Y=Y_protected,
-                                                          h=H,
+                                                          h=1,
                                                           forecasting_model=m[0],
                                                           make_stationary=m[1]["make_stationary"],
                                                           seasonality_type=m[1]["seasonality_type"],

@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 
 # generic function to protect time series data
-def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=None, num_stdev=None, epsilon=None, k=None):
+def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=None, num_stdev=None, epsilon=None, k=None, plus=False):
     """
     Applies data protection for an assortment of protection methods. Supplying
     method specific parameters will apply the corresponding protection, e.g.,
@@ -53,16 +53,19 @@ def apply_data_protection(sensitive_data, coding_type=None, coding_percentage=No
         return P
 
     elif k is not None:
-        P = k_nts_protection(k=k)
+        P = k_nts_protection(k=k, plus=plus)
         return P
 
     else:
         print("No protection method selected.")
         return None
 
-def k_nts_protection(k):
+def k_nts_protection(k, plus):
 
-    P = pd.read_csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_" + str(k) + ".csv", header=None, skiprows=1)
+    if plus:
+        P = pd.read_csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_" + str(k) + ".csv", header=None, skiprows=1)
+    else:
+        P = pd.read_csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_" + str(k) + ".csv", header=None, skiprows=1)
 
     # convert to a list of series, and drop missing values
     P = [x.dropna() for _, x in P.iterrows()]
