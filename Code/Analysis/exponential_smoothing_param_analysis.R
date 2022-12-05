@@ -13,37 +13,102 @@ ses_params <- read_csv("../../Outputs/Results/Model Parameters/ses_params.csv")
 
 ses_params <- ses_params %>%
   gather(key="name", value="values") %>%
+  mutate(name = gsub("k-nts-plus", "knts+", name)) %>%
   mutate(name = gsub("k-nts", "knts", name)) %>%
   separate(name, c("Protection", "Privacy_Parameter", "Model_Parameter"), sep="_")
 
+ses_params %>%
+  group_by(Protection, Privacy_Parameter, Model_Parameter) %>%
+  mutate(snum = 1:n()) %>%
+  group_by(Protection, Model_Parameter, snum) %>%
+  summarize(avg_val = mean(values), .groups='drop') %>%
+  mutate(Protection = factor(Protection, levels = c("original", "knts+", "knts", "AN", "DP"),
+                                         labels = c("Original", "k-nTS+", "k-nTS", "AN", "DP"))) %>%
+  ggplot(aes(x=Protection, y=avg_val)) +
+  geom_boxplot() +
+  labs(x = "Privacy Method",
+       y = "Alpha Values",
+       title = "Average SES Values") +
+  facet_wrap(~Model_Parameter, scales="free")
+
+#######################################################################
+
+des_params <- read_csv("../../Outputs/Results/Model Parameters/des_params.csv")
+
+des_params <- des_params %>%
+  gather(key="name", value="values") %>%
+  mutate(name = gsub("k-nts-plus", "knts+", name)) %>%
+  mutate(name = gsub("k-nts", "knts", name)) %>%
+  separate(name, c("Protection", "Privacy_Parameter", "Model_Parameter"), sep="_")
+
+des_params %>%
+  group_by(Protection, Privacy_Parameter, Model_Parameter) %>%
+  mutate(snum = 1:n()) %>%
+  group_by(Protection, Model_Parameter, snum) %>%
+  summarize(avg_val = mean(values), .groups='drop') %>%
+  mutate(Protection = factor(Protection, levels = c("original", "knts+", "knts", "AN", "DP"),
+                             labels = c("Original", "k-nTS+", "k-nTS", "AN", "DP"))) %>%
+  ggplot(aes(x=Protection, y=avg_val)) +
+  geom_boxplot() +
+  labs(x = "Privacy Method",
+       y = "Alpha Values",
+       title = "Average DES Parameter Values") +
+  facet_wrap(~Model_Parameter, scales="free")
+
+#######################################################################
+
+tes_params <- read_csv("../../Outputs/Results/Model Parameters/tes_params.csv")
+
+tes_params <- tes_params %>%
+  gather(key="name", value="values") %>%
+  mutate(name = gsub("k-nts-plus", "knts+", name)) %>%
+  mutate(name = gsub("k-nts", "knts", name)) %>%
+  separate(name, c("Protection", "Privacy_Parameter", "Model_Parameter"), sep="_")
+
+tes_params %>%
+  group_by(Protection, Privacy_Parameter, Model_Parameter) %>%
+  mutate(snum = 1:n()) %>%
+  group_by(Protection, Model_Parameter, snum) %>%
+  summarize(avg_val = mean(values), .groups='drop') %>%
+  mutate(Protection = factor(Protection, levels = c("original", "knts+", "knts", "AN", "DP"),
+                             labels = c("Original", "k-nTS+", "k-nTS", "AN", "DP"))) %>%
+  ggplot(aes(x=Protection, y=avg_val)) +
+  geom_boxplot() +
+  labs(x = "Privacy Method",
+       y = "Alpha Values",
+       title = "Average TES Parameter Values") +
+  facet_wrap(~Model_Parameter, scales="free")
 
 # Visualize changes in alpha value.
 
-dp_alpha <- ses_params %>%
-  filter(Protection %in% c("DP")) %>%
-  mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("20", "10", "4.6", "1", "0.1"), labels=c("\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"))) %>%
-  ggplot(aes(x=Privacy_Parameter, y=values)) +
-  geom_boxplot() +
-  ylab("SES Alpha") +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# dp_alpha <- ses_params %>%
+#   filter(Protection %in% c("DP")) %>%
+#   mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("20", "10", "4.6", "1", "0.1"), labels=c("\u03f5 = 20", "\u03f5 = 10", "\u03f5 = 4.6", "\u03f5 = 1", "\u03f5 = 0.1"))) %>%
+#   ggplot(aes(x=Privacy_Parameter, y=values)) +
+#   geom_boxplot() +
+#   ylab("SES Alpha") +
+#   xlab("Privacy Parameter") +
+#   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+#   ylim(0.0, 1.0)
+# 
+# knts_plus_alpha <- ses_params %>%
+#   filter(Protection %in% c("knts+")) %>%
+#   mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("3", "5", "7", "10", "15"), labels = c("k = 3", "k = 5", "k = 7", "k = 10", "k = 15")))  %>%
+#   ggplot(aes(x=Privacy_Parameter, y=values)) +
+#   geom_boxplot() +
+#   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+#   ylim(0.0, 1.0)
 
-top_alpha <- ses_params %>%
-  filter(Protection %in% c("Top")) %>%
-  mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("0.1", "0.2", "0.4"), labels = c("Top 0.1", "Top 0.2", "Top 0.4")))  %>%
-  ggplot(aes(x=Privacy_Parameter, y=values)) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+# knts_alpha <- ses_params %>%
+#   filter(Protection %in% c("knts")) %>%
+#   mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("3", "5", "7", "10", "15"), labels = c("k = 3", "k = 5", "k = 7", "k = 10", "k = 15")))  %>%
+#   ggplot(aes(x=Privacy_Parameter, y=values)) +
+#   geom_boxplot() +
+#   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+#   ylim(0.0, 1.0)
 
-knts_alpha <- ses_params %>%
-  filter(Protection %in% c("knts")) %>%
-  mutate(Privacy_Parameter = factor(Privacy_Parameter, levels=c("5", "10", "15"), labels = c("k = 5", "k = 10", "k = 15")))  %>%
-  ggplot(aes(x=Privacy_Parameter, y=values)) +
-  geom_boxplot() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-
-plt <- ggarrange(dp_alpha, top_alpha, knts_alpha,
-                 # labels=c("k = 5", "k = 10", "k = 15"),
-                 ncol=3)
+plt <- ggarrange(dp_alpha, knts_plus_alpha,
+                 ncol=2)
 
 annotate_figure(plt, top=text_grob("SES Alpha Parameter Comparison", face="bold", size=14))
 

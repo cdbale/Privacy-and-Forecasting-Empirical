@@ -195,7 +195,7 @@ good_series_kntsp <- tibble(x = kntsp_series[[155]], t = 1:length(kntsp_series[[
   geom_line(size=.7, color="#3399CC") +
   geom_point() +
   ylim(0, 10) +
-  labs(title="Series with Desirable Features (k-nTS+ k = 7)",
+  labs(title="Series with Desirable Features (k-nTS+, k = 7)",
        x = 'Time',
        y = 'x')
 
@@ -204,7 +204,7 @@ bad_series_kntsp <- tibble(x = kntsp_series[[2]], t = 1:length(kntsp_series[[2]]
   geom_line(size=.7, color="#3399CC") +
   geom_point() +
   ylim(0, 10) +
-  labs(title="Series with Undesirable Features (k-nTS+ k = 7)",
+  labs(title="Series with Undesirable Features (k-nTS+, k = 7)",
        x = 'Time',
        y = "")
 
@@ -228,7 +228,8 @@ annotate_figure(g3, top=text_grob("Protected Time Series (k-nTS+ with k = 7)", f
 
 g4 <- ggarrange(good_series_an, bad_series_an,
                 good_series_kntsp, bad_series_kntsp,
-                nrow=2, ncol=2)
+                good_series_unp, bad_series_unp,
+                nrow=3, ncol=2)
 
 annotate_figure(g4, top=text_grob("Protected Time Series Comparison", face = "bold", size = 14))
 

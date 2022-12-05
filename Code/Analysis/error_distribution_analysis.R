@@ -10,10 +10,11 @@ library(tidytext)
 # path to files with error distributions
 ed_file_path <- "../../Outputs/Results/Error_Distributions/"
 
-eds <- read_csv(paste0(ed_file_path, "all_distributions.csv"))
+eds <- read_csv(paste0(ed_file_path, "all_distributions_h1.csv"))
 
 eds <- eds %>% gather(key="name", value="values") %>%
   mutate(name = gsub("Multivariate_LGBM", "LGBM", name),
+         name = gsub("k_nts_plus", "knts+", name),
          name = gsub("k_nts", "knts", name),
          name = substring(name, 1, nchar(name)-4)) %>%
   separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
