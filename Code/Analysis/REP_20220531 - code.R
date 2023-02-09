@@ -99,9 +99,9 @@ REP <- function(y, fitted=NULL, f, lambda = NULL, insample = TRUE,
   # *** REP ***
   # [see equations (4) and (5) in Petropoulos & Siemsen (2021)]
   if (insample){
-    performance_gap + representativeness_gap
+    return(list("REP"=performance_gap + representativeness_gap, "Perf_Gap"=performance_gap, "Rep_Gap"=representativeness_gap))
   } else {
-    representativeness_gap
+    return(representativeness_gap)
   }
 
 }

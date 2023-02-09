@@ -81,13 +81,10 @@ for (f in file_names){
 
 features <- orig_features %>%
   select(snum, method, parameter, entropy, hurst, 
-         skewness, kurtosis, trend, series_mean, 
-         series_variance, e_acf1, seasonal_strength) %>%
+         skewness, kurtosis, e_acf1, trend, seasonal_strength,
+         series_mean, series_variance, spike, max_var_shift, max_level_shift) %>%
   filter(method %in% c("original", "AN", "DP", "k-nts", "k-nts-plus"))
 
-
-temp2 <- features %>%
-  distinct(method, parameter)
 ################################
 
 ### visualize a good/bad series (based on feature values)
@@ -114,7 +111,7 @@ process_data <- function(time_series, sp){
 
 orig_series <- process_data(read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv"), sp=12)
 an_series <- process_data(read.csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_AN_1.csv"), sp=12)
-kntsp_series <- process_data(read.csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_7.csv"), sp=12)
+kntsp_series <- process_data(read.csv("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_3.csv"), sp=12)
 
 gs_orig <- features %>%
   filter(parameter == 'none') %>%
@@ -130,7 +127,7 @@ gs_an <- features %>%
 gs_an
 
 gs_kntsp <- features %>%
-  filter(method=="k-nts-plus", parameter == '7') %>%
+  filter(method=="k-nts-plus", parameter == '3') %>%
   filter(snum==155)
 
 gs_kntsp
@@ -149,7 +146,7 @@ bs_an <- features %>%
 bs_an
 
 bs_kntsp <- features %>%
-  filter(method=="k-nts-plus", parameter == '7') %>%
+  filter(method=="k-nts-plus", parameter == '3') %>%
   filter(snum==2)
 
 bs_kntsp
@@ -195,7 +192,7 @@ good_series_kntsp <- tibble(x = kntsp_series[[155]], t = 1:length(kntsp_series[[
   geom_line(size=.7, color="#3399CC") +
   geom_point() +
   ylim(0, 10) +
-  labs(title="Series with Desirable Features (k-nTS+, k = 7)",
+  labs(title="Series with Desirable Features (k-nTS+, k = 3)",
        x = 'Time',
        y = 'x')
 
@@ -204,7 +201,7 @@ bad_series_kntsp <- tibble(x = kntsp_series[[2]], t = 1:length(kntsp_series[[2]]
   geom_line(size=.7, color="#3399CC") +
   geom_point() +
   ylim(0, 10) +
-  labs(title="Series with Undesirable Features (k-nTS+, k = 7)",
+  labs(title="Series with Undesirable Features (k-nTS+, k = 3)",
        x = 'Time',
        y = "")
 
@@ -212,7 +209,7 @@ bad_series_kntsp <- tibble(x = kntsp_series[[2]], t = 1:length(kntsp_series[[2]]
 g1 <- ggarrange(good_series_unp, bad_series_unp,
           nrow=1, ncol=2)
 
-annotate_figure(g1, top=text_grob("Confidential Time Series", face = "bold", size = 14))
+annotate_figure(g1, top=text_grob("", face = "bold", size = 14))
 
 # additive noise versions
 g2 <- ggarrange(good_series_an, bad_series_an,
@@ -224,15 +221,17 @@ annotate_figure(g2, top=text_grob("Protected Time Series (AN with s = 1.0)", fac
 g3 <- ggarrange(good_series_kntsp, bad_series_kntsp,
           nrow=1, ncol=2)
 
-annotate_figure(g3, top=text_grob("Protected Time Series (k-nTS+ with k = 7)", face = "bold", size = 14))
+annotate_figure(g3, top=text_grob("Protected Time Series (k-nTS+ with k = 3)", face = "bold", size = 14))
 
-g4 <- ggarrange(good_series_an, bad_series_an,
+g4 <- ggarrange(good_series_unp, bad_series_unp,
                 good_series_kntsp, bad_series_kntsp,
-                good_series_unp, bad_series_unp,
-                nrow=3, ncol=2)
+                good_series_an, bad_series_an,
+                nrow=3, ncol=2, labels=c("A", "B", "A", "B", "A", "B"))
 
-annotate_figure(g4, top=text_grob("Protected Time Series Comparison", face = "bold", size = 14))
+annotate_figure(g4, top=text_grob("", face = "bold", size = 14))
 
+################################
+################################
 ################################
 
 reg_features <- features
@@ -246,11 +245,13 @@ features <- features %>%
                           levels=c("entropy", "hurst", "skewness",
                                    "kurtosis", "e_acf1", "trend",
                                    "seasonal_strength", "series_mean",
-                                   "series_variance"),
-                          labels=c("SpecEntropy", "Hurst", "Skewness",
-                                   "Kurtosis", "E_acf", "Trend",
-                                   "Seasonality", "SeriesMean",
-                                   "SeriesVariance")))
+                                   "series_variance", "spike", "max_var_shift",
+                                   "max_level_shift"),
+                          labels=c("Spectral Entropy", "Hurst", "Skewness",
+                                   "Kurtosis", "EACF", "Trend",
+                                   "Seasonality", "Mean",
+                                   "Variance", "Spike", "Max Variance Shift",
+                                   "Max Level Shift")))
 
 avg_features <- features %>%
   group_by(snum, Feature, method) %>%
@@ -259,7 +260,12 @@ avg_features <- features %>%
 avg_features %>%
   ggplot(aes(x=method, y=avg_val)) +
   geom_boxplot() +
-  facet_wrap(~Feature, scales='free')
+  facet_wrap(~Feature, scales='free') +
+  labs(x = "Privacy Method",
+       y = "Average Feature Value",
+       title = "Average Time Series Feature Values Across Privacy Methods")
+
+
 
 avg_vals <- avg_features %>%
   group_by(Feature, method) %>%

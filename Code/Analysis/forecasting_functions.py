@@ -12,6 +12,7 @@ import numpy as np
 import sktime
 import itertools
 from sktime.forecasting.exp_smoothing import ExponentialSmoothing
+from sktime.forecasting.base import ForecastingHorizon
 # from sktime.forecasting.var import VAR
 from statsmodels.tsa.vector_ar.var_model import VAR
 from sktime.forecasting.arima import AutoARIMA
@@ -166,116 +167,6 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
 
     return fcasts
 
-
-# def multivariate_lgbm_cv(ts_data, param_grid):
-#
-#     # going to have two parameters to optimize:
-#     # - learning rate (lr)
-#     # - num_boost_round (nbr)
-#
-#     param_combos = list(itertools.product(param_grid['learning_rate'],
-#                                           param_grid['num_boost_round']))
-#
-#     mae_vals = []
-#
-#     train = ts_data.iloc[:,:-1]
-#     label = ts_data.iloc[:,-1]
-#     train_data = lgb.Dataset(train, label=label)
-#
-#     for p in param_combos:
-#
-#         # define model parameters
-#         params = {"objective": "mae",
-#                   "metrics": "mae",
-#                   "force_col_wise": "true",
-#                   "learning_rate": p[0]}
-#
-#         # perform cross validation using specified parameters
-#         bst_vals = lgb.cv(params,
-#                           train_data,
-#                           num_boost_round=p[1],
-#                           nfold=10,
-#                           stratified=False)
-#
-#         mae_vals.append(bst_vals['l1-mean'][-1])
-#
-#     best_combo = np.argmin(mae_vals)
-#
-#     return param_combos[best_combo]
-#
-# # function to forecast using a global LGBM model
-# def multivariate_lgbm_forecast(ts_data, h, last_window, num_series, best_params):
-#     """
-#     Function to train multivariate lgbm model.
-#     """
-#
-#     # extract hyper-parameters
-#     lr = best_params[0]
-#     nbr = best_params[1]
-#
-#     # set model parameters
-#     params = {"objective": "mae",
-#               "metrics": "mae",
-#               "force_col_wise": "true",
-#               "learning_rate": lr}
-#
-#     # create training and target data
-#     train = ts_data.iloc[:,:-1]
-#     label = ts_data.iloc[:,-1]
-#     train_data = lgb.Dataset(train, label=label)
-#
-#     # train model
-#     bst = lgb.train(params, train_data, num_boost_round=nbr)
-#
-#     # forecast using the last window of data
-#     fcasts = bst.predict(last_window)
-#
-#     # convert forecasts for each series into pandas Series
-#     fcasts = [pd.Series(x) for x in fcasts]
-#
-#     # calculate what the forecast indices should be
-#     fcast_indexes = [np.arange(last_window[i].index[-1]+1, last_window[i].index[-1]+h+1) for i in range(num_series)]
-#
-#     # add correct time index back to forecasts
-#     for i in range(num_series):
-#         fcasts[i].index = [fcast_indexes[i]]
-#
-#     return fcasts
-
-#############################
-### VAR forecasting functions
-#############################
-
-# def VAR_forecast(ts_data, h, metadata, pre_processing_stage):
-#
-#     num_series = len(ts_data)
-#
-#     if pre_processing_stage:
-#         # save the ts_data so the R script can access it
-#         ts_df = pd.DataFrame(ts_data)
-#         ts_df.to_csv("../../Data/VAR_R_Datasets/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv", index=False)
-#
-#         return None
-#
-#     else:
-#
-#         # read in the forecasts from the R script
-#         fcasts_df = pd.read_csv("../../Outputs/R_VAR_Output/h_" + str(h) + "_" + metadata['protection_method'] + "_" + metadata['protection_parameter'] + ".csv")
-#
-#         fcasts = []
-#
-#         for i, f in fcasts_df.iterrows():
-#             fcasts.append(f)
-#
-#         # make sure the forecasts have the correct time index
-#         fcast_indexes = [np.arange(ts_data[i].index[-1]+1, ts_data[i].index[-1]+h+1) for i in range(num_series)]
-#
-#         # add correct time index back to forecasts
-#         for i in range(num_series):
-#             fcasts[i].index = fcast_indexes[i]
-#
-#         return fcasts
-
 # splitting function used in VAR forecast
 def split(a, n):
     k, m = divmod(len(a), n)
@@ -293,6 +184,7 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
 
     # store the forecasts in an array of all forecasts using the stored series indices
     full_forecasts = np.zeros([num_series, h])
+    full_fitted_values = []
 
     for k, l in enumerate(unique_lengths):
 
@@ -314,6 +206,16 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
             forecaster = VAR(endog=group)
             results = forecaster.fit()
 
+            # number of lags in VAR model
+            lag_order = results.k_ar
+
+            fv = results.fittedvalues.T
+
+            fv = pd.concat([group.iloc[0:lag_order,:].T, fv], axis=1, ignore_index=True)
+
+            for i in range(fv.shape[0]):
+                full_fitted_values.append(fv.iloc[i,:])
+
             # extract intercept coefficients
             intercepts = results.coefs_exog
             pd_intercepts = pd.DataFrame(intercepts)
@@ -325,9 +227,6 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
             # extract lag coefficients
             lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
             lag_coefs.to_csv(newpath + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
-
-            # number of lags in VAR model
-            lag_order = results.k_ar
 
             # generate forecasts
             if lag_order == 0:
@@ -344,10 +243,10 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
         last_time = ts_data[i].index[-1]
         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
 
-    return full_forecasts
+    return full_forecasts, full_fitted_values
 
 # general function for training a model and generating forecasts.
-def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, param_grid=None, last_window=None, options=None, metadata=None):
+def train_and_forecast(ts_data, h, target_forecast_period, forecasting_model, sp=None, param_grid=None, last_window=None, options=None, metadata=None):
     """
     Performs model training and forecasting using the supplied model applied to
     the supplied time series data. Model-specific arguments have a default of
@@ -370,51 +269,74 @@ def train_and_forecast(ts_data, horizon_length, forecasting_model, sp=None, para
     """
 
     # define sktime relative forecasting horizon
-    fh = np.arange(1, horizon_length+1)
+    fh = np.arange(1, h+1)
 
-    # list to store forecasts
+    # lists to store forecasts and fitted values
     fcasts = []
+    fvals = []
 
     # if using SES
     if forecasting_model == "SES":
         forecaster = ExponentialSmoothing(use_boxcox=False)
-        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+        for x in ts_data:
+            # in sample forecast horizon
+            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
+            forecaster.fit(x)
+            fcasts.append(forecaster.predict(fh))
+            fvals.append(forecaster.predict(in_sample_fh))
     # if using DES
     elif forecasting_model == "DES":
         forecaster = ExponentialSmoothing(trend="additive", use_boxcox=False)
-        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+        for x in ts_data:
+            # in sample forecast horizon
+            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
+            forecaster.fit(x)
+            fcasts.append(forecaster.predict(fh))
+            fvals.append(forecaster.predict(in_sample_fh))
     # if using TES
     elif forecasting_model == "TES":
         forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=sp, use_boxcox=False)
-        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+        for x in ts_data:
+            # in sample forecast horizon
+            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
+            forecaster.fit(x)
+            fcasts.append(forecaster.predict(fh))
+            fvals.append(forecaster.predict(in_sample_fh))
     # if using VAR
     elif forecasting_model == "VAR":
-        fcasts = VAR_forecast(ts_data=ts_data, h=horizon_length,
-                              param_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+        fcasts, fvals = VAR_forecast(ts_data=ts_data, h=h,
+                                     param_save_folder="h_" + str(h) + "_target_period" + target_forecast_period + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     # if using ARIMA
     elif forecasting_model == "ARIMA":
         forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
-        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+        for x in ts_data:
+            # in sample forecast horizon
+            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
+            forecaster.fit(x)
+            fcasts.append(forecaster.predict(fh))
+            fv = forecaster.predict(in_sample_fh)
+            fv = fv.fillna(0)
+            fvals.append(fv)
     elif forecasting_model == "Multivariate_LGBM":
         # num_series = len(last_window)
         # best_params = multivariate_lgbm_cv(ts_data=ts_data, param_grid=param_grid)
         # fcasts = multivariate_lgbm_forecast(ts_data=ts_data, h=horizon_length, last_window=last_window, num_series=num_series, best_params=best_params)
         lags = options['window_length']
         fcasts = LGBM_forecast(ts_data=ts_data,
-                               h=horizon_length,
+                               h=h,
                                lags=lags,
                                max_samples_per_ts=options['max_samples_per_ts'],
-                               model_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                               model_save_folder="h_" + str(horizon_length) + "_target_period" + target_forecast_period + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     elif forecasting_model == "RNN":
         fcasts = RNN_forecast(ts_data=ts_data,
-                              h=horizon_length,
+                              h=h,
                               input_chunk_length=options['input_chunk_length'],
                               training_length=options['training_length'],
                               max_samples_per_ts=options['max_samples_per_ts'],
                               num_ensemble_models=options['num_ensemble_models'],
-                              model_save_folder="h_" + str(horizon_length) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                              model_save_folder="h_" + str(horizon_length) + "_target_period" + target_forecast_period + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
 
-    return fcasts
+    return fcasts, fvals
 
 
 # function to calculate metrics for the original and protected forecasts
@@ -576,7 +498,7 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
 
     return results_dict
 
-def full_forecast_analysis(Y, h, forecasting_model, make_stationary=False, seasonality_type=None, sp=None, remove_seasonality=False, mean_normalize=False, detrend=False, log=False, param_grid=None, options=None, metadata=None):
+def full_forecast_analysis(Y, h, target_forecast_period, forecasting_model, make_stationary=False, seasonality_type=None, sp=None, remove_seasonality=False, mean_normalize=False, detrend=False, log=False, param_grid=None, options=None, metadata=None):
 
     transform_dict = {}
 
@@ -585,7 +507,7 @@ def full_forecast_analysis(Y, h, forecasting_model, make_stationary=False, seaso
         transform_dict["deseasonalize"] = {"sp":sp, "seasonality_type":seasonality_type}
 
     Y_processed, Y_last_window, Y_last_window_trend, pre_detrend = pre_process(ts_data=Y,
-                                                                               target_forecast_period=h,
+                                                                               h=h,
                                                                                mean_normalize=mean_normalize,
                                                                                log=log,
                                                                                detrend=detrend,
@@ -594,19 +516,21 @@ def full_forecast_analysis(Y, h, forecasting_model, make_stationary=False, seaso
                                                                                transform_dict=transform_dict)
 
     # train forecasting model and generate forecasts
-    forecasts = train_and_forecast(ts_data=Y_processed,
-                                   horizon_length=h,
-                                   forecasting_model=forecasting_model,
-                                   sp=sp,
-                                   last_window=Y_last_window,
-                                   param_grid=param_grid,
-                                   options=options,
-                                   metadata=metadata)
+    forecasts, fvals = train_and_forecast(ts_data=Y_processed,
+                                          h=h,
+                                          target_forecast_period=target_forecast_period,
+                                          forecasting_model=forecasting_model,
+                                          sp=sp,
+                                          last_window=Y_last_window,
+                                          param_grid=param_grid,
+                                          options=options,
+                                          metadata=metadata)
 
     # post-process the forecasts
     forecasts = post_process(full_ts_data=Y,
                              forecasts=forecasts,
-                             target_forecast_period=h,
+                             h=h,
+                             target_forecast_period=target_forecast_period,
                              last_window_with_trend=Y_last_window_trend,
                              pre_detrend=pre_detrend,
                              mean_normalize=mean_normalize,
@@ -616,4 +540,19 @@ def full_forecast_analysis(Y, h, forecasting_model, make_stationary=False, seaso
                              sp=sp,
                              transform_dict=transform_dict)
 
-    return forecasts
+    # post-process the fitted values
+    fvals = post_process(full_ts_data=Y,
+                         forecasts=fvals,
+                         h=h,
+                         target_forecast_period=target_forecast_period,
+                         last_window_with_trend=Y_last_window_trend,
+                         pre_detrend=pre_detrend,
+                         mean_normalize=mean_normalize,
+                         detrend=detrend,
+                         log=log,
+                         make_stationary=make_stationary,
+                         sp=sp,
+                         is_fitted=True,
+                         transform_dict=transform_dict)
+
+    return forecasts, fvals

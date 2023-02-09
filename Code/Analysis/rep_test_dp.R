@@ -35,8 +35,8 @@ ses_fitted <- ses_mod$fitted
 tes_fitted <- tes_mod$fitted
 
 # save forecasts
-ses_fcasts <- forecast(ses_mod, h=1)$mean
-tes_fcasts <- forecast(tes_mod, h=1)$mean
+ses_fcasts <- forecast(ses_mod, h=2)$mean
+tes_fcasts <- forecast(tes_mod, h=2)$mean
 
 # calculate REP scores
 REP(y=ts_data[[1]], fitted=ses_fitted, f=ses_fcasts)
@@ -60,8 +60,8 @@ for (i in seq_along(ts_data)){
   tes_fitted <- tes_mod$fitted
   
   # save forecasts
-  ses_fcast <- forecast(ses_mod, h=1)$mean
-  tes_fcast <- forecast(tes_mod, h=1)$mean
+  ses_fcast <- forecast(ses_mod, h=2)$mean
+  tes_fcast <- forecast(tes_mod, h=2)$mean
   
   ses_fcasts <- append(ses_fcasts, ses_fcast)
   tes_fcasts <- append(tes_fcasts, tes_fcast)

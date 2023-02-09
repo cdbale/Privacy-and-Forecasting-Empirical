@@ -47,14 +47,19 @@ series_variance <- function(x){
 #######################################################
 
 fv <- c("entropy", "stl_features", "skewness", 
-        "kurtosis", "hurst", "series_mean", "series_variance")
+        "kurtosis", "hurst", "series_mean", "series_variance",
+        "max_var_shift", "max_level_shift")
 
 orig_features <- extract_features(original_data, sp=12, feature_vector=fv)
 
 plot_features <- orig_features %>%
-  select(entropy, hurst, skewness, kurtosis, e_acf1, trend, seasonal_strength, series_mean, series_variance)
+  select(entropy, hurst, skewness, kurtosis, e_acf1, trend, 
+         seasonal_strength, series_mean, series_variance, spike,
+         max_var_shift, max_level_shift)
 
-colnames(plot_features) <- c("SpecEntropy", "Hurst", "Skewness", "Kurtosis", "E_acf", "Trend", "Seasonality", "SeriesMean", "SeriesVariance")
+colnames(plot_features) <- c("Spectral Entropy", "Hurst", "Skewness", "Kurtosis", 
+                             "EACF", "Trend", "Seasonality", "Mean", "Variance", 
+                             "Spike", "Max Variance Shift", "Max Level Shift")
 
 ggpairs(plot_features)
 

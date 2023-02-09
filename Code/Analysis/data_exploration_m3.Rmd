@@ -184,18 +184,6 @@ temp <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-
 temp
 ```
 
-```{r}
-ts_data[1,]
-```
-
-
-```{r}
-temp1 <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_5.csv"))
-
-temp1
-```
-
-
 Function to import protected data and produce a side-by-side comparison of a protected series.
 ```{r}
 protected_series_plot <- function(protection_method, series_number, which_to_plot, ylims, main_title){

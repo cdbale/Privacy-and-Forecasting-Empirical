@@ -27,7 +27,7 @@ ses_params %>%
   ggplot(aes(x=Protection, y=avg_val)) +
   geom_boxplot() +
   labs(x = "Privacy Method",
-       y = "Alpha Values",
+       y = "Value",
        title = "Average SES Values") +
   facet_wrap(~Model_Parameter, scales="free")
 

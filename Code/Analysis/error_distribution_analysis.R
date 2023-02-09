@@ -30,6 +30,13 @@ average_error_ranks <- eds %>%
 average_error_ranks %>%
   filter(Protection == "original")
 
+k3_error_ranks <- eds %>%
+  filter(Protection == "knts+", Parameter == "3") %>%
+  group_by(Model) %>%
+  summarize(avg_error = mean(values), .groups='drop') %>%
+  arrange(avg_error) %>%
+  mutate(rank = 1:n())
+
 error_variance_ranks <- eds %>%
   group_by(Protection, Model) %>%
   summarize(error_variance = var(values), .groups="drop") %>%
@@ -40,21 +47,32 @@ error_variance_ranks <- eds %>%
 error_variance_ranks %>%
   filter(Protection == "original")
 
-ranks1 <- average_error_ranks %>%
-  filter(Protection != "original") %>%
+k3_variance_ranks <- eds %>%
+  filter(Protection == "knts+", Parameter == "3") %>%
   group_by(Model) %>%
-  summarize(avg_rank = mean(rank)) %>%
-  arrange(avg_rank)
+  summarize(error_variance = var(values), .groups='drop') %>%
+  arrange(error_variance) %>%
+  mutate(rank = 1:n())
 
-ranks2 <- error_variance_ranks %>%
-  filter(Protection != "original") %>%
-  group_by(Model) %>%
-  summarize(avg_rank = mean(rank)) %>%
-  arrange(avg_rank)
+# ranks1 <- average_error_ranks %>%
+#   filter(Protection != "original") %>%
+#   group_by(Model) %>%
+#   summarize(avg_rank = mean(rank)) %>%
+#   arrange(avg_rank)
+# 
+# ranks2 <- error_variance_ranks %>%
+#   filter(Protection != "original") %>%
+#   group_by(Model) %>%
+#   summarize(avg_rank = mean(rank)) %>%
+#   arrange(avg_rank)
+# 
+# ranks1
+# 
+# ranks2
 
-ranks1
+k3_error_ranks
 
-ranks2
+k3_variance_ranks
 
 ##############################################
 

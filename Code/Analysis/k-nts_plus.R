@@ -4,14 +4,12 @@
 
 # ------------------------------------------------------------------------- #
 
-###### CODE NEEDS LINE REMOVING KNTS FROM ERROR DISTRIBUTION ######
-
 library(plyr)
 library(tidyverse)
 library(tsfeatures)
 library(e1071)
-library(randomForest)
 library(ggplot2)
+library(randomForest)
 
 # read in original time series
 X <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
@@ -55,7 +53,6 @@ eds <- read_csv(paste0(ed_file_path, "all_distributions_h2.csv"))
 # transform to two columns - model name and errors
 eds <- eds %>% gather(key="name", value="values") %>%
   mutate(name = gsub("Multivariate_LGBM", "LGBM", name),
-         name = gsub("k_nts", "knts", name),
          name = substring(name, 1, nchar(name)-4)) %>%
   separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
   mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
@@ -132,27 +129,6 @@ for (f in file_names){
   
 }
 
-# calculate change in error relative to original data
-model_groups <- eds %>%
-  group_by(Model) %>%
-  group_split()
-
-value_differencer <- function(Y){
-  orig_errors <- Y %>%
-    filter(Protection == "original") %>%
-    pull(values)
-  
-  new_Y <- Y %>%
-    group_by(Protection, Parameter) %>%
-    mutate(values_diff = orig_errors - values)
-  
-  return(new_Y)
-}
-
-model_groups <- lapply(model_groups, value_differencer)
-
-eds <- do.call(rbind, model_groups)
-
 ## join features to errors
 split_eds <- eds %>% 
   group_by(Model, Protection, Parameter) %>%
@@ -170,86 +146,217 @@ for (i in seq_along(split_eds)){
   feat_df <- full_features %>%
     filter(Protection==prot, Parameter==param) %>%
     select(1:39)
-  feat_changes <- as_tibble(as.matrix(of) - as.matrix(feat_df))
   new <- split_eds[[i]] %>%
-    bind_cols(feat_changes)
+    bind_cols(feat_df)
   full_data[[i]] <- new
 }
 
 full_data <- do.call(rbind, full_data)
 
-full_data <- full_data %>%
-  filter(Protection != "original") %>%
-  select(-Model, -Horizon, -Protection, -Parameter, -values)
+############################
+############################
 
-full_data <- as.data.frame(scale(full_data))
+full_data <- full_data %>%
+  group_split(Model)
+
+models <- unlist(lapply(full_data, function(x) distinct(x, Model)))
+
+full_data <- lapply(full_data, function(x) x %>% select(-Model, -Horizon, -Protection, -Parameter))
+
+full_data_scaled <- lapply(full_data, function(x) as.data.frame(scale(x)))
+
+#########################################
+
+############# ############# #############
 
 ############# Initial feature filtering using Relief #############
 
 library(CORElearn)
 
-evals <- attrEval("values_diff", data=full_data, estimator="RReliefFexpRank")
+############ experimenting with choosing the value of k for RReliefF ############
 
-as_tibble(evals, rownames="Feature") %>%
-  arrange(desc(value)) %>%
-  mutate(Feature=factor(Feature, levels=Feature)) %>%
-  ggplot(aes(x=Feature, y=value)) +
+evals <- lapply(full_data_scaled, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
+
+# evals <- lapply(full_data_scaled, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
+
+evals_combined <- lapply(1:length(evals), function(x) as_tibble(evals[[x]], rownames="feature") %>% mutate(model = models[x]))
+
+evals_combined <- do.call(rbind, evals_combined)
+
+relief_plotter <- function(weights_data, model_name){
+  plt <- weights_data %>%
+    filter(model==model_name) %>%
+    arrange(value) %>%
+    mutate(feature=factor(feature, levels=feature)) %>%
+    ggplot(aes(x=feature, y=value)) +
+    geom_col() +
+    coord_flip()
+  
+  return(plt)
+}
+
+relief_plotter(evals_combined, "DES")
+
+avg_evals <- evals_combined %>%
+  group_by(feature) %>%
+  summarize(avg_weight=mean(value))
+
+avg_evals %>%
+  arrange(avg_weight) %>%
+  mutate(feature=factor(feature, levels=feature)) %>%
+  ggplot(aes(x=feature, y=avg_weight)) +
   geom_col() +
   coord_flip() +
   labs(x = "Feature",
        y = "Weight",
-       title = "Feature Weights from RReliefF")
+       title = "Average Feature Weights from RReliefF")
 
-## seems to be some rough clusters of importances
-# - Spike is massively important on its own
-# - linearity, series_mean, and max_var_shift are all about equally important ~30%
-# - max_var_shift, series_variance, and curvature are roughly equally important
-# - peak is kind of on it's own, but still over 15%
+###################################################
+###################################################
+###################################################
 
-# interesting results for kurtosis, skewness, and spectral entropy
+relief_selection <- lapply(evals, function(x) names(x[x > 0]))
 
-# we choose our cutoff at 0%, giving us the following features:
+library(ranger)
 
-relief_selection <- names(evals[evals >= 0.10])
+# number of RFE iterations
+num_iter <- 50
 
-relief_selection
+# setting seed
+set.seed(42)
 
-# "stability"         "max_level_shift"   "time_level_shift"  "max_var_shift"     "time_var_shift"   
-# "time_kl_shift"     "hurst"             "unitroot_kpss"     "trend"             "spike"            
-# "linearity"         "curvature"         "e_acf1"            "e_acf10"           "seasonal_strength"
-# "peak"              "trough"            "x_acf1"            "diff1_acf1"        "diff1_acf10"      
-# "diff2_acf1"        "diff2_acf10"       "seas_acf1"         "x_pacf5"           "diff1x_pacf5"     
-# "diff2x_pacf5"      "seas_pacf"         "series_mean"       "series_variance"  
+# list for oob errors
+oob_list <- list()
 
-#############  #############
+# list for variable rankings
+rank_list <- list()
 
-rf_data <- full_data[,c("values_diff", relief_selection)]
+for (i in seq_along(full_data_scaled)){
+  
+  df <- full_data_scaled[[i]]
+  
+  # list for oob errors
+  oob_list[[i]] <- list()
+  
+  # list for variable rankings
+  rank_list[[i]] <- list()
+  
+  for (j in 1:num_iter){
+    
+    # features to consider for cross validation
+    rf_feature_names <- relief_selection[[i]]
+    
+    # out of bag errors
+    oob_errors <- c()
+    
+    # loop variable ranks
+    loop_ranks <- c()
+    
+    while(length(rf_feature_names) > 0){
+      
+      # create train data
+      train <- df[, c("values", rf_feature_names)]
+      
+      # train random forest with current feature set
+      rf_res <- ranger(values ~ ., data=train, importance="permutation", num.trees=500)
+      
+      oob_errors <- c(oob_errors, rf_res$prediction.error)
+      
+      least_imp <- names(sort(importance(rf_res))[1])
+      
+      loop_ranks <- append(loop_ranks, least_imp)
+      
+      rf_feature_names <- rf_feature_names[rf_feature_names != least_imp]
+      
+      print(paste0("Dataframe ", i, ", Iteration ", j, ". Number of features: ", length(rf_feature_names)+1))
+      
+    }
+    
+    rank_list[[i]][[j]] <- loop_ranks
+    
+    oob_list[[i]][[j]] <- oob_errors
+    
+  }
+  
+}
 
-# set.seed(42)
+avg_oob <- lapply(lapply(oob_list, function(x) do.call(cbind, x)), function(y) rowMeans(y))
 
-rf_res <- randomForest(y=rf_data$values_diff, x=rf_data[,-1], importance=TRUE, nperm=5)
+combined_oob <- do.call(rbind, lapply(1:length(avg_oob), function(x) tibble("num_features"=length(avg_oob[[x]]):1, "value"=avg_oob[[x]], "model"=models[x])))
 
-# Get variable importance from the model fit
-ImpData <- as_tibble(importance(rf_res), rownames="Feature") %>%
-  arrange(desc(`%IncMSE`)) %>%
-  mutate(Feature=factor(Feature, levels=Feature))
+combined_oob %>%
+  ggplot(aes(x=num_features, y=value)) +
+  geom_line(size=0.6) +
+  facet_wrap(~model) +
+  labs(x="Number of Features (Subset Size)",
+       y="OOB MSE",
+       title="OOB MSE Across Subset Sizes for Each Forecasting Model")
 
-ImpData %>%
-  ggplot(aes(x=Feature, y=`%IncMSE`)) +
+## --------------------------------------------------------- ##
+
+combined_oob %>%
+  group_by(model) %>%
+  mutate(min_error = min(value),
+         within_5p = ifelse((value-min_error)/min_error <= 0.05, 1, 0)) %>%
+  ungroup() %>%
+  filter(within_5p == 1) %>%
+  group_by(model) %>%
+  summarize(num_selected = min(num_features), .groups='drop') %>%
+  mutate(avg_selected = floor(mean(num_selected)))
+
+rank_df <- do.call(rbind, lapply(1:length(rank_list), function(y) do.call(rbind, lapply(rank_list[[y]], function(x) tibble("var"=x, "rank"=length(x):1, "model"=models[[y]])))))
+
+sf <- rank_df %>%
+  group_by(var) %>%
+  summarize(avg_rank = mean(rank)) %>%
+  arrange(avg_rank) %>%
+  slice(1:7) %>%
+  pull(var)
+
+top_8s <- rank_df %>%
+  group_by(model, var) %>%
+  summarize(avg_rank = mean(rank)) %>%
+  arrange(model, avg_rank) %>%
+  slice(1:8) %>%
+  group_split()
+
+top_feats <- lapply(top_8s, function(x) x$var)
+
+final_importances <- list()
+
+for (i in seq_along(full_data_scaled)){
+  
+  df <- full_data_scaled[[i]][,c("values", top_feats[[i]])]
+  
+  rf_res <- ranger(values ~ ., data=df, importance="permutation", num.trees=500)
+  
+  final_importances[[i]] <- importance(rf_res)
+}
+
+final_importances <- do.call(rbind, lapply(1:length(final_importances), function(x) tibble("var"=names(final_importances[[x]]), "imp"=final_importances[[x]], "model"=models[x])))
+
+library(tidytext)
+
+#####################################################
+
+final_importances %>%
+  mutate(var = reorder_within(var, imp, model)) %>%
+  ggplot(aes(x=var, y=imp)) +
   geom_col() +
   coord_flip() +
-  labs(x = "Feature",
-       y = "Weight",
-       title = "Permutation Based Feature Importance from Random Forest")
+  facet_wrap(~model, scales='free') +
+  scale_x_reordered() +
+  labs(x="Feature Name",
+       y="Increase in MSE",
+       title="Random Forest Feature Importance")
 
-sf <- ImpData %>%
-  filter(`%IncMSE` > 0) %>%
-  pull(Feature) %>%
-  as.character()
+#######################################
 
 sf
 
-fv <- c("stl_features", "max_var_shift", "max_level_shift", "series_variance", "series_mean")
+# trend, spike, max_var_shift, series_variance, max_level_shift, series_mean
+
+fv <- c("stl_features", "max_var_shift", "series_variance", "series_mean", "max_level_shift")
 
 # split X into three separate datasets, one for each series length
 Xs <- list()

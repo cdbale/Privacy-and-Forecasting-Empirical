@@ -67,11 +67,6 @@ pmf <- function(x){
   return(x/sum(x))
 }
 
-# could use KNN regression using the protected value in period t'+E+1,
-# find the k-nearest neighbors to that protected point in the confidential
-# samples, and then take the weighted average of the corresponding confidential
-# points
-
 privacy_assessment <- function(confidential_data, protected_data, sample_size){
   
   ########### Calculate pmfs for identity disclosure risk ###########
@@ -84,7 +79,7 @@ privacy_assessment <- function(confidential_data, protected_data, sample_size){
   psamps <- lapply(csamps, function(x) lapply(protected_data, function(y) perform_sampling(y, sample_size=sample_size, sample_index=x$starting_index)))
   
   # calculate the similarities between a given confidential sample and each corresponding protected sample
-  similarities <- lapply(1:length(psamps), function(x) sapply(psamps[[x]], function(y) 1/l2_norm(csamps[[x]]$sample - y$sample)))
+  similarities <- lapply(1:length(psamps), function(x) sapply(psamps[[x]], function(y) 1/(l2_norm(csamps[[x]]$sample - y$sample)+.Machine$double.eps)))
   
   # calculate the pmf for each confidential series identity
   pmfs <- lapply(similarities, pmf)
@@ -172,9 +167,11 @@ S <- 20
 # confidential series
 X <- process_series(read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv"))
 
-protected_file_names <- grep("protected", list.files("../../Data/Train/Clean/"), value=TRUE)
+# protected_file_names <- grep("protected", list.files("../../Data/Train/Clean/"), value=TRUE)
 
-protected_file_names <- grep("h1", protected_file_names, value=TRUE)
+protected_file_names <- grep("h1", list.files("../../Data/Train/Clean/"), value=TRUE)
+
+protected_file_names <- grep("h18", protected_file_names, value=TRUE, invert=TRUE)
 
 protected_file_names <- grep("Top", protected_file_names, value=TRUE, invert=TRUE)
 
@@ -184,7 +181,11 @@ res_list <- list()
 
 for (f in protected_file_names){
   
-  fname <- substr(f, start=31, stop=nchar(f)-4)
+  if (substr(f, start=1, stop=3) == "m3_"){
+    fname <- "original"
+  } else{
+    fname <- substr(f, start=31, stop=nchar(f)-4)
+  }
   
   X_p <- process_series(read.csv(paste0("../../Data/Train/Clean/", f)))
   
@@ -194,6 +195,6 @@ for (f in protected_file_names){
   
 }
 
-all_results <- do.call(cbind, res_list)
+all_results <- t(do.call(cbind, res_list))
 
-round(all_results, 3)
+all_results
