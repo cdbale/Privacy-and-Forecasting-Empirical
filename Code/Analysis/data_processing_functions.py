@@ -20,7 +20,7 @@ def difference_to_stationarity(ts_data):
     return differenced_series
 
 # function to reverse first differencing
-def reverse_difference_to_stationarity(forecasts, ts_data, is_fitted):
+def reverse_difference_to_stationarity(h, forecasts, ts_data, is_fitted):
 
     # list to store reversed forecasts
     reversed_forecasts = []
@@ -275,7 +275,7 @@ def post_process(full_ts_data, forecasts, h, target_forecast_period, last_window
     # reverse seasonal and first differencing
     if make_stationary:
         temp_ts_data, _, _, _ = pre_process(full_ts_data, h, target_forecast_period, log=True)
-        processed = reverse_difference_to_stationarity(processed, temp_ts_data, is_fitted)
+        processed = reverse_difference_to_stationarity(h, processed, temp_ts_data, is_fitted)
 
     # reverse the log
     if log:
