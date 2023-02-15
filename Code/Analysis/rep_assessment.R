@@ -4,6 +4,15 @@
 
 # uses the REP function in the `REP_20220531 - code.R` file.
 
+# window length
+# The RNN and LGBM models use an input window length of 25,
+# meaning they can only generate fitted values for period 26 and
+# beyond. For comparability, we restrict the representativeness
+# calculations for all models and time series to time 26 and
+# beyond.
+
+window_length <- 25
+
 # source file for REP function
 source('REP_20220531 - code.R')
 
@@ -45,11 +54,15 @@ data_prep <- function(ts_file, sp, is_fitted=FALSE){
 # import original data
 orig_data <- data_prep(ts_file="m3_monthly_micro_h1.csv", sp=12)
 
+orig_data <- lapply(orig_data, function(x) ts(x[(window_length+1):length(x)], frequency=12))
+
 rep_list <- list()
 
 for (file in protected_files){
   
   protected_data <- data_prep(ts_file=file, sp=12)
+  
+  protected_data <- lapply(protected_data, function(x) ts(x[(window_length+1):length(x)], frequency=12))
   
   short_file <- str_sub(file, start=31, end=-5)
   
@@ -59,18 +72,20 @@ for (file in protected_files){
 
 fitted_rep_list <- list()
 
-window_length <- 5
-
-orig_data <- lapply(orig_data, function(x) ts(x[(window_length+1):length(x)], frequency=12))
-
 for (file in fitted_files){
   
   # remove the beginning input window for consistency across forecasting models
   
   fitted_values <- data_prep(ts_file=file, sp=12, is_fitted=TRUE)
   
-  fitted_values <- lapply(fitted_values, function(x) ts(x[(window_length+1):length(x)], frequency=12))
+  already_truncated <- grepl("RNN", file) | grepl("LGBM", file)
   
+  if (already_truncated){
+    fitted_values <- fitted_values
+  } else {
+    fitted_values <- lapply(fitted_values, function(x) ts(x[(window_length+1):length(x)], frequency=12))
+  }
+
   id <- str_sub(file, end=-5)
   
   print(id)
@@ -85,5 +100,7 @@ fitted_rep_results <- do.call(cbind, fitted_rep_list)
 
 round(apply(rep_results, 2, mean), 2)
 round(apply(fitted_rep_results, 2, mean), 2)
+
+mean(round(apply(fitted_rep_results, 2, mean), 2))
 
 

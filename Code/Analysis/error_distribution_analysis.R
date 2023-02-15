@@ -37,77 +37,20 @@ k3_error_ranks <- eds %>%
   arrange(avg_error) %>%
   mutate(rank = 1:n())
 
-error_variance_ranks <- eds %>%
+error_sd_ranks <- eds %>%
   group_by(Protection, Model) %>%
-  summarize(error_variance = var(values), .groups="drop") %>%
-  arrange(Protection, error_variance) %>%
+  summarize(error_sd = sd(values), .groups="drop") %>%
+  arrange(Protection, error_sd) %>%
   group_by(Protection) %>%
   mutate(rank = 1:n())
 
-error_variance_ranks %>%
-  filter(Protection == "original")
-
-k3_variance_ranks <- eds %>%
+k3_sd_ranks <- eds %>%
   filter(Protection == "knts+", Parameter == "3") %>%
   group_by(Model) %>%
-  summarize(error_variance = var(values), .groups='drop') %>%
-  arrange(error_variance) %>%
+  summarize(error_sd = sd(values), .groups='drop') %>%
+  arrange(error_sd) %>%
   mutate(rank = 1:n())
-
-# ranks1 <- average_error_ranks %>%
-#   filter(Protection != "original") %>%
-#   group_by(Model) %>%
-#   summarize(avg_rank = mean(rank)) %>%
-#   arrange(avg_rank)
-# 
-# ranks2 <- error_variance_ranks %>%
-#   filter(Protection != "original") %>%
-#   group_by(Model) %>%
-#   summarize(avg_rank = mean(rank)) %>%
-#   arrange(avg_rank)
-# 
-# ranks1
-# 
-# ranks2
 
 k3_error_ranks
 
 k3_variance_ranks
-
-##############################################
-
-## plot error distributions
-
-limited_eds <- eds %>%
-  filter(Protection != "original") %>%
-  mutate(error_upper_limit = quantile(values, 0.95)) %>%
-  filter(values <= error_upper_limit)
-
-limited_eds %>%
-  ggplot(aes(x=Model, y=values)) +
-  geom_boxplot() +
-  facet_wrap(~Protection) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-# calculate the error variance normalized by the smallest variance per protection method parameter
-
-normalized_error_variances <- eds %>%
-  filter(Horizon=="h1", Protection %in% c("original", "Top")) %>%
-  group_by(Model, Protection, Parameter) %>%
-  summarize(error_variance = var(values), .groups="drop") %>%
-  # group_by(Protection, Parameter) %>%
-  mutate(norm_error_variance = error_variance/min(error_variance))
-
-# ARIMA lowest forecast error variance
-normalized_error_variances %>%
-  arrange(Parameter, norm_error_variance) %>%
-  mutate(Parameter=as.factor(Parameter), Model=reorder_within(Model, norm_error_variance, Parameter)) %>%
-  ggplot(aes(x = Model, y = norm_error_variance)) +
-  geom_col() +
-  facet_wrap(~Parameter, scales='free_x') +
-  scale_x_reordered() +
-  labs(x="Model",
-       y="Normalized Error Variance")
-
-
-

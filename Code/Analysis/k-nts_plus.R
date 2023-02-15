@@ -177,8 +177,6 @@ library(CORElearn)
 
 evals <- lapply(full_data_scaled, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
 
-# evals <- lapply(full_data_scaled, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
-
 evals_combined <- lapply(1:length(evals), function(x) as_tibble(evals[[x]], rownames="feature") %>% mutate(model = models[x]))
 
 evals_combined <- do.call(rbind, evals_combined)
@@ -203,13 +201,90 @@ avg_evals <- evals_combined %>%
 
 avg_evals %>%
   arrange(avg_weight) %>%
-  mutate(feature=factor(feature, levels=feature)) %>%
+  mutate(feature=factor(feature, 
+                        levels=c('unitroot_kpss',
+                                 'hurst',
+                                 'entropy',
+                                 'skewness',
+                                 'lumpiness',
+                                 'stability',
+                                 'kurtosis',
+                                 'crossing_points',
+                                 'x_acf10',
+                                 'e_acf1',
+                                 'unitroot_pp',
+                                 'max_kl_shift',
+                                 'flat_spots',
+                                 'time_level_shift',
+                                 'x_pacf5',
+                                 'time_kl_shift',
+                                 'diff1_acf1',
+                                 'nonlinearity',
+                                 'time_var_shift',
+                                 'diff1x_pacf5',
+                                 'diff2_acf1',
+                                 'diff2x_pacf5',
+                                 'e_acf10',
+                                 'seas_pacf',
+                                 'x_acf1',
+                                 'trend',
+                                 'diff1_acf10',
+                                 'seasonal_strength',
+                                 'diff2_acf10',
+                                 'seas_acf1',
+                                 'trough',
+                                 'peak',
+                                 'series_mean',
+                                 'curvature',
+                                 'max_var_shift',
+                                 'max_level_shift',
+                                 'linearity',
+                                 'series_variance',
+                                 'spike'),
+                        labels=c("Unitroot KPSS",
+                                 "Hurst",
+                                 "Spectral Entropy",
+                                 "Skewness",
+                                 "Lumpiness",
+                                 "Stability",
+                                 "Kurtosis",
+                                 "Crossing Points",
+                                 "X ACF10",
+                                 "Error ACF",
+                                 "Unitroot PP",
+                                 "Max KL Shift",
+                                 "Flat Spots",
+                                 "Time Level Shift",
+                                 "X PACF5",
+                                 "Time KL Shift",
+                                 "First Difference ACF",
+                                 "Nonlinearity",
+                                 "Time Variance Shift",
+                                 "First Difference PACF5",
+                                 "Second Difference ACF",
+                                 "Second Difference PACF5",
+                                 "Error ACF10",
+                                 "Seasonal PACF",
+                                 "X ACF",
+                                 "Trend",
+                                 "First Difference ACF10",
+                                 "Seasonal Strength",
+                                 "Second Difference ACF10",
+                                 "Seasonal ACF",
+                                 "Trough", 
+                                 "Peak",
+                                 "Mean", 
+                                 "Curvature",
+                                 "Max Variance Shift",
+                                 "Max Level Shift",
+                                 "Linearity",
+                                 "Variance",
+                                 "Spike"))) %>%
   ggplot(aes(x=feature, y=avg_weight)) +
   geom_col() +
   coord_flip() +
   labs(x = "Feature",
-       y = "Weight",
-       title = "Average Feature Weights from RReliefF")
+       y = "Weight")
 
 ###################################################
 ###################################################
@@ -289,12 +364,11 @@ combined_oob %>%
   geom_line(size=0.6) +
   facet_wrap(~model) +
   labs(x="Number of Features (Subset Size)",
-       y="OOB MSE",
-       title="OOB MSE Across Subset Sizes for Each Forecasting Model")
+       y="OOB MSE")
 
 ## --------------------------------------------------------- ##
 
-combined_oob %>%
+ns <- combined_oob %>%
   group_by(model) %>%
   mutate(min_error = min(value),
          within_5p = ifelse((value-min_error)/min_error <= 0.05, 1, 0)) %>%
@@ -302,7 +376,9 @@ combined_oob %>%
   filter(within_5p == 1) %>%
   group_by(model) %>%
   summarize(num_selected = min(num_features), .groups='drop') %>%
-  mutate(avg_selected = floor(mean(num_selected)))
+  mutate(avg_selected = floor(mean(num_selected))) %>%
+  distinct(avg_selected) %>%
+  pull()
 
 rank_df <- do.call(rbind, lapply(1:length(rank_list), function(y) do.call(rbind, lapply(rank_list[[y]], function(x) tibble("var"=x, "rank"=length(x):1, "model"=models[[y]])))))
 
@@ -310,17 +386,17 @@ sf <- rank_df %>%
   group_by(var) %>%
   summarize(avg_rank = mean(rank)) %>%
   arrange(avg_rank) %>%
-  slice(1:7) %>%
+  slice(1:ns) %>%
   pull(var)
 
-top_8s <- rank_df %>%
+top_6s <- rank_df %>%
   group_by(model, var) %>%
   summarize(avg_rank = mean(rank)) %>%
   arrange(model, avg_rank) %>%
-  slice(1:8) %>%
+  slice(1:6) %>%
   group_split()
 
-top_feats <- lapply(top_8s, function(x) x$var)
+top_feats <- lapply(top_6s, function(x) x$var)
 
 final_importances <- list()
 
@@ -340,15 +416,93 @@ library(tidytext)
 #####################################################
 
 final_importances %>%
-  mutate(var = reorder_within(var, imp, model)) %>%
+  mutate(var=factor(var, 
+                    levels=c('unitroot_kpss',
+                                 'hurst',
+                                 'entropy',
+                                 'skewness',
+                                 'lumpiness',
+                                 'stability',
+                                 'kurtosis',
+                                 'crossing_points',
+                                 'x_acf10',
+                                 'e_acf1',
+                                 'unitroot_pp',
+                                 'max_kl_shift',
+                                 'flat_spots',
+                                 'time_level_shift',
+                                 'x_pacf5',
+                                 'time_kl_shift',
+                                 'diff1_acf1',
+                                 'nonlinearity',
+                                 'time_var_shift',
+                                 'diff1x_pacf5',
+                                 'diff2_acf1',
+                                 'diff2x_pacf5',
+                                 'e_acf10',
+                                 'seas_pacf',
+                                 'x_acf1',
+                                 'trend',
+                                 'diff1_acf10',
+                                 'seasonal_strength',
+                                 'diff2_acf10',
+                                 'seas_acf1',
+                                 'trough',
+                                 'peak',
+                                 'series_mean',
+                                 'curvature',
+                                 'max_var_shift',
+                                 'max_level_shift',
+                                 'linearity',
+                                 'series_variance',
+                                 'spike'),
+                        labels=c("Unitroot KPSS",
+                                 "Hurst",
+                                 "Spectral Entropy",
+                                 "Skewness",
+                                 "Lumpiness",
+                                 "Stability",
+                                 "Kurtosis",
+                                 "Crossing Points",
+                                 "X ACF10",
+                                 "Error ACF",
+                                 "Unitroot PP",
+                                 "Max KL Shift",
+                                 "Flat Spots",
+                                 "Time Level Shift",
+                                 "X PACF5",
+                                 "Time KL Shift",
+                                 "First Difference ACF",
+                                 "Nonlinearity",
+                                 "Time Variance Shift",
+                                 "First Difference PACF5",
+                                 "Second Difference ACF",
+                                 "Second Difference PACF5",
+                                 "Error ACF10",
+                                 "Seasonal PACF",
+                                 "X ACF",
+                                 "Trend",
+                                 "First Difference ACF10",
+                                 "Seasonal Strength",
+                                 "Second Difference ACF10",
+                                 "Seasonal ACF",
+                                 "Trough", 
+                                 "Peak",
+                                 "Mean", 
+                                 "Curvature",
+                                 "Max Variance Shift",
+                                 "Max Level Shift",
+                                 "Linearity",
+                                 "Variance",
+                                 "Spike")),
+                    var = reorder_within(var, imp, model)) %>%
   ggplot(aes(x=var, y=imp)) +
   geom_col() +
   coord_flip() +
   facet_wrap(~model, scales='free') +
   scale_x_reordered() +
   labs(x="Feature Name",
-       y="Increase in MSE",
-       title="Random Forest Feature Importance")
+       y="Increase in MSE")
 
 #######################################
 
