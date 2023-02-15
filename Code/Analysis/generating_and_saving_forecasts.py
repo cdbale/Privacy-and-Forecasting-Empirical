@@ -25,15 +25,17 @@ protection_methods = {# "Top": [0.10, 0.20, 0.40],
                       "k_nts": [3, 5, 7, 10, 15],
                       "k_nts_plus": [3, 5, 7, 10, 15]}
 
+protection_methods = {}
+
 # dictionary containing string names of forecasting models and sub-dictionaries
 # of model-specific parameters
-forecasting_models = {"SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+forecasting_models = {# "SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      # "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      # "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      # "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
+                      # "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid": None, "options": None},
                       "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid": None, "options": {'max_samples_per_ts': None, 'window_length': 25}},
-                      "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid": None, "options": None},
-                      "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 1}}}
+                      "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
 
 forecasts_path = "../../Outputs/Forecasts/"
 results_path = "../../Outputs/Results/"
@@ -46,7 +48,7 @@ full_data = pd.read_csv("../../Data/Train/Clean/full_m3_monthly_micro_clean.csv"
 full_data = [x.dropna() for _, x in full_data.iterrows()]
 
 ###### for testing only ######
-full_data = full_data[:15]
+# full_data = full_data[:15]
 
 # loop over target forecast periods (assume a one-step horizon)
 for H in target_forecast_period:
@@ -133,6 +135,7 @@ for H in target_forecast_period:
             for m in forecasting_models.items():
                 fcasts_protected, fitted_values = full_forecast_analysis(Y=Y_protected,
                                                                          h=1,
+                                                                         target_forecast_period=H,
                                                                          forecasting_model=m[0],
                                                                          make_stationary=m[1]["make_stationary"],
                                                                          seasonality_type=m[1]["seasonality_type"],

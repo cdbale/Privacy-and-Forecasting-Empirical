@@ -34,6 +34,7 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
     unique_lengths = np.unique(series_lengths)
 
     full_fcasts = {}
+    full_fitted_values = {}
 
     for length in unique_lengths:
 
@@ -66,23 +67,25 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
                                    training_length=training_length,
                                    max_samples_per_ts=max_samples_per_ts)
 
-        fcasts = train_RNN(train_data=processed,
-                           h=h,
-                           num_ensemble_models=num_ensemble_models,
-                           input_chunk_length=input_chunk_length,
-                           training_length=training_length,
-                           max_samples_per_ts=max_samples_per_ts,
-                           learning_rate_=best_params['params']['learning_rate_'],
-                           n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
-                           hidden_dim_=int(best_params['params']['hidden_dim_']),
-                           batch_size_=int(best_params['params']['batch_size_']),
-                           n_epochs_=int(best_params['params']['n_epochs_']),
-                           dropout_=best_params['params']['dropout_'],
-                           L2_penalty_=best_params['params']['L2_penalty_'],
-                           save_models=True,
-                           model_save_folder=model_save_folder+"_"+str(length))
+        fcasts, fvals = train_RNN(train_data=processed,
+                                  h=h,
+                                  return_fitted=True,
+                                  num_ensemble_models=num_ensemble_models,
+                                  input_chunk_length=input_chunk_length,
+                                  training_length=training_length,
+                                  max_samples_per_ts=max_samples_per_ts,
+                                  learning_rate_=best_params['params']['learning_rate_'],
+                                  n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
+                                  hidden_dim_=int(best_params['params']['hidden_dim_']),
+                                  batch_size_=int(best_params['params']['batch_size_']),
+                                  n_epochs_=int(best_params['params']['n_epochs_']),
+                                  dropout_=best_params['params']['dropout_'],
+                                  L2_penalty_=best_params['params']['L2_penalty_'],
+                                  save_models=True,
+                                  model_save_folder=model_save_folder+"_"+str(length))
 
         fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+        fvals = [pd.Series(fvals.iloc[:,i]) for i in range(fvals.shape[1])]
 
         fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
 
@@ -90,13 +93,14 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
         for i in range(num_series):
             fcasts[i].index = fcast_indexes[i]
 
-        # store sub-group forecasts in matrix of all forecasts
+        # store sub-group forecasts and fitted values
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
+            full_fitted_values[j] = fvals[i]
 
-    fcasts = [full_fcasts[i] for i in range(len(ts_data))]
+    # fcasts = [full_fcasts[i] for i in range(len(ts_data))]
 
-    return fcasts
+    return full_fcasts, full_fitted_values
 
 # function for forecasting with LGBM
 def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
@@ -106,6 +110,7 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
     unique_lengths = np.unique(series_lengths)
 
     full_fcasts = {}
+    full_fitted_values = {}
 
     for length in unique_lengths:
 
@@ -137,21 +142,23 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
                                     lags=lags,
                                     max_samples_per_ts=max_samples_per_ts)
 
-        fcasts = train_LGBM(train_data=processed,
-                            h=h,
-                            lags=lags,
-                            max_samples_per_ts=max_samples_per_ts,
-                            learning_rate_=best_params['params']['learning_rate_'],
-                            num_boost_rounds_=int(best_params['params']['num_boost_rounds_']),
-                            num_leaves_=int(best_params['params']['num_leaves_']),
-                            bagging_freq_=best_params['params']['bagging_freq_'],
-                            bagging_frac_=best_params['params']['bagging_frac_'],
-                            lambda_l2_=best_params['params']['lambda_l2_'],
-                            min_data_in_leaf_=int(best_params['params']['min_data_in_leaf_']),
-                            save_models=True,
-                            model_save_folder=model_save_folder+"_"+str(length))
+        fcasts, fvals = train_LGBM(train_data=processed,
+                                   h=h,
+                                   return_fitted=True,
+                                   lags=lags,
+                                   max_samples_per_ts=max_samples_per_ts,
+                                   learning_rate_=best_params['params']['learning_rate_'],
+                                   num_boost_rounds_=int(best_params['params']['num_boost_rounds_']),
+                                   num_leaves_=int(best_params['params']['num_leaves_']),
+                                   bagging_freq_=best_params['params']['bagging_freq_'],
+                                   bagging_frac_=best_params['params']['bagging_frac_'],
+                                   lambda_l2_=best_params['params']['lambda_l2_'],
+                                   min_data_in_leaf_=int(best_params['params']['min_data_in_leaf_']),
+                                   save_models=True,
+                                   model_save_folder=model_save_folder+"_"+str(length))
 
         fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
+        fvals = [pd.Series(fvals.iloc[:,i]) for i in range(fvals.shape[1])]
 
         fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
 
@@ -162,10 +169,11 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
         # store sub-group forecasts in matrix of all forecasts
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
+            full_fitted_values[j] = fvals[i]
 
-    fcasts = [full_fcasts[i] for i in range(len(ts_data))]
+    # fcasts = [full_fcasts[i] for i in range(len(ts_data))]
 
-    return fcasts
+    return full_fcasts, full_fitted_values
 
 # splitting function used in VAR forecast
 def split(a, n):
@@ -305,7 +313,7 @@ def train_and_forecast(ts_data, h, target_forecast_period, forecasting_model, sp
     # if using VAR
     elif forecasting_model == "VAR":
         fcasts, fvals = VAR_forecast(ts_data=ts_data, h=h,
-                                     param_save_folder="h_" + str(h) + "_target_period" + target_forecast_period + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                                     param_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     # if using ARIMA
     elif forecasting_model == "ARIMA":
         forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
@@ -322,19 +330,19 @@ def train_and_forecast(ts_data, h, target_forecast_period, forecasting_model, sp
         # best_params = multivariate_lgbm_cv(ts_data=ts_data, param_grid=param_grid)
         # fcasts = multivariate_lgbm_forecast(ts_data=ts_data, h=horizon_length, last_window=last_window, num_series=num_series, best_params=best_params)
         lags = options['window_length']
-        fcasts = LGBM_forecast(ts_data=ts_data,
-                               h=h,
-                               lags=lags,
-                               max_samples_per_ts=options['max_samples_per_ts'],
-                               model_save_folder="h_" + str(horizon_length) + "_target_period" + target_forecast_period + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+        fcasts, fvals = LGBM_forecast(ts_data=ts_data,
+                                      h=h,
+                                      lags=lags,
+                                      max_samples_per_ts=options['max_samples_per_ts'],
+                                      model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
     elif forecasting_model == "RNN":
-        fcasts = RNN_forecast(ts_data=ts_data,
-                              h=h,
-                              input_chunk_length=options['input_chunk_length'],
-                              training_length=options['training_length'],
-                              max_samples_per_ts=options['max_samples_per_ts'],
-                              num_ensemble_models=options['num_ensemble_models'],
-                              model_save_folder="h_" + str(horizon_length) + "_target_period" + target_forecast_period + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+        fcasts, fvals = RNN_forecast(ts_data=ts_data,
+                                     h=h,
+                                     input_chunk_length=options['input_chunk_length'],
+                                     training_length=options['training_length'],
+                                     max_samples_per_ts=options['max_samples_per_ts'],
+                                     num_ensemble_models=options['num_ensemble_models'],
+                                     model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
 
     return fcasts, fvals
 
@@ -508,6 +516,7 @@ def full_forecast_analysis(Y, h, target_forecast_period, forecasting_model, make
 
     Y_processed, Y_last_window, Y_last_window_trend, pre_detrend = pre_process(ts_data=Y,
                                                                                h=h,
+                                                                               target_forecast_period=target_forecast_period,
                                                                                mean_normalize=mean_normalize,
                                                                                log=log,
                                                                                detrend=detrend,

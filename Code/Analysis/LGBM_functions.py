@@ -1,6 +1,6 @@
 from bayes_opt import BayesianOptimization
 from torch import nn
-from darts.models.forecasting.gradient_boosted_model import LightGBMModel
+from darts.models.forecasting.lgbm import LightGBMModel
 import numpy as np
 import pandas as pd
 import os
@@ -11,6 +11,7 @@ import joblib
 
 def train_LGBM(train_data,
                h,
+               return_fitted,
                lags,
                max_samples_per_ts,
                learning_rate_,
@@ -45,7 +46,6 @@ def train_LGBM(train_data,
         if not os.path.exists(newpath):
             os.makedirs(newpath)
         joblib.dump(LGBM, newpath + "lgbm_mod_" + ".pkl")
-        # LGBM = joblib.load(newpath + "lgbm_mod_" + ".pkl")
 
     # generate forecasts
     fcasts = LGBM.predict(n=h, series=train_data)
@@ -55,7 +55,19 @@ def train_LGBM(train_data,
 
     fcasts = pd.DataFrame(fcasts).T
 
-    return fcasts
+    if return_fitted:
+        fvals = LGBM.historical_forecasts(series=train_data, retrain=False)
+
+        # convert to series
+        fvals = [x.pd_series().reset_index(drop=True) for x in fvals]
+
+        fvals = pd.DataFrame(fvals).T
+
+        return fcasts, fvals
+
+    else:
+
+        return fcasts
 
 def optimize_LGBM(train_data,
                   validation_data,
@@ -67,6 +79,7 @@ def optimize_LGBM(train_data,
 
         fcasts = train_LGBM(train_data=train_data,
                             h=h,
+                            return_fitted=False,
                             lags=lags,
                             max_samples_per_ts=max_samples_per_ts,
                             learning_rate_=learning_rate_,
