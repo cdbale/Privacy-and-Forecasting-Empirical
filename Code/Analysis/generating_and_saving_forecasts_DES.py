@@ -9,6 +9,8 @@ from forecasting_functions import *
 import csv
 import os
 
+specific_model = "DES"
+
 # whether to forecast using original data
 forecast_for_confidential = False
 
@@ -20,9 +22,9 @@ target_forecast_period = [1]
 # parameters for each method
 protection_methods = {# "Top": [0.10, 0.20, 0.40],
                       # "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.25, 0.5, 1, 1.5, 2],
-                      "DP": [0.1, 1, 4.6, 10, 20],
-                      "k_nts": [3, 5, 7, 10, 15],
+                      # "AN": [0.25, 0.5, 1, 1.5, 2],
+                      # "DP": [0.1, 1, 4.6, 10, 20],
+                      # "k_nts": [3, 5, 7, 10, 15],
                       "k_nts_plus": [3, 5, 7, 10, 15]}
 
 # protection_methods = {}
@@ -129,7 +131,7 @@ for H in target_forecast_period:
             elif p[0] == "k_nts":
                 Y_protected = apply_data_protection(Y, k=param)
             elif p[0] == "k_nts_plus":
-                Y_protected = apply_data_protection(Y, k=param, plus=True)
+                Y_protected = apply_data_protection(Y, k=param, plus=True, model=specific_model)
 
             # forecast using each model on the current protected data
             for m in forecasting_models.items():
@@ -151,15 +153,31 @@ for H in target_forecast_period:
                 if fcasts_protected is None:
                     continue
 
-                # save protected forecasts to .csv
-                fcasts_protected.to_csv(forecasts_path + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
-                fitted_values.T.to_csv(forecasts_path + "fitted_values/" + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
+                if specific_model != None:
 
-                # calculate average MAE
-                mae_global_protected = pd.Series(mean_absolute_error(Test, fcasts_protected, multioutput="uniform_average"))
+                    # save protected forecasts to .csv
+                    fcasts_protected.to_csv(forecasts_path + m[0] + "_h" + str(H) + "_" + "model_specific_" + specific_model + "_" + protection_method + ".csv", index=False)
+                    fitted_values.T.to_csv(forecasts_path + "fitted_values/" + m[0] + "_h" + str(H) + "_" + "model_specific_" + specific_model + "_" +  protection_method + ".csv", index=False)
 
-                # save average MAE to .csv
-                mae_global_protected.to_csv(results_path + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
+                    # calculate average MAE
+                    mae_global_protected = pd.Series(mean_absolute_error(Test, fcasts_protected, multioutput="uniform_average"))
 
-                # print the average MAE for the current model and protection method
-                print("MAE under " + protection_method + " for " + m[0] + ": " + str(mae_global_protected[0]))
+                    # save average MAE to .csv
+                    mae_global_protected.to_csv(results_path + m[0] + "_h" + str(H) + "_" + "model_specific_" + specific_model + "_" +  protection_method + ".csv", index=False)
+
+                    # print the average MAE for the current model and protection method
+                    print("MAE under " + protection_method + " for " + m[0] + ": " + str(mae_global_protected[0]))
+
+                else:
+                    # save protected forecasts to .csv
+                    fcasts_protected.to_csv(forecasts_path + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
+                    fitted_values.T.to_csv(forecasts_path + "fitted_values/" + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
+
+                    # calculate average MAE
+                    mae_global_protected = pd.Series(mean_absolute_error(Test, fcasts_protected, multioutput="uniform_average"))
+
+                    # save average MAE to .csv
+                    mae_global_protected.to_csv(results_path + m[0] + "_h" + str(H) + "_" + protection_method + ".csv", index=False)
+
+                    # print the average MAE for the current model and protection method
+                    print("MAE under " + protection_method + " for " + m[0] + ": " + str(mae_global_protected[0]))

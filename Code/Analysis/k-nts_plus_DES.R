@@ -57,7 +57,8 @@ eds <- eds %>% gather(key="name", value="values") %>%
   mutate(name = gsub("Multivariate_LGBM", "LGBM", name),
          name = substring(name, 1, nchar(name)-4)) %>%
   separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
-  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
+  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter)) %>%
+  filter(Model == "DES")
 
 ### Perform feature extraction for all datasets for h2.
 
@@ -395,7 +396,7 @@ top_6s <- rank_df %>%
   group_by(model, var) %>%
   summarize(avg_rank = mean(rank)) %>%
   arrange(model, avg_rank) %>%
-  slice(1:6) %>%
+  slice(1:8) %>%
   group_split()
 
 top_feats <- lapply(top_6s, function(x) x$var)
@@ -512,7 +513,7 @@ sf
 
 # trend, spike, max_var_shift, series_variance, max_level_shift, series_mean
 
-fv <- c("stl_features", "max_var_shift", "series_variance", "series_mean", "max_level_shift")
+fv <- c("stl_features", "max_var_shift", "series_variance", "series_mean", "max_level_shift", "acf_features")
 
 # split X into three separate datasets, one for each series length
 Xs <- list()
@@ -646,8 +647,8 @@ X_k7 <- perform_knts(time_series=Xs, window_length=window_length, k=7, features_
 X_k10 <- perform_knts(time_series=Xs, window_length=window_length, k=10, features_to_calculate=fv, selected_features=sf)
 X_k15 <- perform_knts(time_series=Xs, window_length=window_length, k=15, features_to_calculate=fv, selected_features=sf)
 
-write.csv(X_k3, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_3.csv", row.names=FALSE)
-write.csv(X_k5, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_5.csv", row.names=FALSE)
-write.csv(X_k7, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_7.csv", row.names=FALSE)
-write.csv(X_k10, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_10.csv", row.names=FALSE)
-write.csv(X_k15, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_15.csv", row.names=FALSE)
+write.csv(X_k3, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_DES_k-nts-plus_3.csv", row.names=FALSE)
+write.csv(X_k5, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_DES_k-nts-plus_5.csv", row.names=FALSE)
+write.csv(X_k7, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_DES_k-nts-plus_7.csv", row.names=FALSE)
+write.csv(X_k10, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_DES_k-nts-plus_10.csv", row.names=FALSE)
+write.csv(X_k15, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_DES_k-nts-plus_15.csv", row.names=FALSE)

@@ -48,7 +48,7 @@ series_variance <- function(x){
 
 fv <- c("entropy", "stl_features", "skewness", 
         "kurtosis", "hurst", "series_mean", "series_variance",
-        "max_var_shift", "max_level_shift")
+        "max_var_shift", "max_level_shift", "acf_features", "pacf_features")
 
 orig_features <- extract_features(original_data, sp=12, feature_vector=fv)
 

@@ -85,6 +85,10 @@ features <- orig_features %>%
          series_mean, series_variance, spike, max_var_shift, max_level_shift) %>%
   filter(method %in% c("original", "AN", "DP", "k-nts", "k-nts-plus"))
 
+ac_features <- orig_features %>%
+  select(snum, method, parameter, x_acf1, x_acf10, x_pacf5, seas_acf1) %>%
+  filter(method %in% c("original", "AN", "DP", "k-nts", "k-nts-plus"))
+
 ################################
 
 ### visualize a good/bad series (based on feature values)
@@ -234,7 +238,27 @@ annotate_figure(g4, top=text_grob("", face = "bold", size = 14))
 ################################
 ################################
 
-reg_features <- features
+ac_features <- ac_features %>%
+  gather(key="Feature", value="Value", -method, -parameter, -snum) %>%
+  mutate(method = factor(method, 
+                         levels=c("original", "AN", "DP", "k-nts", "k-nts-plus"),
+                         labels=c("Original", "AN", "DP", "k-nTS", "k-nTS+")))
+
+avg_ac_features <- ac_features %>%
+  group_by(snum, Feature, method) %>%
+  summarize(avg_val = mean(Value), .groups="drop") 
+
+avg_ac_features %>%
+  mutate(Feature = factor(Feature, 
+                          levels=c("x_acf1", "x_acf10", "x_pacf5", "seas_acf1"),
+                          labels=c("X ACF", "X ACF10", "X PACF5", "Seasonal ACF")
+                          )) %>%
+  ggplot(aes(x=method, y=avg_val)) +
+  geom_boxplot() +
+  facet_wrap(~Feature, scales='free') +
+  labs(x = "Privacy Method",
+       y = "Average Feature Value",
+       title = "")
 
 features <- features %>%
   gather(key="Feature", value="Value", -method, -parameter, -snum) %>%
@@ -248,7 +272,7 @@ features <- features %>%
                                    "series_variance", "spike", "max_var_shift",
                                    "max_level_shift"),
                           labels=c("Spectral Entropy", "Hurst", "Skewness",
-                                   "Kurtosis", "EACF", "Trend",
+                                   "Kurtosis", "Error ACF", "Trend",
                                    "Seasonality", "Mean",
                                    "Variance", "Spike", "Max Variance Shift",
                                    "Max Level Shift")))
@@ -263,8 +287,11 @@ avg_features %>%
   facet_wrap(~Feature, scales='free') +
   labs(x = "Privacy Method",
        y = "Average Feature Value",
-       title = "Average Time Series Feature Values Across Privacy Methods")
+       title = "")
 
+
+########## Plot the auto-correlation features for each protection method ##############
+avg_features
 
 
 avg_vals <- avg_features %>%
