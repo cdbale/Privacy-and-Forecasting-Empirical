@@ -13,7 +13,6 @@ import sktime
 import itertools
 from sktime.forecasting.exp_smoothing import ExponentialSmoothing
 from sktime.forecasting.base import ForecastingHorizon
-# from sktime.forecasting.var import VAR
 from statsmodels.tsa.vector_ar.var_model import VAR
 from sktime.forecasting.arima import AutoARIMA
 from sktime.forecasting.model_selection import ForecastingGridSearchCV, ExpandingWindowSplitter
@@ -25,6 +24,160 @@ from data_processing_functions import *
 from RNN_functions import *
 from LGBM_functions import *
 from darts import TimeSeries
+
+################################################################################
+
+def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_path, model, model_args, h=1, metadata=None):
+
+    """
+
+    param train_path: path to training data file.
+    param test_path: path to test data file.
+    param forecasts_path: path to where forecasts will be saved
+    param results_path: path to where accuracy results will be saved
+    param model: string model name
+    param model_args: model specific arguments
+    param h: forecast horizon, default is 1.
+    """
+
+    # import time series and test data
+    # ignore header and skip the first row to use integers as column names
+    train = pd.read_csv("../../Data/Cleaned/" + train_file, header=None, skiprows=1)
+    test = pd.read_csv("../../Data/Cleaned/" + test_file, header=None, skiprows=1).T
+
+    # convert to a list of series, and drop missing values
+    train = [x.dropna() for _, x in train.iterrows()]
+
+    # generate forecasts
+    fcasts = full_forecast_analysis(Y=train,
+                                    h=h,
+                                    forecasting_model=model,
+                                    sp=model_args["sp"],
+                                    mean_normalize=model_args["mean_normalize"],
+                                    log=model_args["log"],
+                                    options=model_args["options"],
+                                    metadata=metadata)
+
+    # save the forecasts and fitted values based on confidential data to .csv file
+    horizon = train_file.split("_")[-2]
+    finfo = train_file[:-9]
+
+    # save the forecasts
+    fcasts.to_csv(forecasts_path + model + horizon + finfo + ".csv", index=False)
+
+    # calculate the average mean absolute error
+    mae_global = pd.Series(mean_absolute_error(test, fcasts, multioutput="uniform_average"))
+
+    # save the average mean absolute error
+    mae_global.to_csv(results_path + model + horizon + finfo + ".csv", index=False)
+
+    # print the average mean absolute error
+    print("MAE for " + model + " on " + finfo + ": " + str(mae_global[0]))
+
+    return None
+
+################################################################################
+
+def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=False, log=False, options=None, metadata=None):
+
+    Y_processed = pre_process(ts_data=Y,
+                              h=h,
+                              mean_normalize=mean_normalize,
+                              log=log,
+                              sp=sp)
+
+    # train forecasting model and generate forecasts
+    forecasts = train_and_forecast(ts_data=Y_processed,
+                                   h=h,
+                                   forecasting_model=forecasting_model,
+                                   sp=sp,
+                                   options=options,
+                                   metadata=metadata)
+
+    # post-process the forecasts
+    forecasts = post_process(full_ts_data=Y,
+                             forecasts=forecasts,
+                             h=h,
+                             mean_normalize=mean_normalize,
+                             log=log,
+                             sp=sp)
+
+    return forecasts
+
+################################################################################
+
+# general function for training a model and generating forecasts.
+def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, metadata=None):
+    """
+    Performs model training and forecasting using the supplied model applied to
+    the supplied time series data. Model-specific arguments have a default of
+    None.
+
+    :param ts_data: pandas dataframe containing EITHER
+        - series in the rows and time periods in the columns - used with
+            traditional forecasting models.
+        - reduced tabular data with target feature in the last column.
+    :param forecasting_model: string name of the model to use to perform forecasts.
+    :param horizon_length: the number of steps ahead you with to forecast
+        relative to the last point in the series.
+    :protection_method: string name of the type of data protection applied.
+    :param last_window: specific to models that predict using reduced data (i.e.,
+        LGBM). last_window contains the final window of available data which is
+        used to generate forecasts.
+    :return fcasts: a pandas dataframe containing forecasts for all series,
+        dimensions are transposed relative to the input data - series are in the
+        columns, each row corresponds to a time period.
+    """
+
+    # define sktime relative forecasting horizon
+    fh = np.arange(1, h+1)
+
+    # if using SES
+    if forecasting_model == "SES":
+        forecaster = ExponentialSmoothing(use_boxcox=False)
+        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+
+    # if using DES
+    elif forecasting_model == "DES":
+        forecaster = ExponentialSmoothing(trend="additive", use_boxcox=False)
+        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+
+    # if using TES
+    elif forecasting_model == "TES":
+        forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=sp, use_boxcox=False)
+        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+
+    # if using VAR
+    elif forecasting_model == "VAR":
+        fcasts = VAR_forecast(ts_data=ts_data,
+                              h=h,
+                              param_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+
+    # if using ARIMA
+    elif forecasting_model == "ARIMA":
+        forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
+        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+
+    elif forecasting_model == "Multivariate_LGBM":
+        lags = options['window_length']
+        fcasts = LGBM_forecast(ts_data=ts_data,
+                               h=h,
+                               lags=lags,
+                               max_samples_per_ts=options['max_samples_per_ts'],
+                               model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+
+    elif forecasting_model == "RNN":
+        fcasts = RNN_forecast(ts_data=ts_data,
+                              h=h,
+                              input_chunk_length=options['input_chunk_length'],
+                              training_length=options['training_length'],
+                              max_samples_per_ts=options['max_samples_per_ts'],
+                              num_ensemble_models=options['num_ensemble_models'],
+                              model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+
+    return fcasts
+
+################################################################################
 
 # function for forecasting with LSTM-RNN
 def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models, model_save_folder=None):
@@ -253,98 +406,6 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
 
     return full_forecasts, full_fitted_values
 
-# general function for training a model and generating forecasts.
-def train_and_forecast(ts_data, h, target_forecast_period, forecasting_model, sp=None, param_grid=None, last_window=None, options=None, metadata=None):
-    """
-    Performs model training and forecasting using the supplied model applied to
-    the supplied time series data. Model-specific arguments have a default of
-    None.
-
-    :param ts_data: pandas dataframe containing EITHER
-        - series in the rows and time periods in the columns - used with
-            traditional forecasting models.
-        - reduced tabular data with target feature in the last column.
-    :param forecasting_model: string name of the model to use to perform forecasts.
-    :param horizon_length: the number of steps ahead you with to forecast
-        relative to the last point in the series.
-    :protection_method: string name of the type of data protection applied.
-    :param last_window: specific to models that predict using reduced data (i.e.,
-        LGBM). last_window contains the final window of available data which is
-        used to generate forecasts.
-    :return fcasts: a pandas dataframe containing forecasts for all series,
-        dimensions are transposed relative to the input data - series are in the
-        columns, each row corresponds to a time period.
-    """
-
-    # define sktime relative forecasting horizon
-    fh = np.arange(1, h+1)
-
-    # lists to store forecasts and fitted values
-    fcasts = []
-    fvals = []
-
-    # if using SES
-    if forecasting_model == "SES":
-        forecaster = ExponentialSmoothing(use_boxcox=False)
-        for x in ts_data:
-            # in sample forecast horizon
-            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
-            forecaster.fit(x)
-            fcasts.append(forecaster.predict(fh))
-            fvals.append(forecaster.predict(in_sample_fh))
-    # if using DES
-    elif forecasting_model == "DES":
-        forecaster = ExponentialSmoothing(trend="additive", use_boxcox=False)
-        for x in ts_data:
-            # in sample forecast horizon
-            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
-            forecaster.fit(x)
-            fcasts.append(forecaster.predict(fh))
-            fvals.append(forecaster.predict(in_sample_fh))
-    # if using TES
-    elif forecasting_model == "TES":
-        forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=sp, use_boxcox=False)
-        for x in ts_data:
-            # in sample forecast horizon
-            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
-            forecaster.fit(x)
-            fcasts.append(forecaster.predict(fh))
-            fvals.append(forecaster.predict(in_sample_fh))
-    # if using VAR
-    elif forecasting_model == "VAR":
-        fcasts, fvals = VAR_forecast(ts_data=ts_data, h=h,
-                                     param_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
-    # if using ARIMA
-    elif forecasting_model == "ARIMA":
-        forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
-        for x in ts_data:
-            # in sample forecast horizon
-            in_sample_fh = ForecastingHorizon(x.index, is_relative=False)
-            forecaster.fit(x)
-            fcasts.append(forecaster.predict(fh))
-            fv = forecaster.predict(in_sample_fh)
-            fv = fv.fillna(0)
-            fvals.append(fv)
-    elif forecasting_model == "Multivariate_LGBM":
-        # num_series = len(last_window)
-        # best_params = multivariate_lgbm_cv(ts_data=ts_data, param_grid=param_grid)
-        # fcasts = multivariate_lgbm_forecast(ts_data=ts_data, h=horizon_length, last_window=last_window, num_series=num_series, best_params=best_params)
-        lags = options['window_length']
-        fcasts, fvals = LGBM_forecast(ts_data=ts_data,
-                                      h=h,
-                                      lags=lags,
-                                      max_samples_per_ts=options['max_samples_per_ts'],
-                                      model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
-    elif forecasting_model == "RNN":
-        fcasts, fvals = RNN_forecast(ts_data=ts_data,
-                                     h=h,
-                                     input_chunk_length=options['input_chunk_length'],
-                                     training_length=options['training_length'],
-                                     max_samples_per_ts=options['max_samples_per_ts'],
-                                     num_ensemble_models=options['num_ensemble_models'],
-                                     model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
-
-    return fcasts, fvals
 
 
 # function to calculate metrics for the original and protected forecasts
@@ -395,102 +456,6 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     mae_up_protected = mean_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
     mae_down_protected = mean_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
 
-    # # median absolute error for original forecasts (without adjustment)
-    # mdae_up = median_absolute_error(collapsed_test[adjusted_up], collapsed_original[adjusted_up])
-    # mdae_down = median_absolute_error(collapsed_test[adjusted_down], collapsed_original[adjusted_down])
-    #
-    # # median absolute error for protected forecasts (with adjustment)
-    # mdae_up_protected = median_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
-    # mdae_down_protected = median_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
-
-    ############################################################################
-
-    # # point level absolute forecast error using original data
-    # absolute_error = np.absolute(test_data - original_forecasts)
-    # absolute_error = pd.concat([row for i, row in absolute_error.iterrows()])
-
-    # # point level absolute forecast error using protected data
-    # protected_absolute_error = np.absolute(test_data - protected_forecasts)
-    # protected_absolute_error = pd.concat([row for i, row in protected_absolute_error.iterrows()])
-
-    # # average absolute error for upward adjusted points prior to adjustment
-    # avg_up_prior = np.mean(absolute_error[adjusted_up])
-    # # average absolute error for downward adjusted points prior to adjustment
-    # avg_down_prior = np.mean(absolute_error[adjusted_down])
-    #
-    # # average absolute error for upward adjusted points after adjustment
-    # avg_up_post = np.mean(protected_absolute_error[adjusted_up])
-    # # average absolute error for downward adjusted points after adjustment
-    # avg_down_post = np.mean(protected_absolute_error[adjusted_down])
-    #
-    # ########## Metric Calculations ##########
-    # # calculate series level forecast accuracies for confidential training data
-    # local_mae = mean_absolute_error(test_data, original_forecasts, multioutput="raw_values")
-    # local_rmse = mean_squared_error(test_data, original_forecasts, multioutput="raw_values", square_root=True)
-    #
-    # # calculate series level forecast accuracies for protected training data
-    # protected_local_mae = mean_absolute_error(test_data, protected_forecasts, multioutput="raw_values")
-    # protected_local_rmse = mean_squared_error(test_data, protected_forecasts, multioutput="raw_values", square_root=True)
-    #
-    # # calculate global forecast accuracies for confidential training data
-    # global_mae = mean_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
-    # global_rmse = mean_squared_error(test_data, original_forecasts, multioutput="uniform_average", square_root=True)
-    #
-    # # calculate global forecast accuracy for protected training data
-    # protected_global_mae = mean_absolute_error(test_data, protected_forecasts, multioutput="uniform_average")
-    # protected_global_rmse = mean_squared_error(test_data, protected_forecasts, multioutput="uniform_average", square_root=True)
-    #
-    # ########## Comparing Accuracies Before and After Protection ##########
-    #
-    # ## calculated tuples correspond to (MAE, RMSE) comparisons ##
-    #
-    # # percentage of series for which forecast accuracy improved under protection
-    # local_percent_improved = (np.mean(local_mae-protected_local_mae > 0.0),
-    #                           np.mean(local_rmse-protected_local_rmse > 0.0))
-    #
-    # # percentage of series for which forecast accuracy worsened under protection
-    # local_percent_reduced = (np.mean(local_mae-protected_local_mae < 0.0),
-    #                           np.mean(local_rmse-protected_local_rmse < 0.0))
-    #
-    # # percentage of series for which forecast accuracy stayed the same under protection
-    # # this is really only applicable to the SES model
-    # local_percent_equal = (np.mean(local_mae-protected_local_mae == 0.0),
-    #                        np.mean(local_rmse-protected_local_rmse == 0.0))
-    #
-    # # percentage change in global accuracy
-    # percent_change_mean_accuracy = ((global_mae-protected_global_mae)/global_mae,
-    #                                 (global_rmse-protected_global_rmse)/global_rmse)
-    #
-    # percent_change_median_accuracy = ((np.median(local_mae)-np.median(protected_local_mae))/np.median(local_mae),
-    #                                   (np.median(local_rmse)-np.median(protected_local_rmse))/np.median(local_rmse))
-    #
-    #
-    # # average absolute error for upward adjusted points prior to adjustment
-    # avg_up_prior = np.mean(absolute_error[adjusted_up])
-    # # average absolute error for downward adjusted points prior to adjustment
-    # avg_down_prior = np.mean(absolute_error[adjusted_down])
-    #
-    # # average absolute error for upward adjusted points after adjustment
-    # avg_up_post = np.mean(protected_absolute_error[adjusted_up])
-    # # average absolute error for downward adjusted points after adjustment
-    # avg_down_post = np.mean(protected_absolute_error[adjusted_down])
-
-    # results_dict = {
-    #     "Mean Accuracies": (global_mae, global_rmse),
-    #     "Protected Mean Accuracies:": (protected_global_mae, protected_global_rmse),
-    #     "% Change Mean accuracy:": percent_change_mean_accuracy,
-    #     "% Change Median accuracy:": percent_change_median_accuracy,
-    #     "% Forecasted Points adjusted downward:": percent_downward,
-    #     "% Forecasted Points adjusted upward:": percent_upward,
-    #     "% Series with improved accuracy:": local_percent_improved,
-    #     "% Series with reduced accuracy:": local_percent_reduced,
-    #     "Original Mean Absolute Error Upward Adjusted:": avg_up_prior,
-    #     "Original Mean Absolute Error Downward Adjusted:": avg_down_prior,
-    #     "Protected Mean Absolute Error Upward Adjusted:": avg_up_post,
-    #     "Protected Mean Absolute Error Downward Adjusted:": avg_down_post
-    #     # "% Series with unchanged accuracy:": local_percent_equal,
-    # }
-
     results_dict = {
         "Original MAE Up": mae_up,
         "Protected MAE Up": mae_up_protected,
@@ -505,63 +470,3 @@ def forecast_results(test_data, original_forecasts, protected_forecasts):
     results_dict = {k: np.round(v, 4) for k, v in results_dict.items()}
 
     return results_dict
-
-def full_forecast_analysis(Y, h, target_forecast_period, forecasting_model, make_stationary=False, seasonality_type=None, sp=None, remove_seasonality=False, mean_normalize=False, detrend=False, log=False, param_grid=None, options=None, metadata=None):
-
-    transform_dict = {}
-
-    # if seasonality is to be removed through pre-processing,
-    if remove_seasonality:
-        transform_dict["deseasonalize"] = {"sp":sp, "seasonality_type":seasonality_type}
-
-    Y_processed, Y_last_window, Y_last_window_trend, pre_detrend = pre_process(ts_data=Y,
-                                                                               h=h,
-                                                                               target_forecast_period=target_forecast_period,
-                                                                               mean_normalize=mean_normalize,
-                                                                               log=log,
-                                                                               detrend=detrend,
-                                                                               make_stationary=make_stationary,
-                                                                               sp=sp,
-                                                                               transform_dict=transform_dict)
-
-    # train forecasting model and generate forecasts
-    forecasts, fvals = train_and_forecast(ts_data=Y_processed,
-                                          h=h,
-                                          target_forecast_period=target_forecast_period,
-                                          forecasting_model=forecasting_model,
-                                          sp=sp,
-                                          last_window=Y_last_window,
-                                          param_grid=param_grid,
-                                          options=options,
-                                          metadata=metadata)
-
-    # post-process the forecasts
-    forecasts = post_process(full_ts_data=Y,
-                             forecasts=forecasts,
-                             h=h,
-                             target_forecast_period=target_forecast_period,
-                             last_window_with_trend=Y_last_window_trend,
-                             pre_detrend=pre_detrend,
-                             mean_normalize=mean_normalize,
-                             detrend=detrend,
-                             log=log,
-                             make_stationary=make_stationary,
-                             sp=sp,
-                             transform_dict=transform_dict)
-
-    # post-process the fitted values
-    fvals = post_process(full_ts_data=Y,
-                         forecasts=fvals,
-                         h=h,
-                         target_forecast_period=target_forecast_period,
-                         last_window_with_trend=Y_last_window_trend,
-                         pre_detrend=pre_detrend,
-                         mean_normalize=mean_normalize,
-                         detrend=detrend,
-                         log=log,
-                         make_stationary=make_stationary,
-                         sp=sp,
-                         is_fitted=True,
-                         transform_dict=transform_dict)
-
-    return forecasts, fvals

@@ -1,6 +1,6 @@
 from bayes_opt import BayesianOptimization
 from torch import nn
-from darts.models.forecasting.lgbm import LightGBMModel
+# from darts.models.forecasting.lgbm import LightGBMModel
 import numpy as np
 import pandas as pd
 import os

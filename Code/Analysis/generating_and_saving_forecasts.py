@@ -9,33 +9,22 @@ from forecasting_functions import *
 import csv
 import os
 
-# whether to forecast using original data
-forecast_for_confidential = False
-
-# forecast horizons - index corresponds to the period we
-# are generating a forecast for
-target_forecast_period = [1]
-
 # dictionary containing string name for each protection method and list of
 # parameters for each method
-protection_methods = {# "Top": [0.10, 0.20, 0.40],
-                      # "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.25, 0.5, 1, 1.5, 2],
+protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
                       "DP": [0.1, 1, 4.6, 10, 20],
                       "k_nts": [3, 5, 7, 10, 15],
                       "k_nts_plus": [3, 5, 7, 10, 15]}
 
-# protection_methods = {}
-
 # dictionary containing string names of forecasting models and sub-dictionaries
 # of model-specific parameters
-forecasting_models = {# "SES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      "DES": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None}}
-                      # "TES": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "ARIMA": {"make_stationary":False, "seasonality_type":None, "sp":12, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid":None, "options":None},
-                      # "VAR": {"make_stationary":True, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":False, "log":True, "detrend":False, "param_grid": None, "options": None},
-                      # "Multivariate_LGBM": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid": None, "options": {'max_samples_per_ts': None, 'window_length': 25}},
-                      # "RNN": {"make_stationary":False, "seasonality_type":None, "sp":None, "remove_seasonality":False, "mean_normalize":True, "log":True, "detrend":False, "param_grid":None, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
+forecasting_models = {"SES": {"make_stationary":False, "sp":None, "mean_normalize":False, "log":True, "options":None},
+                      "DES": {"make_stationary":False, "sp":None, "mean_normalize":False, "log":True, "options":None},
+                      "TES": {"make_stationary":False, "sp":12, "mean_normalize":False, "log":True, "options":None}}
+                      "ARIMA": {"make_stationary":False, "sp":12, "mean_normalize":False, "log":True, "options":None},
+                      "VAR": {"make_stationary":True, "sp":None, "mean_normalize":False, "log":True, "options": None},
+                      "LGBM": {"make_stationary":False, "sp":None, "mean_normalize":True, "log":True, "options": {'max_samples_per_ts': None, 'window_length': 25}},
+                      "RNN": {"make_stationary":False, "sp":None, "mean_normalize":True, "log":True, "options": {'input_chunk_length': 25, 'training_length': 30, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
 
 forecasts_path = "../../Outputs/Forecasts/"
 results_path = "../../Outputs/Results/"

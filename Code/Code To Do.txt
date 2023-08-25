@@ -1,0 +1,16 @@
+TO DO FOR CODE
+
+- put the stationary making code in the VAR forecast function automatically
+
+- need to write a script that does the forecasting process for a given file in the 'Cleaned' folder.
+
+- run for all M3 data
+- create scripts that are completely contained, and then
+you run the forecasting analysis from the command line by specifying
+the desired parameters.
+- clean up library imports
+- set a random seed wherever appropriate
+- implement an option to use random or correlation weighted sampling
+- reduce the amount of things that are saved to just the essentials for the paper
+
+- go through code and make sure everything is well commented

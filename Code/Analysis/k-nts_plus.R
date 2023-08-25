@@ -9,7 +9,8 @@ library(tidyverse)
 library(tsfeatures)
 library(e1071)
 library(ggplot2)
-library(randomForest)
+library(ranger)
+library(tidytext)
 
 ## NEED TO RE-Read in X with h1 when doing protection
 
@@ -294,8 +295,6 @@ avg_evals %>%
 
 relief_selection <- lapply(evals, function(x) names(x[x > 0]))
 
-library(ranger)
-
 # number of RFE iterations
 num_iter <- 50
 
@@ -361,12 +360,32 @@ avg_oob <- lapply(lapply(oob_list, function(x) do.call(cbind, x)), function(y) r
 
 combined_oob <- do.call(rbind, lapply(1:length(avg_oob), function(x) tibble("num_features"=length(avg_oob[[x]]):1, "value"=avg_oob[[x]], "model"=models[x])))
 
+# new plot for revision
+
 combined_oob %>%
-  ggplot(aes(x=num_features, y=value)) +
-  geom_line(size=0.6) +
-  facet_wrap(~model) +
+  ggplot(aes(x=num_features, y=value, color=model)) +
+  geom_line(size=0.8) +
+  geom_point(aes(shape=model)) +
   labs(x="Number of Features (Subset Size)",
-       y="OOB MSE")
+       y="Out-of-Bag MSE",
+       shape="Model")
+
+combined_oob %>%
+  ggplot(aes(x=num_features, y=value, color=model, shape=model)) +
+  geom_line(size=0.75) +
+  geom_point(size=3) +
+  labs(x="Number of Features (Subset Size)",
+       y="Out-of-Bag MSE",
+       color="Model",
+       shape="Model") +
+  theme(text = element_text(size = 15))
+
+# combined_oob %>%
+#   ggplot(aes(x=num_features, y=value)) +
+#   geom_line(size=0.6) +
+#   facet_wrap(~model) +
+#   labs(x="Number of Features (Subset Size)",
+#        y="OOB MSE")
 
 ## --------------------------------------------------------- ##
 
@@ -412,8 +431,6 @@ for (i in seq_along(full_data_scaled)){
 }
 
 final_importances <- do.call(rbind, lapply(1:length(final_importances), function(x) tibble("var"=names(final_importances[[x]]), "imp"=final_importances[[x]], "model"=models[x])))
-
-library(tidytext)
 
 #####################################################
 
@@ -561,7 +578,7 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
     sorted <- sort(d, index.return=TRUE)
     
     # select from index 2 to k+1 since first index corresponds to the series itself
-    K <- sorted$ix[2:k+1]
+    K <- sorted$ix[2:(k+1)]
     
     # for each series
     for (t in 1:window_length){
@@ -606,7 +623,7 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
       sorted <- sort(d, index.return=TRUE)
       
       # select from index 2 to k+1 since first index corresponds to the series itself
-      K <- sorted$ix[2:k+1]
+      K <- sorted$ix[2:(k+1)]
       
       # sample an index
       # later can implement sampling based on distance based probabilities
