@@ -15,8 +15,6 @@ from sktime.forecasting.exp_smoothing import ExponentialSmoothing
 from sktime.forecasting.base import ForecastingHorizon
 from statsmodels.tsa.vector_ar.var_model import VAR
 from sktime.forecasting.arima import AutoARIMA
-from sktime.forecasting.model_selection import ForecastingGridSearchCV, ExpandingWindowSplitter
-from sktime.forecasting.compose import make_reduction
 import lightgbm as lgb
 from sktime.performance_metrics.forecasting import mean_absolute_error, median_absolute_error, mean_absolute_percentage_error, MeanAbsoluteError
 from data_protection_functions import *
@@ -27,7 +25,7 @@ from darts import TimeSeries
 
 ################################################################################
 
-def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_path, model, model_args, h=1, metadata=None):
+def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_path, model, model_args, h, file_suffix):
 
     """
 
@@ -54,22 +52,21 @@ def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_p
                                     forecasting_model=model,
                                     sp=model_args["sp"],
                                     mean_normalize=model_args["mean_normalize"],
-                                    log=model_args["log"],
                                     options=model_args["options"],
-                                    metadata=metadata)
+                                    file_suffix=file_suffix)
 
     # save the forecasts and fitted values based on confidential data to .csv file
     horizon = train_file.split("_")[-2]
     finfo = train_file[:-9]
 
     # save the forecasts
-    fcasts.to_csv(forecasts_path + model + horizon + finfo + ".csv", index=False)
+    fcasts.to_csv(forecasts_path + model + "_" + horizon + "_" + finfo + ".csv", index=False)
 
     # calculate the average mean absolute error
     mae_global = pd.Series(mean_absolute_error(test, fcasts, multioutput="uniform_average"))
 
     # save the average mean absolute error
-    mae_global.to_csv(results_path + model + horizon + finfo + ".csv", index=False)
+    mae_global.to_csv(results_path + model + "_" + horizon + "_" + finfo + ".csv", index=False)
 
     # print the average mean absolute error
     print("MAE for " + model + " on " + finfo + ": " + str(mae_global[0]))
@@ -78,12 +75,11 @@ def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_p
 
 ################################################################################
 
-def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=False, log=False, options=None, metadata=None):
+def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=False, options=None, file_suffix=None):
 
     Y_processed = pre_process(ts_data=Y,
                               h=h,
                               mean_normalize=mean_normalize,
-                              log=log,
                               sp=sp)
 
     # train forecasting model and generate forecasts
@@ -92,14 +88,13 @@ def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=Fals
                                    forecasting_model=forecasting_model,
                                    sp=sp,
                                    options=options,
-                                   metadata=metadata)
+                                   file_suffix=file_suffix)
 
     # post-process the forecasts
     forecasts = post_process(full_ts_data=Y,
                              forecasts=forecasts,
                              h=h,
                              mean_normalize=mean_normalize,
-                             log=log,
                              sp=sp)
 
     return forecasts
@@ -107,7 +102,7 @@ def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=Fals
 ################################################################################
 
 # general function for training a model and generating forecasts.
-def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, metadata=None):
+def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, file_suffix=None):
     """
     Performs model training and forecasting using the supplied model applied to
     the supplied time series data. Model-specific arguments have a default of
@@ -147,24 +142,29 @@ def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, met
         forecaster = ExponentialSmoothing(trend="additive", seasonal="additive", sp=sp, use_boxcox=False)
         fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
 
-    # if using VAR
+    # if using ARIMA
+    elif forecasting_model == "ARIMA":
+        if sp > 1:
+            forecaster = AutoARIMA(seasonal=True, maxiter=15, sp=sp, suppress_warnings=True)
+            fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+        else:
+            forecaster = AutoARIMA(seasonal=False, maxiter=15, suppress_warnings=True)
+            fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+
+        # if using VAR
     elif forecasting_model == "VAR":
         fcasts = VAR_forecast(ts_data=ts_data,
                               h=h,
-                              param_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                              save_params=options["save_params"],
+                              simulate_series=options["simulate_series"],
+                              param_save_file=file_suffix)
 
-    # if using ARIMA
-    elif forecasting_model == "ARIMA":
-        forecaster = AutoARIMA(seasonal=True, maxiter=25, sp=sp, suppress_warnings=True)
-        fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
-
-    elif forecasting_model == "Multivariate_LGBM":
+    elif forecasting_model == "LGBM":
         lags = options['window_length']
         fcasts = LGBM_forecast(ts_data=ts_data,
                                h=h,
                                lags=lags,
-                               max_samples_per_ts=options['max_samples_per_ts'],
-                               model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                               max_samples_per_ts=options['max_samples_per_ts'])
 
     elif forecasting_model == "RNN":
         fcasts = RNN_forecast(ts_data=ts_data,
@@ -172,8 +172,7 @@ def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, met
                               input_chunk_length=options['input_chunk_length'],
                               training_length=options['training_length'],
                               max_samples_per_ts=options['max_samples_per_ts'],
-                              num_ensemble_models=options['num_ensemble_models'],
-                              model_save_folder="h" + str(h) + "_target_period" + str(target_forecast_period) + "_" + metadata['protection_method'] + "_" + str(metadata['protection_parameter']))
+                              num_ensemble_models=options['num_ensemble_models'])
 
     return fcasts
 
@@ -220,25 +219,21 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
                                    training_length=training_length,
                                    max_samples_per_ts=max_samples_per_ts)
 
-        fcasts, fvals = train_RNN(train_data=processed,
-                                  h=h,
-                                  return_fitted=True,
-                                  num_ensemble_models=num_ensemble_models,
-                                  input_chunk_length=input_chunk_length,
-                                  training_length=training_length,
-                                  max_samples_per_ts=max_samples_per_ts,
-                                  learning_rate_=best_params['params']['learning_rate_'],
-                                  n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
-                                  hidden_dim_=int(best_params['params']['hidden_dim_']),
-                                  batch_size_=int(best_params['params']['batch_size_']),
-                                  n_epochs_=int(best_params['params']['n_epochs_']),
-                                  dropout_=best_params['params']['dropout_'],
-                                  L2_penalty_=best_params['params']['L2_penalty_'],
-                                  save_models=True,
-                                  model_save_folder=model_save_folder+"_"+str(length))
+        fcasts = train_RNN(train_data=processed,
+                           h=h,
+                           num_ensemble_models=num_ensemble_models,
+                           input_chunk_length=input_chunk_length,
+                           training_length=training_length,
+                           max_samples_per_ts=max_samples_per_ts,
+                           learning_rate_=best_params['params']['learning_rate_'],
+                           n_rnn_layers_=int(best_params['params']['n_rnn_layers_']),
+                           hidden_dim_=int(best_params['params']['hidden_dim_']),
+                           batch_size_=int(best_params['params']['batch_size_']),
+                           n_epochs_=int(best_params['params']['n_epochs_']),
+                           dropout_=best_params['params']['dropout_'],
+                           L2_penalty_=best_params['params']['L2_penalty_'])
 
         fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
-        fvals = [pd.Series(fvals.iloc[:,i]) for i in range(fvals.shape[1])]
 
         fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
 
@@ -249,21 +244,17 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
         # store sub-group forecasts and fitted values
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
-            full_fitted_values[j] = fvals[i]
 
-    # fcasts = [full_fcasts[i] for i in range(len(ts_data))]
-
-    return full_fcasts, full_fitted_values
+    return full_fcasts
 
 # function for forecasting with LGBM
-def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
+def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
 
     series_lengths = [len(x) for x in ts_data]
 
     unique_lengths = np.unique(series_lengths)
 
     full_fcasts = {}
-    full_fitted_values = {}
 
     for length in unique_lengths:
 
@@ -295,9 +286,8 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
                                     lags=lags,
                                     max_samples_per_ts=max_samples_per_ts)
 
-        fcasts, fvals = train_LGBM(train_data=processed,
+        fcasts = train_LGBM(train_data=processed,
                                    h=h,
-                                   return_fitted=True,
                                    lags=lags,
                                    max_samples_per_ts=max_samples_per_ts,
                                    learning_rate_=best_params['params']['learning_rate_'],
@@ -306,12 +296,9 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
                                    bagging_freq_=best_params['params']['bagging_freq_'],
                                    bagging_frac_=best_params['params']['bagging_frac_'],
                                    lambda_l2_=best_params['params']['lambda_l2_'],
-                                   min_data_in_leaf_=int(best_params['params']['min_data_in_leaf_']),
-                                   save_models=True,
-                                   model_save_folder=model_save_folder+"_"+str(length))
+                                   min_data_in_leaf_=int(best_params['params']['min_data_in_leaf_']))
 
         fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
-        fvals = [pd.Series(fvals.iloc[:,i]) for i in range(fvals.shape[1])]
 
         fcast_indexes = [np.arange(tsd[i].index[-1]+1, tsd[i].index[-1]+h+1) for i in range(num_series)]
 
@@ -322,30 +309,23 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts, model_save_folder=None):
         # store sub-group forecasts in matrix of all forecasts
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
-            full_fitted_values[j] = fvals[i]
 
-    # fcasts = [full_fcasts[i] for i in range(len(ts_data))]
+    return full_fcasts
 
-    return full_fcasts, full_fitted_values
+def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None):
 
-# splitting function used in VAR forecast
-def split(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+    ts = difference_to_stationarity(ts_data)
 
-def VAR_forecast(ts_data, h, param_save_folder=None):
-
-    num_series = len(ts_data)
+    num_series = len(ts)
 
     # get the length of each series
-    lengths = [len(y) for y in ts_data]
+    lengths = [len(y) for y in ts]
 
     # store the unique length values
     unique_lengths = np.unique(lengths)
 
     # store the forecasts in an array of all forecasts using the stored series indices
     full_forecasts = np.zeros([num_series, h])
-    full_fitted_values = []
 
     for k, l in enumerate(unique_lengths):
 
@@ -357,12 +337,10 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
         for i, j in enumerate(split_ids):
 
             # store series in a list
-            group = [ts_data[m].reset_index(drop=True) for m in j]
+            group = [ts[m].reset_index(drop=True) for m in j]
 
             # convert list to TxK dataframe
             group = pd.concat(group, axis=1, ignore_index=True)
-
-            ####################################################
 
             forecaster = VAR(endog=group)
             results = forecaster.fit()
@@ -370,24 +348,21 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
             # number of lags in VAR model
             lag_order = results.k_ar
 
-            fv = results.fittedvalues.T
-
-            fv = pd.concat([group.iloc[0:lag_order,:].T, fv], axis=1, ignore_index=True)
-
-            for i in range(fv.shape[0]):
-                full_fitted_values.append(fv.iloc[i,:])
-
             # extract intercept coefficients
-            intercepts = results.coefs_exog
-            pd_intercepts = pd.DataFrame(intercepts)
-            newpath = "../../Outputs/VAR Params/" + param_save_folder + "/"
-            if not os.path.exists(newpath):
-                os.makedirs(newpath)
-            pd_intercepts.to_csv(newpath + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
+            if save_params:
+                intercepts = results.coefs_exog
+                pd_intercepts = pd.DataFrame(intercepts)
+                newpath = "../../Outputs/VAR Weights/" + param_save_file
+                if not os.path.exists(newpath):
+                    os.makedirs(newpath)
+                pd_intercepts.to_csv(newpath + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
 
-            # extract lag coefficients
-            lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
-            lag_coefs.to_csv(newpath + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
+                # extract lag coefficients
+                lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
+                lag_coefs.to_csv(newpath + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
+            
+            if simulate_series:
+                print('none')
 
             # generate forecasts
             if lag_order == 0:
@@ -401,10 +376,12 @@ def VAR_forecast(ts_data, h, param_save_folder=None):
     full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(num_series)]
 
     for i in range(num_series):
-        last_time = ts_data[i].index[-1]
+        last_time = ts[i].index[-1]
         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
 
-    return full_forecasts, full_fitted_values
+    processed = reverse_difference_to_stationarity(h, full_forecasts, ts_data)
+
+    return processed
 
 
 

@@ -8,7 +8,7 @@ Next two steps can run at the same time.
 - Run generating_and_saving_forecasts.py for period t-2
 	- For additive noise and differential privacy only
 
-- Run k-nts.R to protect data up through period t-1
+- Run feature extraction and k-nts.R to protect data up through period t-1
 
 - Run error_distribution_generator.py for period t-2
 	- get error distributions for models forecasting additive noise and differential privacy data sets

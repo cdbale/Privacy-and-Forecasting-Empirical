@@ -1,8 +1,12 @@
+# computation time feature extraction
+
+# computation time knts and knts+
+
+# need computation time code for all models
+
+# FOR H1: need to save VAR weights and simulate series
+
 TO DO FOR CODE
-
-- put the stationary making code in the VAR forecast function automatically
-
-- need to write a script that does the forecasting process for a given file in the 'Cleaned' folder.
 
 - run for all M3 data
 - create scripts that are completely contained, and then

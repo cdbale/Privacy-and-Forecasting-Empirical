@@ -1,12 +1,81 @@
-### Perform k-NTS Data Protection
+### Perform k-NTS Data Protection (without the machine learning feature selection)
+# i.e., using manually selected features
 
 # Author: Cameron Bale
 
 # ------------------------------------------------------------------------- #
 
-library(tsfeatures)
-library(e1071)
 library(plyr)
+
+# paths to the data files and feature files
+file_path <- "../../Data/Cleaned/"
+features_path <- "../../Data/Features/"
+
+# function to import and process series
+import_data <- function(file_name, sp){
+  
+  ###
+  # Takes the name file_name of a time series data set and the seasonal period
+  # of that time series data. Imports the data, pre-processes and converts 
+  # to a timeseries object, and returns the data.
+  ###
+  
+  # import data and convert to a list of series
+  ts_data <- as.list(as.data.frame(t(read.csv(file_name))))
+  
+  # remove NA values from the end of each series
+  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+  
+  # convert each series to a TS object with appropriate seasonal frequency
+  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
+  
+  # truncate data to strictly positive
+  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
+  
+  # take the log of the data
+  ts_data <- lapply(ts_data, log)
+  
+  return(ts_data)
+}
+
+# import names of original data files - this may include protected versions
+# so we have to remove those
+file_names <- grep("_h1_train", list.files(file_path), value=TRUE)
+# make sure protected versions are excluded
+file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
+
+# function to import corresponding features
+import_features <- function(ts_file_name, feature_file_directory){
+  
+  ###
+  # Takes the name ts_file_name which is the name of a time series data set
+  # and imports and returns the corresponding file containing the features of those
+  # time series from the directory feature_file_directory
+  ###
+  
+  feature_file_name <- grep(ts_file_name, list.files(feature_file_directory), value=TRUE)
+  
+  return(read.csv(paste0(feature_file_directory, feature_file_name)))
+}
+
+import_features(file_names[1], features_path)
+
+feature_file_name <- grep(file_names[1], list.files(features_path), value=TRUE)
+
+
+
+### features still need to be extracted on a rolling basis
+
+
+
+
+
+
+
+
+
+
 
 # read in original time series
 X <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
@@ -23,17 +92,11 @@ X <- lapply(X, function(x) ts(x, frequency=12))
 # take the log of the data
 X <- lapply(X, log)
 
-series_mean <- function(x){
-  return(mean(x))
-}
 
-series_variance <- function(x){
-  return(var(x))
-}
 
-# vector of features to calculate
-fv <- c("entropy", "stl_features", "skewness",
-        "kurtosis", "hurst", "series_mean", "series_variance")
+
+
+
 
 # vector of features to select
 sf <- c("entropy", "e_acf1", "trend", "seasonal_strength",

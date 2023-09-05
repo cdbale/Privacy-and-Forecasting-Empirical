@@ -9,6 +9,11 @@ import numpy as np
 import pmdarima as pm
 from scipy import stats
 
+# splitting function used in VAR forecast
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+
 # function to conduct first differencing on time series
 def difference_to_stationarity(ts_data):
 
@@ -18,30 +23,22 @@ def difference_to_stationarity(ts_data):
     return differenced_series
 
 # function to reverse first differencing
-def reverse_difference_to_stationarity(h, forecasts, ts_data, is_fitted):
+def reverse_difference_to_stationarity(h, forecasts, ts_data):
 
     # list to store reversed forecasts
     reversed_forecasts = []
 
-    if is_fitted:
-        for i, f in enumerate(forecasts):
-            start_value = ts_data[i].iloc[0]
-            reverse_diffed = pd.Series(np.r_[start_value, f].cumsum())
-            reverse_diffed.index = np.arange(0, ts_data[i].index[-1]+1)
-            reversed_forecasts.append(reverse_diffed)
-
-    elif not is_fitted:
-        for i, f in enumerate(forecasts):
-            start_value = ts_data[i].iloc[-1]
-            reverse_diffed = np.r_[start_value, f].cumsum()
-            reverse_diffed = pd.Series(reverse_diffed[-h:])
-            reverse_diffed.index = f.index
-            reversed_forecasts.append(reverse_diffed)
+    for i, f in enumerate(forecasts):
+        start_value = ts_data[i].iloc[-1]
+        reverse_diffed = np.r_[start_value, f].cumsum()
+        reverse_diffed = pd.Series(reverse_diffed[-h:])
+        reverse_diffed.index = f.index
+        reversed_forecasts.append(reverse_diffed)
 
     return reversed_forecasts
 
 # pre-process the data using various pre-processing steps
-def pre_process(ts_data, h, mean_normalize=False, log=False, sp=None, transform_dict={}):
+def pre_process(ts_data, h, mean_normalize=False, sp=None, transform_dict={}):
     """
     Performs various pre-processing steps. Data independent steps are implemented
     using boolean values. Data-dependent steps are implemented using a transform_dict
@@ -79,8 +76,7 @@ def pre_process(ts_data, h, mean_normalize=False, log=False, sp=None, transform_
         processed = [x.divide(np.mean(x)) for x in processed]
 
     # Step 3: log transform each series
-    if log:
-        processed = [np.log(x) for x in processed]
+    processed = [np.log(x) for x in processed]
 
     # Step 4: make stationary series using differencing
     # if make_stationary:
@@ -89,10 +85,7 @@ def pre_process(ts_data, h, mean_normalize=False, log=False, sp=None, transform_
     return processed
 
 # post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, h, mean_normalize=False, log=False, sp=None, transform_dict={}):
-
-    if forecasts is None:
-        return None
+def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None):
 
     # create processed copy of forecasts, store the number of series
     processed = forecasts
@@ -100,24 +93,24 @@ def post_process(full_ts_data, forecasts, h, mean_normalize=False, log=False, sp
 
     # reverse seasonal and first differencing
     # if make_stationary:
-    #     temp_ts_data, _, _, _ = pre_process(full_ts_data, h, log=True)
-    #     processed = reverse_difference_to_stationarity(h, processed, temp_ts_data, is_fitted)
+    #     temp_ts_data = pre_process(full_ts_data, h)
+    #     processed = reverse_difference_to_stationarity(h, processed, temp_ts_data)
 
     # reverse the log
-    if log:
-        ## Forecasting: Principles and Practice
-        # bias adjusted forecasts are y = exp(w)[1 + sigma^2_h/2]
-        # where sigma^2_h/2 is the h-step forecast variance
-        # bias adjusted forecasts
 
-        # This bias-corrected back-adjustment is inappropriate for MAE - the
-        # median minimizes the expected MAE, so we use the median forecast
-        # sigma2 = [np.var(x) for x in processed]
-        # processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
+    ## Forecasting: Principles and Practice
+    # bias adjusted forecasts are y = exp(w)[1 + sigma^2_h/2]
+    # where sigma^2_h/2 is the h-step forecast variance
+    # bias adjusted forecasts
 
-        # use the below version if debugging - it allows you to return the original
-        # data values when testing the pre-process function
-        processed = [np.exp(processed[i]) for i in range(num_series)]
+    # This bias-corrected back-adjustment is inappropriate for MAE - the
+    # median minimizes the expected MAE, so we use the median forecast
+    # sigma2 = [np.var(x) for x in processed]
+    # processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
+
+    # use the below version if debugging - it allows you to return the original
+    # data values when testing the pre-process function
+    processed = [np.exp(processed[i]) for i in range(num_series)]
 
     if mean_normalize:
         processed = [x * np.mean(full_ts_data[i]) for i, x in enumerate(processed)]
