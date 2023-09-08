@@ -74,6 +74,12 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
   
+  ##################################
+  
+  X_cor <- cor(do.call(cbind, X_window))
+  
+  ##################################
+  
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   
@@ -99,11 +105,20 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     # select from index 2 to k+1 since first index corresponds to the series itself
     K <- sorted$ix[2:(k+1)]
     
+    #############################
+    
+    # obtain the correlations corresponding to the K indexes
+    cors <- X_cor[,j][K]
+    
+    swap_weights <- exp(cors)/sum(exp(cors))
+    
+    #############################
+    
     # for each series
     for (t in 1:window_length){
       
       # sample an index
-      i <- sample(K, size=1)
+      i <- sample(K, size=1, prob=swap_weights)
       
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
@@ -119,6 +134,12 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     
     # restrict the data to the current window
     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
+    
+    ##################################
+    
+    X_cor <- cor(do.call(cbind, X_window))
+    
+    ##################################
     
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
@@ -141,8 +162,17 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
       # select from index 2 to k+1 since first index corresponds to the series itself
       K <- sorted$ix[2:(k+1)]
       
+      #############################
+      
+      # obtain the correlations corresponding to the K indexes
+      cors <- X_cor[,j][K]
+      
+      swap_weights <- exp(cors)/sum(exp(cors))
+      
+      #############################
+      
       # sample an index
-      i <- sample(K, size=1)
+      i <- sample(K, size=1, prob=swap_weights)
       
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
@@ -154,7 +184,7 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   
 }
 
-
+# perform data protection for three values of k = {5, 10, 15}
 
 perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features){
   
@@ -214,7 +244,7 @@ for (f in file_names){
                            features_to_calculate=fv,
                            selected_features=sft)
     
-    write.csv(X_knts, file=paste0(fp, "k-nts_", j, "_", f))
+    write.csv(X_knts, file=paste0(fp, "k-nts-corr_", j, "_", f))
     
   }
 }

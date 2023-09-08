@@ -54,6 +54,14 @@ extract_features <- function(time_series, sp, feature_vector){
   return(features)
 }
 
+#### compengine includes features in:
+# autocorr_features
+# pred_features
+# station_features
+# dist_features
+# scal_features --> can't use this, some time series are too short
+# also exclude arch.lm and arch_r2, they often return NA values
+
 # vector of feature names to calculate
 fv <- c("entropy", "lumpiness", "stability",
         "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
@@ -70,8 +78,8 @@ fv <- c("entropy", "lumpiness", "stability",
 # temp_data1 <- read.csv(paste0(file_path, file_names[1]))
 # temp_data30 <- read.csv(paste0(file_path, file_names[30]))
 # 
-# temp_features1 <- extract_features(temp_data, sp=12, feature_vector=fv)
-# temp_features30 <- extract_features(temp_data, sp=1, feature_vector=fv)
+# temp_features1 <- extract_features(temp_data1, sp=12, feature_vector=fv)
+# temp_features30 <- extract_features(temp_data30, sp=1, feature_vector=fv)
 # 
 # columns1 <- colnames(temp_features1)
 # columns30 <- colnames(temp_features30)
@@ -99,6 +107,7 @@ for (f in file_names){
     start <- Sys.time()
     features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
     stop <- Sys.time()
+    features <- features %>% select(-nperiods, -seasonal_period)
     computation_time[computation_time$File==f, "feature_extraction"] <- stop-start
     write.csv(computation_time, file="../../Data/Computation Results/computation_time.csv", row.names=FALSE)
   }
