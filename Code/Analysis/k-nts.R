@@ -60,7 +60,7 @@ sf <- c("entropy", "e_acf1", "trend", "seasonal_strength",
         "skewness", "kurtosis", "hurst",
         "series_mean", "series_variance")
 
-knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features){
+knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
   
   # number of time series
   num_series <- length(time_series)
@@ -73,6 +73,14 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
+  
+  ##################################
+  
+  if (corr_based){
+    X_cor <- cor(do.call(cbind, X_window))
+  }
+  
+  ##################################
   
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
@@ -99,11 +107,28 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     # select from index 2 to k+1 since first index corresponds to the series itself
     K <- sorted$ix[2:(k+1)]
     
+    if (corr_based){
+      #############################
+      
+      # obtain the correlations corresponding to the K indexes
+      cors <- X_cor[,j][K]
+      
+      swap_weights <- exp(cors)/sum(exp(cors))
+      
+      #############################
+      
+    }
+    
     # for each series
     for (t in 1:window_length){
       
-      # sample an index
-      i <- sample(K, size=1)
+      if (corr_based){
+        # sample an index
+        i <- sample(K, size=1, prob=swap_weights)
+      } else {
+        # sample an index
+        i <- sample(K, size=1)
+      }
       
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
@@ -119,6 +144,14 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     
     # restrict the data to the current window
     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
+    
+    ##################################
+    
+    if (corr_based){
+      X_cor <- cor(do.call(cbind, X_window))
+    }
+    
+    ##################################
     
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
@@ -141,8 +174,23 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
       # select from index 2 to k+1 since first index corresponds to the series itself
       K <- sorted$ix[2:(k+1)]
       
-      # sample an index
-      i <- sample(K, size=1)
+      if (corr_based){
+        #############################
+        
+        # obtain the correlations corresponding to the K indexes
+        cors <- X_cor[,j][K]
+        
+        swap_weights <- exp(cors)/sum(exp(cors))
+        
+        #############################
+        
+        # sample an index
+        i <- sample(K, size=1, prob=swap_weights)
+        
+      } else {
+        # sample an index
+        i <- sample(K, size=1)
+      }
       
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
@@ -156,7 +204,7 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
 
 
 
-perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features){
+perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
   
   # read in time series
   X <- import_data(file_name=ts_file, file_path=ts_file_path, sp=seasonal_period)
@@ -196,12 +244,11 @@ for (f in file_names){
   # determine sp
   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
   
-  if (sp > 1){
-    window_length <- 2*sp + 1
-  } else if (sp == 1) {
-    window_length <- 9
-    # remove seasonal_strength from selected features when sp=1
-    sft <- sf[!sf %in% c("seasonal_strength")]
+  # minimum window length of 11 so that x_acf10 can be calculated
+  window_length <- max(c(2*sp + 1, 11))
+  
+  if (sp == 1) {
+    sft <- sf[!sf %in% c("seasonal_strength", "peak", "trough", "seas_acf1", "seas_pacf")]
   }
   
   for (j in c(3, 5, 7, 10, 15)){
@@ -214,7 +261,18 @@ for (f in file_names){
                            features_to_calculate=fv,
                            selected_features=sft)
     
-    write.csv(X_knts, file=paste0(fp, "k-nts_", j, "_", f))
+    write.csv(X_knts, file=paste0(fp, "k-nts_", j, "_", f), row.names=FALSE)
+    
+    X_knts_corr <- perform_knts(ts_file=f,
+                                ts_file_path=fp,
+                                seasonal_period=sp,
+                                window_length=window_length,
+                                k=j,
+                                features_to_calculate=fv,
+                                selected_features=sft,
+                                corr_based=TRUE)
+    
+    write.csv(X_knts_corr, file=paste0(fp, "k-nts-corr_", j, "_", f), row.names=FALSE)
     
   }
 }

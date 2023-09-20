@@ -117,7 +117,7 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
         # train random forest with current feature set
         rf_res <- ranger(values ~ ., data=train, importance="permutation", num.trees=500)
         
-        oob_errors <- c(oob_errors, rf_res$prediction.error)
+        oob_errors <- c(oob_errors, mean(abs(rf_res$predictions-train$values)))
         
         least_imp <- names(sort(importance(rf_res))[1])
         
@@ -169,7 +169,8 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
               "evals_combined" = evals_combined,
               "selected_features" = sf,
               "relief_time" = difftime(relief_stop, relief_start, units="mins"),
-              "rfe_time" = difftime(rfe_stop, rfe_start, units="mins")))
+              "rfe_time" = difftime(rfe_stop, rfe_start, units="mins"),
+              "rf" = rf_res))
   
 }
 
@@ -185,8 +186,13 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # matrix to hold new series
   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
   
+  X_means <<- unname(sapply(time_series, mean))
+  X_sds <<- unname(sapply(time_series, sd))
+  
+  X_scaled <- lapply(time_series, function(x) (x-mean(x))/sd(x))
+  
   # restrict the data to the beginning window
-  X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
+  X_window <- lapply(X_scaled, function(x) ts(x[1:window_length], frequency=sp))
   
   if (corr_based){
     X_cor <- cor(do.call(cbind, X_window))
@@ -240,7 +246,7 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
       }
       
       # replace the value
-      X_new[t,j] <- time_series[[i]][t]
+      X_new[t,j] <- X_scaled[[i]][t]
       
     }
   }
@@ -252,7 +258,7 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   for (t in (window_length+1):num_periods){
     
     # restrict the data to the current window
-    X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
+    X_window <- lapply(X_scaled, function(x) ts(x[(t-window_length+1):t], frequency=sp))
     
     if (corr_based){
       ##################################
@@ -303,15 +309,18 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
       }
       
       # replace the value
-      X_new[t,j] <- time_series[[i]][t]
+      X_new[t,j] <- X_scaled[[i]][t]
       
     }
   }
   
+  temp <<- X_new
+  
+  X_new <- apply(temp, 1, function(x) x*X_sds + X_means)
+  
   return(X_new)
   
 }
-
 
 perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
   
@@ -329,7 +338,7 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
   
   X_k <- lapply(Xs, function(x) knts_alg(x, sp=seasonal_period, window_length=window_length, k=k, features_to_calculate=features_to_calculate, selected_features=selected_features, corr_based=corr_based))
   
-  X_k <- lapply(X_k, function(x) as.data.frame(t(x)))
+  X_k <- lapply(X_k, function(x) as.data.frame(x))
   
   X_k <- lapply(X_k, exp)
   
@@ -512,18 +521,18 @@ for (f in file_names){
   ## save RFE oob results
   
   # check if sub directory exists 
-  if (file.exists("../../Outputs/RFE Rankings/")){
+  if (file.exists("../../Outputs/RFE OOB/")){
     
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   } else {
     
     # create a new sub directory inside
     # the main path
-    dir.create(file.path("../../Outputs/RFE Rankings/"))
+    dir.create(file.path("../../Outputs/RFE OOB/"))
     
     # specifying the working directory
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   }
   
@@ -541,18 +550,17 @@ for (f in file_names){
   # determine sp
   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
   
-  if (sp > 1){
-    window_length <- 2*sp + 1
-  } else if (sp == 1) {
-    window_length <- 9
-    # remove seasonal_strength from selected features when sp=1
+  # minimum window length of 11 so that x_acf10 can be calculated
+  window_length <- max(c(2*sp + 1, 11))
+
+  if (sp == 1) {
     sft <- sf[!sf %in% c("seasonal_strength", "peak", "trough", "seas_acf1", "seas_pacf")]
   }
   
   swap_times <- c()
   corr_swap_times <- c()
   
-  for (j in c(3, 5, 7, 10, 15)){
+  for (j in c(3)){
     
     print("Starting swapping.")
     
@@ -570,7 +578,7 @@ for (f in file_names){
     
     swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="mins"))
     
-    write.csv(X_knts, file=paste0(fp, "k-nts-plus_", j, "_", f), row.names=FALSE)
+    write.csv(X_knts, file=paste0(fp, "k-nts-plus-scaled_", j, "_", f), row.names=FALSE)
     
     ############################################################################
     
@@ -591,7 +599,7 @@ for (f in file_names){
     
     corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
     
-    write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
+    write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr-scaled_", j, "_", f), row.names=FALSE)
     
   }
   
@@ -615,3 +623,11 @@ for (f in file_names){
 }
 
 write.csv(computation_time, file="../../Data/Computation Results/k-nts-plus.csv", row.names=FALSE)
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################

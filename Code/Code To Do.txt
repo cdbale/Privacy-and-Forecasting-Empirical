@@ -1,3 +1,36 @@
+in privacy analysis - be sure to undo code where the first column of k-nts protected data is removed
+
+re-run k-nTS because row indices got left in there.
+
+re-run all forecasting code.
+
+check code for any errors - make sure the test files are correct?
+
+check the features that were selected for each model - if they were very different, this could produce sub-optimal results if we averaged
+across models.
+
+Condition all utility and feature measurements on the privacy levels. Compare methods with similar privacy levels!
+
+
+
+
+RESULTS:
+
+file with average results for each privacy method across all time series/models
+
+file(s) with average results across all models for each data set
+
+file(s) with average results across all data sets for each model
+
+file(s) with average results for each model on each data set
+
+Do everything in percentage increases???
+
+
+
+
+
+
 # computation time feature extraction
 
 # computation time knts and knts+

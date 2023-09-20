@@ -15,7 +15,7 @@ from sktime.performance_metrics.forecasting import mean_absolute_error
 
 ### need the file string to just be the beginning e.g., "monthly-demographic"
 
-def error_distribution_generator(file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon):
+def error_distribution_generator(file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, track_comp_time=False):
     
     test_files = os.listdir("../../Data/Cleaned/")
     
@@ -33,49 +33,37 @@ def error_distribution_generator(file_string, forecasts_path, results_path, mode
     
     # track computation time
     
-    computation_time = pd.read_csv("../../Data/Computation Results/computation_time.csv")
+    if track_comp_time:
+        computation_time = pd.read_csv("../../Data/Computation Results/computation_time.csv")
     
     for f in forecast_files:
         
         split_f = f.split("_")[2:]
         
         combined_f = "_".join(split_f)[:-4]
-        
-        if "AN_" in combined_f or "DP_" in combined_f:
             
-            start = time.time()
+        start = time.time()
+        time.sleep(0.01)
             
-            fcasts = pd.read_csv(forecasts_path + f)
+        fcasts = pd.read_csv(forecasts_path + f)
         
-            mae_vals = pd.DataFrame(mean_absolute_error(test_data, fcasts, multioutput="raw_values"))
+        mae_vals = pd.DataFrame(mean_absolute_error(test_data, fcasts, multioutput="raw_values"))
         
-            distribution_dict[f] = mae_vals.squeeze()
+        distribution_dict[f] = mae_vals.squeeze()
         
-            path = results_path + "Error_Distributions/" 
-            if not os.path.exists(path):
-                os.makedirs(path)
-            mae_vals.to_csv(path + "error_distribution_" + f, index=False)
+        path = results_path + "Error_Distributions/" 
+        if not os.path.exists(path):
+            os.makedirs(path)
+        mae_vals.to_csv(path + "error_distribution_" + f, index=False)
 
-            stop = time.time()
+        stop = time.time()
             
+        if track_comp_time:
             where_to = np.where(pd.Series([combined_f in x for x in computation_time.File]))[0]
             
-            computation_time.loc[where_to, "error_computation"] += stop-start
+            computation_time.loc[where_to, "error_computation"] += stop-start-0.01
         
             computation_time.to_csv("../../Data/Computation Results/computation_time.csv", index=False)
-        
-        else:
-            
-            fcasts = pd.read_csv(forecasts_path + f)
-        
-            mae_vals = pd.DataFrame(mean_absolute_error(test_data, fcasts, multioutput="raw_values"))
-        
-            distribution_dict[f] = mae_vals.squeeze()
-        
-            path = results_path + "Error_Distributions/" 
-            if not os.path.exists(path):
-                os.makedirs(path)
-            mae_vals.to_csv(path + "error_distribution_" + f, index=False)
 
     ddf = pd.DataFrame(distribution_dict)
 

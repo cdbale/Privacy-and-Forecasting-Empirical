@@ -10,9 +10,17 @@ import pmdarima as pm
 from scipy import stats
 
 # splitting function used in VAR forecast
+# def split(a, n):
+#     k, m = divmod(len(a), n)
+#     print(k, m)
+#     return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+
+# splitting function used in VAR forecast
 def split(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
+    # how many chunks of size n can we create
+    num_chunks = np.floor(len(a) / n)
+    return(np.array_split(a, num_chunks))
+    
 
 # function to conduct first differencing on time series
 def difference_to_stationarity(ts_data):
@@ -23,17 +31,26 @@ def difference_to_stationarity(ts_data):
     return differenced_series
 
 # function to reverse first differencing
-def reverse_difference_to_stationarity(h, forecasts, ts_data):
+def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False):
 
     # list to store reversed forecasts
     reversed_forecasts = []
 
     for i, f in enumerate(forecasts):
-        start_value = ts_data[i].iloc[-1]
-        reverse_diffed = np.r_[start_value, f].cumsum()
-        reverse_diffed = pd.Series(reverse_diffed[-h:])
-        reverse_diffed.index = f.index
-        reversed_forecasts.append(reverse_diffed)
+        
+        if is_simulated:
+            start_value = ts_data[i].iloc[0]
+            reverse_diffed = np.r_[start_value, f].cumsum()
+            reverse_diffed = pd.Series(reverse_diffed)
+            reverse_diffed.index = ts_data[i].index
+            reversed_forecasts.append(reverse_diffed)
+
+        else:
+            start_value = ts_data[i].iloc[-1]
+            reverse_diffed = np.r_[start_value, f].cumsum()
+            reverse_diffed = pd.Series(reverse_diffed[-h:])
+            reverse_diffed.index = f.index
+            reversed_forecasts.append(reverse_diffed)
 
     return reversed_forecasts
 
@@ -85,7 +102,7 @@ def pre_process(ts_data, h, mean_normalize=False, sp=None, transform_dict={}):
     return processed
 
 # post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None):
+def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None, var_sim=False):
 
     # create processed copy of forecasts, store the number of series
     processed = forecasts
@@ -118,6 +135,9 @@ def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None):
     # make sure forecasts are non-negative
     processed = [pd.Series([x if x >=0 else 0 for x in y]) for y in processed]
 
-    processed = pd.DataFrame([x.reset_index(drop=True) for x in processed]).T
+    if var_sim:
+        processed = pd.DataFrame([x.reset_index(drop=True) for x in processed])
+    else:
+        processed = pd.DataFrame([x.reset_index(drop=True) for x in processed]).T
 
     return processed

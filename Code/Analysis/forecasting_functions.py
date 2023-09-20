@@ -5,6 +5,7 @@
 
 ################################################################################
 
+from ast import Param
 import subprocess
 import pickle
 import pandas as pd
@@ -312,7 +313,9 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
 
     return full_fcasts
 
-def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None):
+def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None):  
+
+    series_means = [np.mean(x) for x in ts_data]
 
     ts = difference_to_stationarity(ts_data)
 
@@ -326,6 +329,9 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
 
     # store the forecasts in an array of all forecasts using the stored series indices
     full_forecasts = np.zeros([num_series, h])
+    
+    # list to store simulated time series
+    simulated = [0 for x in range(num_series)]
 
     for k, l in enumerate(unique_lengths):
 
@@ -352,18 +358,24 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
             if save_params:
                 intercepts = results.coefs_exog
                 pd_intercepts = pd.DataFrame(intercepts)
-                newpath = "../../Outputs/VAR Weights/" + param_save_file
+                newpath = "../../Outputs/VAR Weights/"
                 if not os.path.exists(newpath):
                     os.makedirs(newpath)
-                pd_intercepts.to_csv(newpath + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
+                pd_intercepts.to_csv(newpath + param_save_file + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
 
                 # extract lag coefficients
                 lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
-                lag_coefs.to_csv(newpath + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
+                lag_coefs.to_csv(newpath + param_save_file + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
             
             if simulate_series:
-                print('none')
-
+                ## simulating VAR time series
+                sim_series = results.simulate_var(steps=group.shape[0]+lag_order,
+                                                  seed=42,
+                                                  initial_values=np.zeros((lag_order, group.shape[1])))
+                
+                for s, p in enumerate(j):
+                    simulated[p] = sim_series[lag_order:,s]
+                
             # generate forecasts
             if lag_order == 0:
                 y_pred = np.repeat(intercepts, h, axis=1).T
@@ -380,6 +392,25 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
 
     processed = reverse_difference_to_stationarity(h, full_forecasts, ts_data)
+    
+    ######## how do we handle first differencing with the simulated time series???
+    ######## save the simulated series as a dataframe
+    ######## we are going to save the simulated versions in first differenced form,
+    ######## and have the adversary match on the first differenced version
+
+    if simulate_series:
+
+        # reverse the differencing to stationarity on the simulated time series - use the
+        # mean of the original series?
+        
+        simulated = reverse_difference_to_stationarity(h, simulated, ts_data, is_simulated=True)
+        
+        simulated = post_process(full_ts_data=ts_data, forecasts=simulated, h=h, var_sim=True)
+    
+        sim_path = "../../Outputs/VAR Simulated/"
+        if not os.path.exists(sim_path):
+            os.makedirs(sim_path)
+        simulated.to_csv(sim_path + param_save_file + ".csv", index=False)
 
     return processed
 

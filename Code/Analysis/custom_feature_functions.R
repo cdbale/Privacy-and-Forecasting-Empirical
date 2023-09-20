@@ -9,6 +9,28 @@ series_variance <- function(x){
   return(var(x))
 }
 
+# custom spectral entropy
+# handles case of zero variance series
+entropy_c <- function(x){
+  if (var(x) == 0){
+    return(return(c(entropy = 0)))
+  }
+  spec <- try(stats::spec.ar(na.contiguous(x), plot = FALSE, 
+                             method = "burg", n.freq = ceiling(length(x)/2 + 1)))
+  if ("try-error" %in% class(spec)) {
+    entropy <- NA
+  }
+  else {
+    fx <- c(rev(spec$spec[-1]), spec$spec)/length(x)
+    fx <- fx/sum(fx)
+    prior.fx = rep(1/length(fx), length = length(fx))
+    prior.weight = 0.001
+    fx <- (1 - prior.weight) * fx + prior.weight * prior.fx
+    entropy <- pmin(1, -sum(fx * log(fx, base = length(x))))
+  }
+  return(c(entropy = entropy))
+}
+
 # max level shift with custom width
 max_level_shift_c <- function (x, width = ifelse(frequency(x) > 1, frequency(x), floor(length(x)/3))) {
   suppressWarnings(rollmean <- try(RcppRoll::roll_mean(x, width, 

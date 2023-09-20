@@ -29,7 +29,10 @@ file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
 
 # steps:
 
-# - track computation time (each part - RReliefF, RFE, swapping)
+# - track computation time (each part - RReliefF, RFE, swapping) - need
+# new file to track computation time for each of the original (unprotected)
+# files.
+
 # - import original data
 # - import baseline protected versions of data
 # - import corresponding features
@@ -488,7 +491,7 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
 ### otherwise use 9, which is the same length as
 ### the shortest window with a seasonal period (quarterly)
 
-for (f in file_names){
+for (f in file_names[1:2]){
   
   # reassign selected features
   sft <- sf

@@ -117,7 +117,7 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
         # train random forest with current feature set
         rf_res <- ranger(values ~ ., data=train, importance="permutation", num.trees=500)
         
-        oob_errors <- c(oob_errors, rf_res$prediction.error)
+        oob_errors <- c(oob_errors, mean(abs(rf_res$predictions-train$values)))
         
         least_imp <- names(sort(importance(rf_res))[1])
         
@@ -169,7 +169,8 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
               "evals_combined" = evals_combined,
               "selected_features" = sf,
               "relief_time" = difftime(relief_stop, relief_start, units="mins"),
-              "rfe_time" = difftime(rfe_stop, rfe_start, units="mins")))
+              "rfe_time" = difftime(rfe_stop, rfe_start, units="mins"),
+              "rf" = rf_res))
   
 }
 
@@ -381,6 +382,8 @@ num_iter <- 25
 
 feature_file_names <- grep("h2_train", list.files("../../Data/Features/"), value=TRUE)
 
+file_names <- file_names[file_names %in% c("monthly-MICRO_h1_train.csv", "quarterly-FINANCE_h1_train.csv")]
+
 # loop over file names
 for (f in file_names){
   
@@ -512,18 +515,18 @@ for (f in file_names){
   ## save RFE oob results
   
   # check if sub directory exists 
-  if (file.exists("../../Outputs/RFE Rankings/")){
+  if (file.exists("../../Outputs/RFE OOB/")){
     
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   } else {
     
     # create a new sub directory inside
     # the main path
-    dir.create(file.path("../../Outputs/RFE Rankings/"))
+    dir.create(file.path("../../Outputs/RFE OOB/"))
     
     # specifying the working directory
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   }
   
@@ -541,11 +544,10 @@ for (f in file_names){
   # determine sp
   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
   
-  if (sp > 1){
-    window_length <- 2*sp + 1
-  } else if (sp == 1) {
-    window_length <- 9
-    # remove seasonal_strength from selected features when sp=1
+  # minimum window length of 11 so that x_acf10 can be calculated
+  window_length <- max(c(2*sp + 1, 11))
+
+  if (sp == 1) {
     sft <- sf[!sf %in% c("seasonal_strength", "peak", "trough", "seas_acf1", "seas_pacf")]
   }
   
@@ -615,3 +617,11 @@ for (f in file_names){
 }
 
 write.csv(computation_time, file="../../Data/Computation Results/k-nts-plus.csv", row.names=FALSE)
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################

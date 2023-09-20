@@ -15,167 +15,319 @@ library(ggplot2)
 library(ggpubr)
 library(gridExtra)
 library(forecast)
+library(e1071)
 ```
 
 Import data. Start with the full data, then use just the training data for examining features.
 ```{r}
-ts_data <- read.csv("../../Data/Train/Clean/full_m3_monthly_micro_clean.csv")
+mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
+qf_data <- read.csv("../../Data/Cleaned/quarterly-FINANCE_h1_train.csv")
 ```
 
 Correlation statistics and histogram for the M3 monthly micro data. (This is the correlation of the series taken over the length of the shortest series.)
 ```{r}
-ts_data <- as.list(as.data.frame(t(ts_data)))
+mm_data <- as.list(as.data.frame(t(mm_data)))
 
-ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+mm_data <- lapply(mm_data, function(x) x[!is.na(x)])
 
-ts_short <- lapply(ts_data, function(x) tail(x, 67))
-
-# ts_short <- ts_data[,1:67]
-
-ts_short <- as.data.frame(ts_short)
-
-cmat <- cor(ts_short)
-
-corrs <- cmat[upper.tri(cmat)]
-
-mean(abs(corrs))
-
-median(abs(corrs))
-
-hist(abs(corrs))
-```
-
-***
-
-Summary statistics.
-```{r}
-lengths = sapply(ts_data, length)
-
-# print the unique lengths
-print("Series lengths:")
-unique_lengths <- unique(lengths)
-unique_lengths
-
-# how many series correspond to each length
-print("Number of Series per Length:")
-number_series_per_length <- sapply(unique(lengths), function(x) sum(lengths==x))
-number_series_per_length
-
-# number of series
-print("Number of Series:")
-sum(number_series_per_length)
-
-# minimum value across all series
-print("Min value across all series:")
-min(sapply(ts_data, min))
-
-# maximum value across all series
-print("Max value across all series:")
-max(sapply(ts_data, max))
-```
-
-***
-
-## Extracting time series features. Examining feature distributions under strong protection.
-
-Import data. Start with the training data for `h=1`.
-```{r}
-# read in the data
-original_data <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
-
-# convert to a list of series
-ts_data <- as.list(as.data.frame(t(original_data)))
-  
-# remove NA values from each series
-ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
 # convert each series to a TS object with appropriate seasonal frequency
-ts_data <- lapply(ts_data, function(x) ts(x, frequency=12))
+mm_data <- lapply(mm_data, function(x) ts(x, frequency=12))
 
 # take the log of the data
-ts_data <- lapply(ts_data, log)
+mm_data <- lapply(mm_data, log)
 
-# binarize_mean feature was returning an error that it wasn't giving a named feature vector
+qf_data <- as.list(as.data.frame(t(qf_data)))
 
-cv <- function(series){
-  return(sd(series)/mean(series))
-}
+qf_data <- lapply(qf_data, function(x) x[!is.na(x)])
 
-series_mean <- function(x){
-  return(mean(x))
-}
+# convert each series to a TS object with appropriate seasonal frequency
+qf_data <- lapply(qf_data, function(x) ts(x, frequency=4))
 
+# take the log of the data
+qf_data <- lapply(qf_data, log)
+```
+
+***
+Summary statistics.
+```{r}
+# lengths = sapply(ts_data, length)
+# 
+# # print the unique lengths
+# print("Series lengths:")
+# unique_lengths <- unique(lengths)
+# unique_lengths
+# 
+# # how many series correspond to each length
+# print("Number of Series per Length:")
+# number_series_per_length <- sapply(unique(lengths), function(x) sum(lengths==x))
+# number_series_per_length
+# 
+# # number of series
+# print("Number of Series:")
+# sum(number_series_per_length)
+# 
+# # minimum value across all series
+# print("Min value across all series:")
+# min(sapply(ts_data, min))
+# 
+# # maximum value across all series
+# print("Max value across all series:")
+# max(sapply(ts_data, max))
+```
+
+***
+
+## Extracting time series features.
+
+```{r}
 # simple outlier detection indicators, one for when an outlier occurs at forecast origin, within 5, and within 10 time periods
 
 # for top coding, we want to see if it corrects positive outliers
 # tsoutliers will find the outliers for us
 # we can determine if they are positive based on whether they are greater than the mean
 
-outlier_detection <- function(series){
-  outliers <- tsoutliers(series)$index
-  within_1 <- 1 * (length(series) %in% outliers)
-  within_5 <- 1 * any((outliers > (length(series)-5)))
-  within_10 <- 1 * any((outliers > (length(series)-10)))
-  features <- c(within_1, within_5, within_10)
-  names(features) <- c("Outlier_within_1", "Outlier_within_5", "Outlier_within_10")
-  return(features)
-}
-
-outlier_detection_1 <- function(series){
-  outliers <- tsoutliers(series)$index
-  return(1 * (length(series) %in% outliers))
-}
-
-outlier_detection_5 <- function(series){
-  outliers <- tsoutliers(series)$index
-  return(1 * any((outliers > (length(series)-5))))
-}
-
-outlier_detection_10 <- function(series){
-  outliers <- tsoutliers(series)$index
-  return(1 * any((outliers > (length(series)-10))))
-}
-
-ts_features <- tsfeatures(ts_data, features=c("series_mean", "stability", "stl_features", "hurst", "max_var_shift"), scale=FALSE)
+# outlier_detection <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   within_1 <- 1 * (length(series) %in% outliers)
+#   within_5 <- 1 * any((outliers > (length(series)-5)))
+#   within_10 <- 1 * any((outliers > (length(series)-10)))
+#   features <- c(within_1, within_5, within_10)
+#   names(features) <- c("Outlier_within_1", "Outlier_within_5", "Outlier_within_10")
+#   return(features)
+# }
+# 
+# outlier_detection_1 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * (length(series) %in% outliers))
+# }
+# 
+# outlier_detection_5 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * any((outliers > (length(series)-5))))
+# }
+# 
+# outlier_detection_10 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * any((outliers > (length(series)-10))))
+# }
 ```
 
-Save extracted features.
+Going to look at quarterly finance for comparison.
 ```{r}
-# write.csv(ts_features, "../../Data/Train/Clean/m3_features.csv")
+# find which features were chosen to be most important for these data sets
+mm_rankings <- read_csv("../../Outputs/RFE Rankings/RFE_monthly-MICRO_h1_train.csv")
+qf_rankings <- read_csv("../../Outputs/RFE Rankings/RFE_quarterly-FINANCE_h1_train.csv")
 ```
 
+Which features were chosen by each model in monthly micro.
+```{r}
+mm_model_features <- mm_rankings %>%
+  group_by(model, var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(model, avg_rank) %>%
+  group_by(model) %>%
+  slice(1:6)
+
+qf_model_features <- qf_rankings %>%
+  group_by(model, var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(model, avg_rank) %>%
+  group_by(model) %>%
+  slice(1:6)
+```
+
+What were the overall top features chosen for both data sets.
+```{r}
+mm_rankings %>%
+  group_by(var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(avg_rank)
+```
 
 ```{r}
-f_orig <- ts_features %>% select(series_mean, trend, curvature, hurst, stability, max_var_shift)
+qf_rankings %>%
+  group_by(var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(avg_rank)
+```
 
+Extract features both both data sets.
+```{r}
+# custom feature functions
+source("custom_feature_functions.R")
+
+mm_features <- tsfeatures(mm_data, features=c("series_variance", "stl_features", "max_level_shift_c", "max_var_shift_c", "series_mean", "kurtosis"), scale=FALSE)
+qf_features <- tsfeatures(qf_data, features=c("series_variance", "stl_features", "max_level_shift_c", "max_var_shift_c", "series_mean", "kurtosis"), scale=FALSE)
+```
+
+Select desired features.
+```{r}
+mm_features <- mm_features %>%
+  select("series_variance", "spike", "max_level_shift", "max_var_shift", "series_mean", "kurtosis")
+
+qf_features <- qf_features %>%
+  select("series_variance", "spike", "max_level_shift", "max_var_shift", "series_mean", "kurtosis")
+```
+
+```{r}
 # perform pca on desired features
-f_pca <- f_orig %>% prcomp(center=TRUE, scale=TRUE)
+feat_pca <- mm_features %>% prcomp(center=FALSE, scale=FALSE)
 
-# variable to indicate protected vs. original data
-is_protected <- rep(c(0,1), each=nrow(original_data))
+mm_pcs <- as_tibble(feat_pca$x[,1:2]) %>%
+  mutate(data="monthly-MICRO")
 
-is_protected <- factor(is_protected, levels=c(0,1), labels=c("Original", "Protected"))
-```
+qf_pcs <- as_tibble(predict(feat_pca, qf_features)[,1:2]) %>%
+  mutate(data="quarterly-FINANCE")
 
-```{r}
-ts_features
-```
-
-Convert projected original data to tibble.
-```{r}
-orig <- as_tibble(f_pca$x) %>%
-  bind_cols(f_orig)
+combined_pcs <- bind_rows(mm_pcs, qf_pcs)
 ```
 
 View PCA summary.
 ```{r}
-summary(f_pca)
+summary(feat_pca)
 ```
 
 View matrix of variable loadings.
 ```{r}
-f_pca$rotation
+feat_pca$rotation[,1:2]
 ```
+
+Visualize principal component distributions.
+```{r}
+combined_pcs %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point() +
+  facet_wrap(~data)
+```
+
+Look at the distances between series based on the features.
+```{r}
+## Calculate the feature distance matrix D
+D_calc <- function(ts_data){
+  ones_column <- as.matrix(rep(1, ncol(ts_data)), nrow=ncol(ts_data))
+  temp <- ones_column %*% diag(t(ts_data)%*%ts_data) - 2*t(ts_data)%*%ts_data + diag(t(ts_data)%*%ts_data) %*% t(ones_column)
+  return(temp)
+}
+
+neighbor_distances <- function(d_matrix, num_neighbors){
+  distance_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    distance_vector <- append(distance_vector, sort_d)
+  }
+  return(distance_vector)
+}
+
+qf_D <- D_calc(t(as.matrix(qf_features)))
+
+mm_D <- D_calc(t(as.matrix(mm_features)))
+
+qf_distances <- neighbor_distances(qf_D, 3)
+mm_distances <- neighbor_distances(mm_D, 3)
+
+hist(qf_distances)
+hist(mm_distances)
+```
+
+Plot original and k-nTS+ protected versions for sanity check.
+```{r}
+mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
+qf_data <- read.csv("../../Data/Cleaned/quarterly-FINANCE_h1_train.csv")
+
+mm_protected <- read.csv("../../Data/Cleaned/k-nts-plus_3_monthly-MICRO_h1_train.csv")
+qf_protected <- read.csv("../../Data/Cleaned/k-nts-plus_3_quarterly-FINANCE_h1_train.csv")
+```
+
+```{r}
+s1 <- as_vector(qf_data[5,])
+s1 <- unname(s1[!is.na(s1)])
+
+ps1 <- as_vector(qf_protected[5,])
+ps1 <- unname(ps1[!is.na(ps1)])
+```
+
+```{r fig.width=10, fig.height=10}
+qf_data <- as_tibble(t(qf_data)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='original')
+
+qf_protected <- as_tibble(t(qf_protected)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='protected')
+
+full <- bind_rows(qf_data, qf_protected)
+
+full %>%
+  ggplot(aes(x=time, y=value, color=type)) +
+  geom_line() +
+  facet_wrap(~Series)
+```
+
+
+
+
+```{r}
+plot(s1, type='l')
+lines(ps1)
+```
+
+
+
+
+
+
+
+
+
+What about the inter-series distances?
+```{r}
+qf_data <- read.csv("../../Data/Cleaned/quarterly-FINANCE_h1_train.csv")
+
+# take the log of the data
+qf_data <- log(qf_data)
+
+# convert C to a t x J matrix (num time periods by num series)
+qf_data <- t(qf_data)
+
+qf_D <- D_calc(qf_data)
+```
+
+```{r}
+mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
+
+mm_data <- as.list(as.data.frame(t(mm_data)))
+
+mm_data <- lapply(mm_data, function(x) x[!is.na(x)])
+
+# take the log of the data
+mm_data <- lapply(mm_data, log)
+
+# split X into separate datasets, one for each series length
+Xs <- list()
+lengths <- sapply(mm_data, length)
+unique_lengths <- unique(lengths)
+for (l in seq_along(unique_lengths)){
+  ids <- lengths==unique_lengths[l]
+  Xs[[l]] <- mm_data[ids]
+}
+
+Xs <- lapply(Xs, function(x) do.call(rbind, x))
+
+mm_Ds <- lapply(Xs, D_calc)
+```
+
+Extract the distances from the lower triangular.
+
+Look at the distribution of distances.
+```{r}
+qf_distances <- qf_D[lower.tri(qf_D)]
+
+mm_distances <- lapply(mm_Ds, function(x) x[lower.tri(x)])
+```
+
 
 ***
 

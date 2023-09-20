@@ -2,10 +2,6 @@
 
 # Author: Cameron Bale
 
-import pandas as pd
-import numpy as np
-import os
-
 # results file path
 results_path = "../../Outputs/Results/"
 
@@ -18,15 +14,15 @@ result_files = os.listdir(results_path)
 # names of forecast files
 fcast_files = os.listdir(forecasts_path)
 
-models = ["SES", "DES", "TES", "ARIMA", "VAR", "Multivariate_LGBM", "RNN"]
+models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM", "RNN"]
 
 # protection methods dictionary
-protection_methods = {# "Top": [0.10, 0.20, 0.40],
-                      # "Bottom": [0.10, 0.20, 0.40],
-                      "AN": [0.25, 0.5, 1, 1.5, 2],
+protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
                       "DP": [0.1, 1, 4.6, 10, 20],
-                      "k_nts": [3, 5, 7, 10, 15],
-                      "k_nts_plus": [3, 5, 7, 10, 15]}
+                      "k-nts": [3, 5, 7, 10, 15],
+                      "k-nts-corr": [3, 5, 7, 10, 15],
+                      "k-nts-plus": [3, 5, 7, 10, 15],
+                      "k-nts-plus-corr": [3, 5, 7, 10, 15]}
 
 # loop over each protection method making a table for each
 for p in protection_methods.items():

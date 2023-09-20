@@ -18,7 +18,9 @@ source('custom_feature_functions.R')
 file_path <- "../../Data/Cleaned/"
 
 # import names of original and baseline protected data files
-file_names <- grep("_train", list.files(file_path), value=TRUE)
+file_names <- grep("k-nts", list.files(file_path), value=TRUE)
+
+file_names
 
 # feature extraction function
 extract_features <- function(time_series, sp, feature_vector){
@@ -75,10 +77,10 @@ fv <- c("entropy", "lumpiness", "stability",
 # file_names[1]
 # file_names[30]
 # 
-# temp_data1 <- read.csv(paste0(file_path, file_names[1]))
+# temp_data1 <- read.csv(paste0(file_path, file_names[547]))
 # temp_data30 <- read.csv(paste0(file_path, file_names[30]))
 # 
-# temp_features1 <- extract_features(temp_data1, sp=12, feature_vector=fv)
+# temp_features1 <- extract_features(temp_data1, sp=4, feature_vector=fv)
 # temp_features30 <- extract_features(temp_data30, sp=1, feature_vector=fv)
 # 
 # columns1 <- colnames(temp_features1)
@@ -91,9 +93,6 @@ fv <- c("entropy", "lumpiness", "stability",
 ################################################################################
 
 ### Perform feature extraction for all original and baseline data sets.
-
-computation_time <- read.csv("../../Data/Computation Results/computation_time.csv")
-computation_time$feature_extraction <- 0
 
 ################################################################################
 ################################################################################
@@ -108,7 +107,7 @@ for (f in file_names){
     features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
     stop <- Sys.time()
     features <- features %>% select(-nperiods, -seasonal_period)
-    computation_time[computation_time$File==f, "feature_extraction"] <- stop-start
+    computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="mins")
     write.csv(computation_time, file="../../Data/Computation Results/computation_time.csv", row.names=FALSE)
   }
   else {
