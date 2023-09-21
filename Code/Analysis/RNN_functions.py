@@ -8,7 +8,6 @@ import os
 
 def train_RNN(train_data,
               h,
-              return_fitted,
               num_ensemble_models,
               input_chunk_length,
               training_length,
@@ -26,7 +25,6 @@ def train_RNN(train_data,
     num_series = len(train_data)
 
     full_forecasts = np.zeros([h, num_series, num_ensemble_models])
-    full_fitted_values = []
 
     for m in range(num_ensemble_models):
 
@@ -67,26 +65,11 @@ def train_RNN(train_data,
         # store forecasts in appropriate indexes
         full_forecasts[:,:,m] = fcasts
 
-        if return_fitted:
-            fvals = RNN.historical_forecasts(series=train_data, retrain=False)
-            # convert to series
-            fvals = [x.pd_series().reset_index(drop=True) for x in fvals]
-
-            fvals = pd.DataFrame(fvals).T
-
-            # store forecasts in appropriate indexes
-            full_fitted_values.append(fvals)
-
     # take the median of the forecasts
     median_forecasts = pd.DataFrame(np.median(full_forecasts, axis=2))
 
-    if return_fitted:
-        # concatenate fitted values
-        full_fitted_values = np.dstack(full_fitted_values)
-        median_fvals = pd.DataFrame(np.median(full_fitted_values, axis=2))
-        return median_forecasts, median_fvals
-    else:
-        return median_forecasts
+    return median_forecasts
+
 
 def optimize_RNN(train_data,
                  validation_data,
@@ -100,7 +83,6 @@ def optimize_RNN(train_data,
 
         fcasts = train_RNN(train_data=train_data,
                            h=h,
-                           return_fitted=False,
                            num_ensemble_models=num_ensemble_models,
                            input_chunk_length=input_chunk_length,
                            training_length=training_length,
@@ -131,7 +113,7 @@ def optimize_RNN(train_data,
         random_state=1234,
         verbose=1)
 
-    optimizer.maximize()
+    optimizer.maximize(n_iter=15)
 
     print("Final Result: ", optimizer.max)
 

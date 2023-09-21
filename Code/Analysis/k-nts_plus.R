@@ -11,67 +11,56 @@ library(e1071)
 library(ggplot2)
 library(ranger)
 library(tidytext)
+library(CORElearn)
 
-## NEED TO RE-Read in X with h1 when doing protection
-
-# read in original time series
-X <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h2.csv")
-
-# convert to a list of series
-X <- as.list(as.data.frame(t(X)))
-
-# remove NA values from each series
-X <- lapply(X, function(x) x[!is.na(x)])
-
-# convert each series to a TS object with appropriate seasonal frequency
-X <- lapply(X, function(x) ts(x, frequency=12))
-
-# take the log of the data
-X <- lapply(X, log)
-
-series_mean <- function(x){
-  return(mean(x))
-}
-
-series_variance <- function(x){
-  return(var(x))
-}
-
-#####################################################
-#####################################################
-
-## under k-nTS plus, the data provider generates forecasts
-## for period t, and uses random forest to measure feature
-## importance for predicting the forecast accuracy of period 
-## t. The most important features are used in k-nts plus, in
-## hopes of minimizing the impact of data protection on forecast
-## accuracy in period t+1.
-
+# paths to the data files and feature files
+fp <- "../../Data/Cleaned/"
+features_path <- "../../Data/Features/"
 # path to files with error distributions
 ed_file_path <- "../../Outputs/Results/Error_Distributions/"
 
-# file with errors for all models on original data
-eds <- read_csv(paste0(ed_file_path, "all_distributions_h2.csv"))
+# import names of original data files - this may include protected versions
+# so we have to remove those
+file_names <- grep("_h1_train", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
 
-# transform to two columns - model name and errors
-eds <- eds %>% gather(key="name", value="values") %>%
-  mutate(name = gsub("Multivariate_LGBM", "LGBM", name),
-         name = substring(name, 1, nchar(name)-4)) %>%
-  separate(name, c("Model", "Horizon", "Protection", "Parameter"), sep="_") %>%
-  mutate(Parameter = if_else(is.na(Parameter), "Original", Parameter))
+# steps:
 
-### Perform feature extraction for all datasets for h2.
+# - track computation time (each part - RReliefF, RFE, swapping) - need
+# new file to track computation time for each of the original (unprotected)
+# files.
 
-file_names <- grep("protected", list.files("../../Data/Train/Clean/"), value=TRUE)
+# - import original data
+# - import baseline protected versions of data
+# - import corresponding features
+# write a function to do everything and save the results for one 
+# original file at a time
+# Save:
+# - RReliefF feature rankings
+# - Random Forest feature rankings
+# - which features were selected for each data set
+# - computation time for each part
 
-file_names <- grep("h2", file_names, value=TRUE)
+## NEED TO RE-Read in X with h1 when doing protection
 
-extract_features <- function(time_series, sp, feature_vector){
+source("custom_feature_functions.R")
+
+# function to import and process series
+import_data <- function(file_name, file_path, sp){
   
-  # convert to a list of series
-  ts_data <- as.list(as.data.frame(t(time_series)))
+  ###
+  # Takes the name file_name of a time series data set and the seasonal period
+  # of that time series data. Imports the data, pre-processes and converts 
+  # to a timeseries object, and returns the data.
+  ###
   
-  # remove NA values from each series
+  # import data and convert to a list of series
+  ts_data <- as.list(as.data.frame(t(read.csv(paste0(file_path, file_name)))))
+  
+  # remove NA values from the end of each series
   ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
   
   # convert each series to a TS object with appropriate seasonal frequency
@@ -83,50 +72,46 @@ extract_features <- function(time_series, sp, feature_vector){
   # take the log of the data
   ts_data <- lapply(ts_data, log)
   
-  # calculate time series features
-  features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
-  
-  return(features)
+  return(ts_data)
 }
 
-fv <- c("entropy", "lumpiness", "stability",
-        "max_level_shift", "max_var_shift", "max_kl_shift",
-        "crossing_points", "flat_spots", "hurst",
-        "unitroot_kpss", "unitroot_pp", "stl_features",
-        "acf_features", "pacf_features",
-        "nonlinearity", "series_mean", "series_variance",
-        "skewness", "kurtosis")
+# read in original time series
+X <- import_data(file_name="yearly-MACRO_h1_train.csv", file_path=fp, sp=1)
 
-for (f in file_names){
-  data_set <- read.csv(paste0("../../Data/Train/Clean/", f))
-  features <- extract_features(data_set, sp=12, feature_vector=fv) 
-  features <- features %>%
-    select(-nperiods, -seasonal_period)
-  write.csv(features, file=paste0("../../Data/Train/Clean/tsfeatures/", sub(".*micro_", "", f)), row.names=FALSE)
-}
+# file with errors for all models on original data
+eds <- read_csv(paste0(ed_file_path, "yearly-MACRO_all_distributions_h2.csv"))
 
-# extract the features for the original data
-orig_features <- tsfeatures(X, features=fv, scale=FALSE) %>%
-  select(-nperiods, -seasonal_period)
-orig_features["Horizon"] <- "h2"
-orig_features["Protection"] <- "original"
-orig_features["Parameter"] <- "Original"
+# transform to two columns - model name and errors
+eds <- eds %>% gather(key="name", value="values") %>%
+  mutate(name = substring(name, 1, nchar(name)-8)) %>%
+  separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data"), sep="_") %>%
+  mutate(Protection = if_else(is.na(Protection), "Original", ifelse(Protection == "yearly-MACRO", "Original", Protection)),
+         Parameter = if_else(is.na(Parameter), "Original", Parameter)) %>%
+  select(-Data)
 
-file_names <- grep("tsfeatures", list.files("../../Data/Train/Clean/tsfeatures/"), value=TRUE, invert=TRUE)
-file_names <- grep("h2_", file_names, value=TRUE)
+### now import corresponding time series features and link to forecast errors
 
-full_features <- orig_features
+feature_file_names <- grep("h2_train", list.files("../../Data/Features/"), value=TRUE)
+feature_file_names <- grep("yearly-MACRO", feature_file_names, value=TRUE)
+
+full_features <- tibble()
 
 # import protected features and assign new variable values for linking to errors
-for (f in file_names){
+for (f in feature_file_names){
   
-  features <- read_csv(paste0("../../Data/Train/Clean/tsfeatures/", f))
+  features <- read_csv(paste0("../../Data/Features/", f))
   
-  params <- strsplit(f, split="_")
-
-  features["Horizon"] <- params[[1]][1]
-  features["Protection"] <- params[[1]][2]
-  features["Parameter"] <- strsplit(params[[1]][3], split=".csv")
+  params <- strsplit(f, split="_")[[1]]
+  
+  print(params)
+  
+  if (!params[2] %in% c("AN", "DP")){
+    features["Protection"] <- "Original"
+    features["Parameter"] <- "Original"
+  } else {
+    features["Protection"] <- params[2]
+    features["Parameter"] <- params[3]
+  }
   
   full_features <- bind_rows(full_features, features)
   
@@ -139,19 +124,17 @@ split_eds <- eds %>%
 
 full_data <- list()
 
-of <- orig_features %>%
-  select(1:39)
-
 for (i in seq_along(split_eds)){
   pps <- split_eds[[i]] %>% distinct(Protection, Parameter)
   prot <- pps %>% pull(Protection)
   param <- pps %>% pull(Parameter)
   feat_df <- full_features %>%
     filter(Protection==prot, Parameter==param) %>%
-    select(1:39)
+    select(-Protection, -Parameter)
   new <- split_eds[[i]] %>%
     bind_cols(feat_df)
   full_data[[i]] <- new
+  print(i)
 }
 
 full_data <- do.call(rbind, full_data)
@@ -174,8 +157,6 @@ full_data_scaled <- lapply(full_data, function(x) as.data.frame(scale(x)))
 
 ############# Initial feature filtering using Relief #############
 
-library(CORElearn)
-
 ############ experimenting with choosing the value of k for RReliefF ############
 
 evals <- lapply(full_data_scaled, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
@@ -184,105 +165,32 @@ evals_combined <- lapply(1:length(evals), function(x) as_tibble(evals[[x]], rown
 
 evals_combined <- do.call(rbind, evals_combined)
 
-relief_plotter <- function(weights_data, model_name){
-  plt <- weights_data %>%
-    filter(model==model_name) %>%
-    arrange(value) %>%
-    mutate(feature=factor(feature, levels=feature)) %>%
-    ggplot(aes(x=feature, y=value)) +
-    geom_col() +
-    coord_flip()
-  
-  return(plt)
-}
-
-relief_plotter(evals_combined, "DES")
+# relief_plotter <- function(weights_data, model_name){
+#   plt <- weights_data %>%
+#     filter(model==model_name) %>%
+#     arrange(value) %>%
+#     mutate(feature=factor(feature, levels=feature)) %>%
+#     ggplot(aes(x=feature, y=value)) +
+#     geom_col() +
+#     coord_flip()
+#   
+#   return(plt)
+# }
+# 
+# relief_plotter(evals_combined, "DES")
 
 avg_evals <- evals_combined %>%
   group_by(feature) %>%
   summarize(avg_weight=mean(value))
 
+avg_evals <- avg_evals %>%
+  arrange(avg_weight)
+
+sorted_names <- avg_evals$feature
+
 avg_evals %>%
-  arrange(avg_weight) %>%
   mutate(feature=factor(feature, 
-                        levels=c('unitroot_kpss',
-                                 'hurst',
-                                 'entropy',
-                                 'skewness',
-                                 'lumpiness',
-                                 'stability',
-                                 'kurtosis',
-                                 'crossing_points',
-                                 'x_acf10',
-                                 'e_acf1',
-                                 'unitroot_pp',
-                                 'max_kl_shift',
-                                 'flat_spots',
-                                 'time_level_shift',
-                                 'x_pacf5',
-                                 'time_kl_shift',
-                                 'diff1_acf1',
-                                 'nonlinearity',
-                                 'time_var_shift',
-                                 'diff1x_pacf5',
-                                 'diff2_acf1',
-                                 'diff2x_pacf5',
-                                 'e_acf10',
-                                 'seas_pacf',
-                                 'x_acf1',
-                                 'trend',
-                                 'diff1_acf10',
-                                 'seasonal_strength',
-                                 'diff2_acf10',
-                                 'seas_acf1',
-                                 'trough',
-                                 'peak',
-                                 'series_mean',
-                                 'curvature',
-                                 'max_var_shift',
-                                 'max_level_shift',
-                                 'linearity',
-                                 'series_variance',
-                                 'spike'),
-                        labels=c("Unitroot KPSS",
-                                 "Hurst",
-                                 "Spectral Entropy",
-                                 "Skewness",
-                                 "Lumpiness",
-                                 "Stability",
-                                 "Kurtosis",
-                                 "Crossing Points",
-                                 "X ACF10",
-                                 "Error ACF",
-                                 "Unitroot PP",
-                                 "Max KL Shift",
-                                 "Flat Spots",
-                                 "Time Level Shift",
-                                 "X PACF5",
-                                 "Time KL Shift",
-                                 "First Difference ACF",
-                                 "Nonlinearity",
-                                 "Time Variance Shift",
-                                 "First Difference PACF5",
-                                 "Second Difference ACF",
-                                 "Second Difference PACF5",
-                                 "Error ACF10",
-                                 "Seasonal PACF",
-                                 "X ACF",
-                                 "Trend",
-                                 "First Difference ACF10",
-                                 "Seasonal Strength",
-                                 "Second Difference ACF10",
-                                 "Seasonal ACF",
-                                 "Trough", 
-                                 "Peak",
-                                 "Mean", 
-                                 "Curvature",
-                                 "Max Variance Shift",
-                                 "Max Level Shift",
-                                 "Linearity",
-                                 "Variance",
-                                 "Spike"))) %>%
+                        levels=sorted_names)) %>%
   ggplot(aes(x=feature, y=avg_weight)) +
   geom_col() +
   coord_flip() +
@@ -296,7 +204,7 @@ avg_evals %>%
 relief_selection <- lapply(evals, function(x) names(x[x > 0]))
 
 # number of RFE iterations
-num_iter <- 50
+num_iter <- 25
 
 # setting seed
 set.seed(42)
@@ -363,14 +271,6 @@ combined_oob <- do.call(rbind, lapply(1:length(avg_oob), function(x) tibble("num
 # new plot for revision
 
 combined_oob %>%
-  ggplot(aes(x=num_features, y=value, color=model)) +
-  geom_line(size=0.8) +
-  geom_point(aes(shape=model)) +
-  labs(x="Number of Features (Subset Size)",
-       y="Out-of-Bag MSE",
-       shape="Model")
-
-combined_oob %>%
   ggplot(aes(x=num_features, y=value, color=model, shape=model)) +
   geom_line(size=0.75) +
   geom_point(size=3) +
@@ -410,14 +310,14 @@ sf <- rank_df %>%
   slice(1:ns) %>%
   pull(var)
 
-top_6s <- rank_df %>%
+tops <- rank_df %>%
   group_by(model, var) %>%
   summarize(avg_rank = mean(rank)) %>%
   arrange(model, avg_rank) %>%
-  slice(1:6) %>%
+  slice(1:ns) %>%
   group_split()
 
-top_feats <- lapply(top_6s, function(x) x$var)
+top_feats <- lapply(tops, function(x) x$var)
 
 final_importances <- list()
 
@@ -435,86 +335,6 @@ final_importances <- do.call(rbind, lapply(1:length(final_importances), function
 #####################################################
 
 final_importances %>%
-  mutate(var=factor(var, 
-                    levels=c('unitroot_kpss',
-                                 'hurst',
-                                 'entropy',
-                                 'skewness',
-                                 'lumpiness',
-                                 'stability',
-                                 'kurtosis',
-                                 'crossing_points',
-                                 'x_acf10',
-                                 'e_acf1',
-                                 'unitroot_pp',
-                                 'max_kl_shift',
-                                 'flat_spots',
-                                 'time_level_shift',
-                                 'x_pacf5',
-                                 'time_kl_shift',
-                                 'diff1_acf1',
-                                 'nonlinearity',
-                                 'time_var_shift',
-                                 'diff1x_pacf5',
-                                 'diff2_acf1',
-                                 'diff2x_pacf5',
-                                 'e_acf10',
-                                 'seas_pacf',
-                                 'x_acf1',
-                                 'trend',
-                                 'diff1_acf10',
-                                 'seasonal_strength',
-                                 'diff2_acf10',
-                                 'seas_acf1',
-                                 'trough',
-                                 'peak',
-                                 'series_mean',
-                                 'curvature',
-                                 'max_var_shift',
-                                 'max_level_shift',
-                                 'linearity',
-                                 'series_variance',
-                                 'spike'),
-                        labels=c("Unitroot KPSS",
-                                 "Hurst",
-                                 "Spectral Entropy",
-                                 "Skewness",
-                                 "Lumpiness",
-                                 "Stability",
-                                 "Kurtosis",
-                                 "Crossing Points",
-                                 "X ACF10",
-                                 "Error ACF",
-                                 "Unitroot PP",
-                                 "Max KL Shift",
-                                 "Flat Spots",
-                                 "Time Level Shift",
-                                 "X PACF5",
-                                 "Time KL Shift",
-                                 "First Difference ACF",
-                                 "Nonlinearity",
-                                 "Time Variance Shift",
-                                 "First Difference PACF5",
-                                 "Second Difference ACF",
-                                 "Second Difference PACF5",
-                                 "Error ACF10",
-                                 "Seasonal PACF",
-                                 "X ACF",
-                                 "Trend",
-                                 "First Difference ACF10",
-                                 "Seasonal Strength",
-                                 "Second Difference ACF10",
-                                 "Seasonal ACF",
-                                 "Trough", 
-                                 "Peak",
-                                 "Mean", 
-                                 "Curvature",
-                                 "Max Variance Shift",
-                                 "Max Level Shift",
-                                 "Linearity",
-                                 "Variance",
-                                 "Spike")),
-                    var = reorder_within(var, imp, model)) %>%
   ggplot(aes(x=var, y=imp)) +
   geom_col() +
   coord_flip() +
@@ -527,21 +347,25 @@ final_importances %>%
 
 sf
 
-# trend, spike, max_var_shift, series_variance, max_level_shift, series_mean
+#####################################################
 
-fv <- c("stl_features", "max_var_shift", "series_variance", "series_mean", "max_level_shift")
+## under k-nTS plus, the data provider generates forecasts
+## for period t, and uses random forest to measure feature
+## importance for predicting the forecast accuracy of period 
+## t. The most important features are used in k-nts plus, in
+## hopes of minimizing the impact of data protection on forecast
+## accuracy in period t+1.
 
-# split X into three separate datasets, one for each series length
-Xs <- list()
-unique_lengths <- unique(sapply(X, length))
-lengths <- sapply(X, length)
-for (l in seq_along(unique_lengths)){
-  ids <- lengths==unique_lengths[l]
-  sub_X <- X[ids]
-  Xs[[l]] <- sub_X
-}
+# vector of feature names to calculate
+fv <- c("entropy", "lumpiness", "stability",
+        "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
+        "crossing_points", "flat_spots", "hurst",
+        "unitroot_kpss", "unitroot_pp", "stl_features",
+        "acf_features", "pacf_features",
+        "nonlinearity", "series_mean", "series_variance",
+        "skewness", "kurtosis")
 
-knts_alg <- function(time_series, window_length, k, features_to_calculate, selected_features){
+knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features){
   
   # number of time series
   num_series <- length(time_series)
@@ -553,7 +377,7 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
   
   # restrict the data to the beginning window
-  X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=12))
+  X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
   
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
@@ -599,13 +423,10 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
   for (t in (window_length+1):num_periods){
     
     # restrict the data to the current window
-    X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=12))
+    X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
     
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-    
-    # normalize features
-    # C <- as.data.frame(scale(C))
     
     # transpose C to a c x J matrix (num features by num series)
     C <- t(C)
@@ -626,7 +447,6 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
       K <- sorted$ix[2:(k+1)]
       
       # sample an index
-      # later can implement sampling based on distance based probabilities
       i <- sample(K, size=1)
       
       # replace the value
@@ -639,11 +459,21 @@ knts_alg <- function(time_series, window_length, k, features_to_calculate, selec
   
 }
 
-# perform data protection for three values of k = {5, 10, 15}
-
-perform_knts <- function(time_series, window_length, k, features_to_calculate, selected_features){
+perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features){
   
-  X_k <- lapply(time_series, function(x) knts_alg(x, window_length=window_length, k=k, features_to_calculate=features_to_calculate, selected_features=selected_features))
+  # read in time series
+  X <- import_data(file_name=ts_file, file_path=ts_file_path, sp=seasonal_period)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  unique_lengths <- unique(sapply(X, length))
+  lengths <- sapply(X, length)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- X[ids]
+  }
+  
+  X_k <- lapply(Xs, function(x) knts_alg(x, sp=seasonal_period, window_length=window_length, k=k, features_to_calculate=features_to_calculate, selected_features=selected_features))
   
   X_k <- lapply(X_k, function(x) as.data.frame(t(x)))
   
@@ -655,16 +485,39 @@ perform_knts <- function(time_series, window_length, k, features_to_calculate, s
   
 }
 
-window_length <- 25
+### perform the protection ###
 
-X_k3 <- perform_knts(time_series=Xs, window_length=window_length, k=3, features_to_calculate=fv, selected_features=sf)
-X_k5 <- perform_knts(time_series=Xs, window_length=window_length, k=5, features_to_calculate=fv, selected_features=sf)
-X_k7 <- perform_knts(time_series=Xs, window_length=window_length, k=7, features_to_calculate=fv, selected_features=sf)
-X_k10 <- perform_knts(time_series=Xs, window_length=window_length, k=10, features_to_calculate=fv, selected_features=sf)
-X_k15 <- perform_knts(time_series=Xs, window_length=window_length, k=15, features_to_calculate=fv, selected_features=sf)
+### use a window length = 2x + 1 the sp when sp > 1
+### otherwise use 9, which is the same length as
+### the shortest window with a seasonal period (quarterly)
 
-write.csv(X_k3, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_3.csv", row.names=FALSE)
-write.csv(X_k5, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_5.csv", row.names=FALSE)
-write.csv(X_k7, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_7.csv", row.names=FALSE)
-write.csv(X_k10, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_10.csv", row.names=FALSE)
-write.csv(X_k15, file="../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts-plus_15.csv", row.names=FALSE)
+for (f in file_names[1:2]){
+  
+  # reassign selected features
+  sft <- sf
+  
+  # determine sp
+  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+  
+  if (sp > 1){
+    window_length <- 2*sp + 1
+  } else if (sp == 1) {
+    window_length <- 9
+    # remove seasonal_strength from selected features when sp=1
+    sft <- sf[!sf %in% c("seasonal_strength")]
+  }
+  
+  for (j in c(3, 5, 7, 10, 15)){
+    
+    X_knts <- perform_knts(ts_file=f,
+                           ts_file_path=fp,
+                           seasonal_period=sp,
+                           window_length=window_length,
+                           k=j,
+                           features_to_calculate=fv,
+                           selected_features=sft)
+    
+    write.csv(X_knts, file=paste0(fp, "k-nts-plus_", j, "_", f))
+    
+  }
+}
