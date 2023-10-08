@@ -367,7 +367,7 @@ file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
 computation_time <- tibble()
 
 # vector of feature names to calculate in k-nTS+
-fv <- c("entropy", "lumpiness", "stability",
+fv <- c("entropy_c", "lumpiness", "stability",
         "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
         "crossing_points", "flat_spots", "hurst",
         "unitroot_kpss", "unitroot_pp", "stl_features",
@@ -382,7 +382,7 @@ num_iter <- 25
 
 feature_file_names <- grep("h2_train", list.files("../../Data/Features/"), value=TRUE)
 
-file_names <- file_names[file_names %in% c("monthly-MICRO_h1_train.csv", "quarterly-FINANCE_h1_train.csv")]
+# file_names <- file_names[file_names %in% c("monthly-MICRO_h1_train.csv", "quarterly-FINANCE_h1_train.csv")]
 
 # loop over file names
 for (f in file_names){
@@ -576,47 +576,47 @@ for (f in file_names){
     
     ############################################################################
     
-    swap_start <- Sys.time()
-    
-    X_knts_cor <- perform_knts(ts_file=f,
-                               ts_file_path=fp,
-                               seasonal_period=sp,
-                               window_length=window_length,
-                               k=j,
-                               features_to_calculate=fv,
-                               selected_features=sft,
-                               corr_based=TRUE)
-    
-    swap_stop <- Sys.time()
-    
-    print("Stopping swapping.")
-    
-    corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
-    
-    write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
+    # swap_start <- Sys.time()
+    # 
+    # X_knts_cor <- perform_knts(ts_file=f,
+    #                            ts_file_path=fp,
+    #                            seasonal_period=sp,
+    #                            window_length=window_length,
+    #                            k=j,
+    #                            features_to_calculate=fv,
+    #                            selected_features=sft,
+    #                            corr_based=TRUE)
+    # 
+    # swap_stop <- Sys.time()
+    # 
+    # print("Stopping swapping.")
+    # 
+    # corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
+    # 
+    # write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
     
   }
   
-  computation_row <- tibble(File = f,
-                            feature_prep = difftime(feature_stop, feature_start, units="mins"),
-                            RReliefF = fsr[["relief_time"]],
-                            RFE = fsr[["rfe_time"]],
-                            swap3 = swap_times[1],
-                            swap5 = swap_times[2],
-                            swap7 = swap_times[3],
-                            swap10 = swap_times[4],
-                            swap15 = swap_times[5],
-                            corswap3 = corr_swap_times[1],
-                            corswap5 = corr_swap_times[2],
-                            corswap7 = corr_swap_times[3],
-                            corswap10 = corr_swap_times[4],
-                            corswap15 = corr_swap_times[5],)
-  
-  computation_time <- bind_rows(computation_time, computation_row)
+  # computation_row <- tibble(File = f,
+  #                           feature_prep = difftime(feature_stop, feature_start, units="mins"),
+  #                           RReliefF = fsr[["relief_time"]],
+  #                           RFE = fsr[["rfe_time"]],
+  #                           swap3 = swap_times[1],
+  #                           swap5 = swap_times[2],
+  #                           swap7 = swap_times[3],
+  #                           swap10 = swap_times[4],
+  #                           swap15 = swap_times[5],
+  #                           corswap3 = corr_swap_times[1],
+  #                           corswap5 = corr_swap_times[2],
+  #                           corswap7 = corr_swap_times[3],
+  #                           corswap10 = corr_swap_times[4],
+  #                           corswap15 = corr_swap_times[5],)
+  # 
+  # computation_time <- bind_rows(computation_time, computation_row)
   
 }
 
-write.csv(computation_time, file="../../Data/Computation Results/k-nts-plus.csv", row.names=FALSE)
+# write.csv(computation_time, file="../../Data/Computation Results/k-nts-plus.csv", row.names=FALSE)
 
 ################################################################################
 ################################################################################

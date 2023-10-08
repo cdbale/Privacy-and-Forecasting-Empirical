@@ -220,7 +220,7 @@ cleaned_data_path = "../../Data/Cleaned/"
 cleaned_files = os.listdir(cleaned_data_path)
 
 # # # training data for feature selection
-h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "-scaled" in x]
+h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "preprocess-lw" in x]
 h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
 forecasts_path = "../../Outputs/Forecasts/"
@@ -236,8 +236,8 @@ forecasting_models = {"SES": {"sp":None, "mean_normalize":False, "options":None}
                       "TES": {"sp":None, "mean_normalize":False, "options":None},
                       "ARIMA": {"sp":None, "mean_normalize":False, "options":None},
                       "VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
-                      "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-                      "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
+                      "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}}}
+                      # "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
 
 for m in forecasting_models.items():
     

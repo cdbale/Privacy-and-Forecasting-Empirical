@@ -91,11 +91,11 @@ computation_time = pd.read_csv("../../Data/Computation Results/computation_time.
 
 # # now we store all the cleaned data file names including the baseline
 # # protected data sets
-# cleaned_data_path = "../../Data/Cleaned/"
-# cleaned_files = os.listdir(cleaned_data_path)
+cleaned_data_path = "../../Data/Cleaned/"
+cleaned_files = os.listdir(cleaned_data_path)
 
 # # # training data for feature selection
-# h2_train_files = [x for x in cleaned_files if "_h2_train" in x]
+# h2_train_files = [x for x in cleaned_files if "_h2_train" in x and "baseline-swapped" in x]
 # h2_test_files = [x for x in cleaned_files if "_h2_test" in x]
 
 forecasts_path = "../../Outputs/Forecasts/"
@@ -109,10 +109,10 @@ results_path = "../../Outputs/Results/"
 # forecasting_models = {"SES": {"sp":None, "mean_normalize":False, "options":None},
 #                       "DES": {"sp":None, "mean_normalize":False, "options":None},
 #                       "TES": {"sp":None, "mean_normalize":False, "options":None},
-#                       "ARIMA": {"sp":None, "mean_normalize":False, "options":None},
+#                       # "ARIMA": {"sp":None, "mean_normalize":False, "options":None},
 #                       "VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
-#                       "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-#                       "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
+#                       "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}}}
+#                       # "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
 
 # for m in forecasting_models.items():
     
@@ -170,33 +170,36 @@ results_path = "../../Outputs/Results/"
 
 # computation_time.to_csv("../../Data/Computation Results/computation_time.csv", index=False)
 
-# ### generate error distributions for forecasts made for second to last period - these are
-# ### used in k-nTS+
+### generate error distributions for forecasts made for second to last period - these are
+### used in k-nTS+
 
 # create a list of the original file names
-# og_files = os.listdir(cleaned_data_path)
-# og_files = [x[:-12] for x in og_files if not any(y in x for y in ['_train', '_h1_', 'k-nts', 'AN_', 'DP_'])]
+og_files = os.listdir(cleaned_data_path)
+og_files = [x[:-12] for x in og_files if not any(y in x for y in ['Augmented', '_train', '_h1_', 'k-nts', 'AN_', 'DP_'])]
 
-# # for each of these, we need to extract the error distributions for all forecasting models and 
-# # baseline data sets
+# for each of these, we need to extract the error distributions for all forecasting models and 
+# baseline data sets
 
-# models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM", "RNN"]
+models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM", "RNN"]
 
-# protection_methods = {"original": [""],
-#                       "AN": [0.25, 0.5, 1, 1.5, 2],
-#                       "DP": [0.1, 1, 4.6, 10, 20]}
+protection_methods = {"original": [""],
+                      "AN": [0.25, 0.5, 1, 1.5, 2],
+                      "DP": [0.1, 1, 4.6, 10, 20],
+                      "baseline-swapped": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}
 
-# computation_time["error_computation"] = np.zeros(computation_time.shape[0])
+# protection_methods = {"baseline-swapped": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}
 
-# computation_time.to_csv("../../Data/Computation Results/computation_time.csv", index=False)
+computation_time["error_computation"] = np.zeros(computation_time.shape[0])
 
-# for f in og_files:
-#     error_distribution_generator(file_string=f,
-#                                  forecasts_path=forecasts_path, 
-#                                  results_path=results_path, 
-#                                  model_list=models, 
-#                                  protection_method_dict=protection_methods, 
-#                                  forecast_horizon="h2")
+computation_time.to_csv("../../Data/Computation Results/computation_time.csv", index=False)
+
+for f in og_files:
+    error_distribution_generator(file_string=f,
+                                 forecasts_path=forecasts_path, 
+                                 results_path=results_path, 
+                                 model_list=models, 
+                                 protection_method_dict=protection_methods, 
+                                 forecast_horizon="h2")
 
 #############################
 
@@ -216,70 +219,70 @@ results_path = "../../Outputs/Results/"
 
 # # now we store all the cleaned data file names including the baseline
 # # protected data sets
-cleaned_data_path = "../../Data/Cleaned/"
-cleaned_files = os.listdir(cleaned_data_path)
+# cleaned_data_path = "../../Data/Cleaned/"
+# cleaned_files = os.listdir(cleaned_data_path)
 
-# # # training data for feature selection
-h1_train_files = [x for x in cleaned_files if "_h1_train" in x]
-h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
+# # # # training data for feature selection
+# h1_train_files = [x for x in cleaned_files if "_h1_train" in x]
+# h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
-forecasts_path = "../../Outputs/Forecasts/"
-results_path = "../../Outputs/Results/"
+# forecasts_path = "../../Outputs/Forecasts/"
+# results_path = "../../Outputs/Results/"
 
-# loop over forecasting models and training data files
+# # loop over forecasting models and training data files
 
-# for seasonal models, we have to account for some data not having a seasonal period.
-# for TES, we only apply it to monthly and quarterly data
+# # for seasonal models, we have to account for some data not having a seasonal period.
+# # for TES, we only apply it to monthly and quarterly data
 
-forecasting_models = {"SES": {"sp":None, "mean_normalize":False, "options":None},
-                      "DES": {"sp":None, "mean_normalize":False, "options":None},
-                      "TES": {"sp":None, "mean_normalize":False, "options":None}}
-                      #"ARIMA": {"sp":None, "mean_normalize":False, "options":None},
-                      #"VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
-                      #"LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-                      #"RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
+# forecasting_models = {"SES": {"sp":None, "mean_normalize":False, "options":None},
+#                       "DES": {"sp":None, "mean_normalize":False, "options":None},
+#                       "TES": {"sp":None, "mean_normalize":False, "options":None}}
+#                       #"ARIMA": {"sp":None, "mean_normalize":False, "options":None},
+#                       #"VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
+#                       #"LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
+#                       #"RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
 
-for m in forecasting_models.items():
+# for m in forecasting_models.items():
     
-    model = m[0]
-    model_args = m[1]
+#     model = m[0]
+#     model_args = m[1]
 
-    for f in h1_train_files:
+#     for f in h1_train_files:
         
-        if "monthly" in f:
-            model_args["sp"] = 12
-            if model == "LGBM":
-                model_args["options"]["window_length"] = 25
-            elif model == "RNN":
-                model_args["options"]["input_chunk_length"] = 25
-                model_args["options"]["training_length"] = 30
-        elif "quarterly" in f:
-            model_args["sp"] = 4
-            if model == "LGBM":
-                model_args["options"]["window_length"] = 11
-            elif model == "RNN":
-                model_args["options"]["input_chunk_length"] = 11
-                model_args["options"]["training_length"] = 13
-        else:
-            if model == "TES":
-                continue
-            model_args["sp"] = 1
-            if model == "LGBM":
-                model_args["options"]["window_length"] = 11
-            elif model == "RNN":
-                model_args["options"]["input_chunk_length"] = 11
-                model_args["options"]["training_length"] = 13
+#         if "monthly" in f:
+#             model_args["sp"] = 12
+#             if model == "LGBM":
+#                 model_args["options"]["window_length"] = 25
+#             elif model == "RNN":
+#                 model_args["options"]["input_chunk_length"] = 25
+#                 model_args["options"]["training_length"] = 30
+#         elif "quarterly" in f:
+#             model_args["sp"] = 4
+#             if model == "LGBM":
+#                 model_args["options"]["window_length"] = 11
+#             elif model == "RNN":
+#                 model_args["options"]["input_chunk_length"] = 11
+#                 model_args["options"]["training_length"] = 13
+#         else:
+#             if model == "TES":
+#                 continue
+#             model_args["sp"] = 1
+#             if model == "LGBM":
+#                 model_args["options"]["window_length"] = 11
+#             elif model == "RNN":
+#                 model_args["options"]["input_chunk_length"] = 11
+#                 model_args["options"]["training_length"] = 13
             
-        test_file = [x for x in h1_test_files if x[:-9] in f]
-        [test_file] = test_file
+#         test_file = [x for x in h1_test_files if x[:-9] in f]
+#         [test_file] = test_file
 
-        generate_and_save_forecasts(train_file=f,
-                                    test_file=test_file,
-                                    forecasts_path=forecasts_path,
-                                    results_path=results_path,
-                                    model=model,
-                                    model_args=model_args,
-                                    h=1,
-                                    file_suffix=f)
+#         generate_and_save_forecasts(train_file=f,
+#                                     test_file=test_file,
+#                                     forecasts_path=forecasts_path,
+#                                     results_path=results_path,
+#                                     model=model,
+#                                     model_args=model_args,
+#                                     h=1,
+#                                     file_suffix=f)
 
-print('Done.')
+# print('Done.')

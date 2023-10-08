@@ -4,9 +4,6 @@
 
 # ------------------------------------------------------------------------- #
 
-# scale by the point prior to forecast origin and use tsoutliers to
-# remove outliers.
-
 library(plyr)
 library(tidyverse)
 library(tsfeatures)
@@ -15,7 +12,21 @@ library(ggplot2)
 library(ranger)
 library(tidytext)
 library(CORElearn)
-library(gratis)
+library(stats)
+library(forecast)
+
+# steps:
+
+# - track computation time (each part - RReliefF, RFE, swapping)
+# - import original data
+# - import baseline protected versions of data
+# - import corresponding features
+# write a function to do everything and save the results for one 
+# original file at a time
+# Save:
+# - computation time for each part
+
+## NEED TO RE-Read in X with h1 when doing protection
 
 source("custom_feature_functions.R")
 
@@ -40,9 +51,20 @@ import_data <- function(file_name, file_path, sp){
   # truncate data to strictly positive
   ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
   
-  ts_data <- lapply(ts_data, log)
-  
   return(ts_data)
+}
+
+is_seasonal <- function(time_series, sp){
+  
+  if ((sp > 1) & (length(time_series) >= 3*sp)){
+    
+    acfs <- acf(time_series, lag.max=sp, plot=FALSE, type="correlation")[['acf']][,,1]
+    
+    test_result <- abs(acfs[sp+1]) > (1.645*sqrt((1+2*sum(acfs[1:sp]^2))/length(time_series)))
+  } else {
+    test_result <- FALSE
+  }
+  return(test_result)
 }
 
 # function to perform two-stage feature selection using RReliefF and RFE
@@ -164,216 +186,60 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
   
 }
 
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-
-ts_scaler <- function(synthetic_y, y){
-  synthetic_y <- ts(scale(synthetic_y) * sd(y) + mean(y), frequency=frequency(y))
-  return(synthetic_y)
-}
-
-# mar_sim <- function(num_series, length_series, sp){
-#   mm <- mar_model(seasonal_periods = sp)
-#   sim_series <- mm %>%
-#     generate(num_series=num_series,
-#              length_series=length_series) 
-#   
-#   return(sim_series)
-# }
-
-simulate_series <- function(original_series, num_models, num_series){
+knts_alg <- function(time_series, type_of_series, sp, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
   
-  # get frequency of original series
-  sp <- frequency(original_series)
-  series_length <- length(original_series)
+  # note that we won't need to consider any seasonal features for swapping
   
-  X_sim <- lapply(1:num_models, function(x) mar_model(seasonal_periods=sp) %>%
-                                            generate(nseries=num_series,
-                                                     length=series_length,
-                                                     sp=sp) %>%
-                                            as_tibble() %>%
-                                            select(key, value) %>%
-                                            group_split(key, .keep=FALSE))
+  # and these can be removed from the RFE as well
   
-  X_sim <- lapply(unlist(X_sim, recursive=FALSE), function(x) x %>% pull(value))
+  # for each series
   
-  X_sim <- lapply(X_sim, function(x) ts_scaler(x, original_series))
+  # select the point immediately prior to the forecast origin
+  # for scaling the series
+  # scalers <- sapply(time_series, function(x) x[length(x)-1])
   
-  mins <- sapply(X_sim, min)
+  adjusted_series <- list()
+  seasonal_components <- list()
   
-  mins <- ifelse(mins < 1, abs(mins) + 1, 0)
-  
-  X_sim <- lapply(1:length(X_sim), function(x) X_sim[[x]] + abs(mins[x]))
-  
-  return(X_sim)
-}
+  for (s in seq_along(time_series)){
+    
+    # perform a seasonality test
+    seasonal_test <- is_seasonal(time_series[[s]], sp)
+    
+    # if seasonal,
+    if (seasonal_test){
+      
+      # apply box-cox transformation
+      lmda <- BoxCox.lambda(time_series[[s]], method='guerrero')
+      transformed <- BoxCox(time_series[[s]], lambda=lmda)
+      
+      # STL decomposition
+      decomposed <- stl(transformed, s.window="periodic")[['time.series']]
+      
+      # inverse box-cox on trend + remainder component 
+      sadj <- InvBoxCox(decomposed[,2] + decomposed[,3], lambda=lmda)
+      
+      # keep seasonal component to add back in at the end
+      seasonal_components[[s]] <- decomposed[,1]
+      
+    } else {
+      
+      sadj <- time_series[[s]]
+      
+      seasonal_components[[s]] <- ts(rep(0, length(sadj)), frequency=sp)
+      
+    }
+    
+    # smooth the seasonally adjusted series using Loess
+    alpha <- ifelse(type_of_series=="monthly", 0.10, 0.25)
+    treg <- 1:length(sadj)
+    smoothed_model <- loess(sadj ~ treg, span=alpha)
+    smoothed_sadj <- ts(predict(smoothed_model), frequency=sp)
+    
+    adjusted_series[[s]] <- smoothed_sadj
+  }
 
-# now test with comparing to an actual series
-
-# X <- import_data("yearly-FINANCE_h1_train.csv", "../../Data/Cleaned/", 1)
-# 
-# num_models <- ceiling(20000/(length(X)*15))
-# 
-# temp <- unlist(lapply(X, function(x) simulate_series(x, num_models, 15)), recursive=FALSE)
-# 
-# 
-# 
-# 
-# X_sim <- lapply(1:40, function(x) simulate_series(num_series=500,
-#                                                   length_series=46,
-#                                                   sp=1))
-# 
-# X_sim <- unlist(X_sim, recursive=FALSE)
-# 
-# # scale series to match target series
-# 
-# X_sim <- lapply(X_sim, function(x) ts_scaler(x, X[[1]]))
-
-# # vector of feature names to calculate in k-nTS+
-# fv <- c("entropy", "lumpiness", "stability",
-#         "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
-#         "crossing_points", "flat_spots", "hurst",
-#         "unitroot_kpss", "unitroot_pp", "stl_features",
-#         "acf_features", "pacf_features",
-#         "nonlinearity", "series_mean", "series_variance",
-#         "skewness", "kurtosis")
-# 
-# sf <- c("trend",
-#         "unitroot_pp",
-#         "spike",
-#         "max_var_shift",
-#         "max_level_shift")
-# #
-# # # vector of feature names to calculate in k-nTS+
-# temp_fv <- c("entropy", "lumpiness", "stability",
-#         "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
-#         "crossing_points", "flat_spots", "hurst",
-#         "unitroot_kpss", "unitroot_pp", "stl_features",
-#         "acf_features", "pacf_features",
-#         "nonlinearity", "series_mean", "series_variance",
-#         "skewness", "kurtosis")
-# 
-# temp_sf <- c("trend",
-#         "unitroot_pp",
-#         "spike",
-#         "max_var_shift",
-#         "max_level_shift")
-
-# function to return vector of feature values
-# feature_calculator <- function(y) {
-#   return(deframe(gather(tsfeatures(y, features=temp_fv, scale=FALSE)[temp_sf])))
-# }
-
-# y_features <- feature_calculator(temp_data[[1]])
-# 
-# fake_series <- generate_target(nseries=15,
-#                                length = length(temp_data[[1]]),
-#                                seasonal_periods=1,
-#                                feature_function = feature_calculator,
-#                                target = y_features,
-#                                tolerance=0.3)
-# 
-# temp <- fake_series %>%
-#   select(-index) %>%
-#   group_split(key, .keep=FALSE)
-# 
-# temp <- lapply(temp, function(x) x %>% pull(value))
-# 
-# temp <- lapply(temp, function(x) ts_scaler(x, temp_data[[1]]))
-# 
-# temp <- lapply(1:length(temp), function(x) tibble(index=1:length(temp[[x]]),
-#                                                   key=paste0("Series ", x),
-#                                                   value=temp[[x]][1:length(temp[[x]])],
-#                                                   synthetic=1))
-# 
-# temp[[21]] <- tibble(index=1:length(temp_data[[1]]),
-#                             key="Series Original",
-#                             value=temp_data[[1]][1:length(temp_data[[1]])],
-#                             synthetic=0)
-# 
-# temp <- do.call(rbind, temp)
-# 
-# temp %>%
-#   ggplot(aes(x=index, y=value, color=key)) +
-#   geom_line() +
-#   facet_wrap(~synthetic)
-# 
-# 
-
-
-# # function to generate a bunch of synthetic series that target the feature
-# # values of the provided series
-# synthetic_generator <- function(real_series, features_to_calculate, selected_features, num_to_generate, feature_tol){
-# 
-#   # used internally by feature calculation function `feature_calculator`
-#   temp_fv <<- features_to_calculate[!features_to_calculate %in% c("series_mean", "series_variance")]
-#   temp_sf <<- selected_features[!selected_features %in% c("series_mean", "series_variance")]
-# 
-#   y_features <- feature_calculator(real_series)
-# 
-#   fake_series <- generate_target(nseries=num_to_generate,
-#                                  length = length(real_series),
-#                                  seasonal_periods=frequency(real_series),
-#                                  feature_function = feature_calculator,
-#                                  target = y_features,
-#                                  tolerance=feature_tol)
-# 
-#   temp <- fake_series %>%
-#     select(-index) %>%
-#     group_split(key, .keep=FALSE)
-# 
-#   temp <- lapply(temp, function(x) x %>% pull(value))
-# 
-#   temp <- lapply(temp, function(x) ts_scaler(x, real_series))
-# 
-#   return(temp)
-# }
-# 
-# augment_data <- function(full_real_series, features_to_calculate, selected_features, num_to_generate, feature_tol){
-# 
-#   synth_series <- lapply(full_real_series, function(x) synthetic_generator(real_series=x,
-#                                                                            features_to_calculate=features_to_calculate,
-#                                                                            selected_features=selected_features,
-#                                                                            num_to_generate=num_to_generate,
-#                                                                            feature_tol=feature_tol))
-# 
-#   synth_series <- unlist(synth_series, recursive=FALSE)
-# 
-#   return(append(full_real_series, synth_series))
-# 
-# }
-
-
-# 
-# 
-# 
-# 
-# 
-# 
-# start <- Sys.time()
-# ttt <- augment_data(temp_data,
-#                     features_to_calculate = fv,
-#                     selected_features = sf,
-#                     num_to_generate = 15,
-#                     feature_tol = 0.4)
-# stop <- Sys.time()
-# 
-# stop-start
-
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-
-knts_alg <- function(time_series, synthetic_series, sp, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
-  
-  # number of time series to actually protect
+  # number of time series
   num_series <- length(time_series)
   
   # number of time periods
@@ -382,29 +248,21 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
   # matrix to hold new series
   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
   
-  # append synthetic series on to original series
-  full_series <- append(time_series, synthetic_series)
-  
-  names(full_series) <- as.character(c(1:length(full_series)))
-  
-  X_means <- unname(sapply(time_series, mean))
-  X_sds <- unname(sapply(time_series, sd))
-  
-  X_scaled <- lapply(full_series, function(x) (x-mean(x))/sd(x))
-
   # restrict the data to the beginning window
-  X_window <- lapply(X_scaled, function(x) ts(x[1:window_length], frequency=sp))
+  X_window <- lapply(adjusted_series, function(x) ts(x[1:window_length], frequency=sp))
   
-  if (corr_based){
-    X_cor <- cor(do.call(cbind, X_window))
-  }
+  # extract scaling points - the time period prior to forecast origin
+  scalers <- sapply(X_window, function(x) x[length(x)-1])
   
-  print("pre-feature calculation")
+  # scale series
+  scaled_X_window <- lapply(1:length(X_window), function(x) X_window[[x]]/scalers[x])
+  
+  # if (corr_based){
+  #   X_cor <- cor(do.call(cbind, X_window))
+  # }
   
   # calculate the features for the current window
-  C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-  
-  print("feature calculation done")
+  C <- tsfeatures(scaled_X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   
   # normalize features
   # C <- as.data.frame(scale(C))
@@ -413,11 +271,10 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
   C <- t(C)
   
   ## Calculate the feature distance matrix D
-  ones_column <- as.matrix(rep(1, length(full_series)), nrow=length(full_series))
+  ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
   D <- ones_column %*% diag(t(C)%*%C) - 2*t(C)%*%C + diag(t(C)%*%C) %*% t(ones_column)
   
-  # for each series we need to protect
-  # these are the first J series in the augmented data
+  # for each time period in the initial window
   for (j in 1:num_series){
     
     # select the jth column
@@ -429,16 +286,16 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
     # select from index 2 to k+1 since first index corresponds to the series itself
     K <- sorted$ix[2:(k+1)]
     
-    if (corr_based){
-      #############################
-      
-      # obtain the correlations corresponding to the K indexes
-      cors <- X_cor[,j][K]
-      
-      swap_weights <- exp(cors)/sum(exp(cors))
-      
-      #############################
-    }
+    # if (corr_based){
+    #   #############################
+    #   
+    #   # obtain the correlations corresponding to the K indexes
+    #   cors <- X_cor[,j][K]
+    #   
+    #   swap_weights <- exp(cors)/sum(exp(cors))
+    #   
+    #   #############################
+    # }
     
     # for each series
     for (t in 1:window_length){
@@ -452,7 +309,7 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
       }
       
       # replace the value
-      X_new[t,j] <- X_scaled[[i]][t]
+      X_new[t,j] <- scaled_X_window[[i]][t] * scalers[j]
       
     }
   }
@@ -464,23 +321,30 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
   for (t in (window_length+1):num_periods){
     
     # restrict the data to the current window
-    X_window <- lapply(X_scaled, function(x) ts(x[(t-window_length+1):t], frequency=sp))
+    X_window <- lapply(adjusted_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
     
-    if (corr_based){
-      ##################################
-      
-      X_cor <- cor(do.call(cbind, X_window))
-      
-      ##################################
-    }
+    # extract scaling points - the time period prior to forecast origin
+    scalers <- sapply(X_window, function(x) x[length(x)-1])
+    
+    # scale series
+    scaled_X_window <- lapply(1:length(X_window), function(x) X_window[[x]]/scalers[x])
+    
+    # if (corr_based){
+    #   ##################################
+    #   
+    #   X_cor <- cor(do.call(cbind, X_window))
+    #   
+    #   ##################################
+    # }
     
     ## calculate the features for the current window
-    C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
+    C <- tsfeatures(scaled_X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
     
     # transpose C to a c x J matrix (num features by num series)
     C <- t(C)
     
     ## Calculate the feature distance matrix D
+    # ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
     D <- ones_column %*% diag(t(C)%*%C) - 2*t(C)%*%C + diag(t(C)%*%C) %*% t(ones_column)
     
     for (j in 1:num_series){
@@ -494,16 +358,16 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
       # select from index 2 to k+1 since first index corresponds to the series itself
       K <- sorted$ix[2:(k+1)]
       
-      if (corr_based){
-        #############################
-        
-        # obtain the correlations corresponding to the K indexes
-        cors <- X_cor[,j][K]
-        
-        swap_weights <- exp(cors)/sum(exp(cors))
-        
-        #############################
-      }
+      # if (corr_based){
+      #   #############################
+      #   
+      #   # obtain the correlations corresponding to the K indexes
+      #   cors <- X_cor[,j][K]
+      #   
+      #   swap_weights <- exp(cors)/sum(exp(cors))
+      #   
+      #   #############################
+      # }
       
       if (corr_based){
         # sample an index based on correlation
@@ -514,42 +378,50 @@ knts_alg <- function(time_series, synthetic_series, sp, window_length, k, featur
       }
       
       # replace the value
-      X_new[t,j] <- X_scaled[[i]][t]
+      X_new[t,j] <- scaled_X_window[[i]][window_length] * scalers[j]
       
     }
   }
   
-  X_new <- (X_new * X_sds) + X_means
+  # add seasonal component back
+  for (i in 1:ncol(X_new)){
+    X_new[,i] + seasonal_components[[i]]
+  }
   
   return(X_new)
   
 }
 
-# perform_knts <- function(ts_file, ts_file_path, augmented_series, seasonal_period, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
-#   
-#   # read in time series
-#   X <- import_data(file_name=ts_file, file_path=ts_file_path, sp=seasonal_period)
-#   
-#   # split X into separate datasets, one for each series length
-#   Xs <- list()
-#   unique_lengths <- unique(sapply(X, length))
-#   lengths <- sapply(X, length)
-#   for (l in seq_along(unique_lengths)){
-#     ids <- lengths==unique_lengths[l]
-#     Xs[[l]] <- X[ids]
-#   }
-#   
-#   X_k <- lapply(Xs, function(x) knts_alg(x, sp=seasonal_period, window_length=window_length, k=k, features_to_calculate=features_to_calculate, selected_features=selected_features, corr_based=corr_based))
-#   
-#   X_k <- lapply(X_k, function(x) as.data.frame(t(x)))
-#   
-#   X_k <- lapply(X_k, exp)
-#   
-#   X_k <- do.call(rbind.fill, X_k)
-#   
-#   return(X_k)
-#   
-# }
+
+perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, k, features_to_calculate, selected_features, corr_based=FALSE){
+  
+  # read in time series
+  X <- import_data(file_name=ts_file, file_path=ts_file_path, sp=seasonal_period)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  unique_lengths <- unique(sapply(X, length))
+  lengths <- sapply(X, length)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- X[ids]
+  }
+  
+  ts_type <- ifelse(grepl("monthly", ts_file), "monthly", "non-monthly")
+  
+  window_lengths <- sapply(Xs, function(x) ifelse(length(x[[1]]) >= 25, 25, ceiling(0.80*length(x[[1]]))))
+  
+  X_k <- lapply(Xs, function(x) knts_alg(x, type_of_series=ts_type, sp=seasonal_period, window_length=window_length, k=k, features_to_calculate=features_to_calculate, selected_features=selected_features, corr_based=corr_based))
+  
+  X_k <- lapply(X_k, function(x) as.data.frame(t(x)))
+  
+  # X_k <- lapply(X_k, exp)
+  
+  X_k <- do.call(rbind.fill, X_k)
+  
+  return(X_k)
+  
+}
 
 ################################################################################
 ################################################################################
@@ -593,6 +465,8 @@ num_iter <- 25
 
 feature_file_names <- grep("h2_train", list.files("../../Data/Features/"), value=TRUE)
 
+# file_names <- file_names[file_names %in% c("quarterly-FINANCE_h1_train.csv")]
+
 # loop over file names
 for (f in file_names){
   
@@ -625,6 +499,8 @@ for (f in file_names){
     
     params <- strsplit(ff, split="_")[[1]]
     
+    print(params)
+    
     if (!params[2] %in% c("AN", "DP")){
       features["Protection"] <- "Original"
       features["Parameter"] <- "Original"
@@ -634,6 +510,14 @@ for (f in file_names){
     }
     
     full_features <- bind_rows(full_features, features)
+    
+  }
+  
+  if (grepl("monthly", f) | grepl("quarterly", f)){
+    
+    ##### remove seasonal features #####
+    full_features <- full_features %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
     
   }
   
@@ -753,114 +637,52 @@ for (f in file_names){
   
   # minimum window length of 11 so that x_acf10 can be calculated
   window_length <- max(c(2*sp + 1, 11))
+  
+  swap_times <- c()
+  corr_swap_times <- c()
+  
+  for (j in c(3, 5, 7, 10, 15)){
+    
+    print("Starting swapping.")
+    
+    swap_start <- Sys.time()
 
-  if (sp == 1) {
-    sft <- sf[!sf %in% c("seasonal_strength", "peak", "trough", "seas_acf1", "seas_pacf")]
+    X_knts <- perform_knts(ts_file=f,
+                           ts_file_path=fp,
+                           seasonal_period=sp,
+                           window_length=window_length,
+                           k=j,
+                           features_to_calculate=fv,
+                           selected_features=sft)
+    
+    swap_stop <- Sys.time()
+    
+    swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="mins"))
+    
+    write.csv(X_knts, file=paste0(fp, "preprocess-k-nts-plus_", j, "_", f), row.names=FALSE)
+    
+    ############################################################################
+    
+    # swap_start <- Sys.time()
+    # 
+    # X_knts_cor <- perform_knts(ts_file=f,
+    #                            ts_file_path=fp,
+    #                            seasonal_period=sp,
+    #                            window_length=window_length,
+    #                            k=j,
+    #                            features_to_calculate=fv,
+    #                            selected_features=sft,
+    #                            corr_based=TRUE)
+    # 
+    # swap_stop <- Sys.time()
+    # 
+    # print("Stopping swapping.")
+    # 
+    # corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
+    # 
+    # write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
+    
   }
-  
-  # read in time series
-  X <- import_data(file_name=f, file_path=fp, sp=sp)
-    
-  # split X into separate datasets, one for each series length
-  Xs <- list()
-  lengths <- sapply(X, length)
-  unique_lengths <- unique(lengths)
-  for (l in seq_along(unique_lengths)){
-    ids <- lengths==unique_lengths[l]
-    Xs[[l]] <- X[ids]
-  }
-  
-  print("split up X")
-  
-  num_models <- sapply(Xs, function(x) ceiling(5000/(length(x)*15)))
-  
-  Xs_augmented <- lapply(1:length(Xs), function(x) unlist(lapply(Xs[[x]], function(y) simulate_series(y, num_models[[x]], 15)), recursive=FALSE))
-  
-  Xs_augmented <- lapply(Xs_augmented, function(x) lapply(x, log))
-  
-  print("Augmentation done.")
-  
-  for (k in c(3)){
-    X_k <- lapply(1:length(Xs), function(x) knts_alg(Xs[[x]], 
-                                                     Xs_augmented[[x]], 
-                                                     sp=sp, 
-                                                     window_length=window_length, 
-                                                     k=k, 
-                                                     features_to_calculate=fv, 
-                                                     selected_features=sft, 
-                                                     corr_based=FALSE))
-    
-    X_k <- lapply(X_k, function(x) as.data.frame(t(x)))
-    
-    X_k <- lapply(X_k, exp)
-    
-    X_k <- do.call(rbind.fill, X_k)
-    
-    write.csv(X_k, file=paste0(fp, "gratis-full-k-nts-plus_", k, "_", f), row.names=FALSE)
-    
-    X_k_cor <- lapply(1:length(Xs), function(x) knts_alg(Xs[[x]], 
-                                                         Xs_augmented[[x]], 
-                                                         sp=sp, 
-                                                         window_length=window_length, 
-                                                         k=k, 
-                                                         features_to_calculate=fv, 
-                                                         selected_features=sft, 
-                                                         corr_based=TRUE))
-    
-    X_k_cor <- lapply(X_k_cor, function(x) as.data.frame(t(x)))
-    
-    X_k_cor <- lapply(X_k_cor, exp)
-    
-    X_k_cor <- do.call(rbind.fill, X_k_cor)
-    
-    write.csv(X_k_cor, file=paste0(fp, "gratis-full-k-nts-plus-corr_", k, "_", f), row.names=FALSE)
-  }
-  
-  # swap_times <- c()
-  # corr_swap_times <- c()
-  # 
-  # for (j in c(3, 5, 7, 10, 15)){
-  #   
-  #   print("Starting swapping.")
-  #   
-  #   swap_start <- Sys.time()
-  # 
-  #   X_knts <- perform_knts(ts_file=f,
-  #                          ts_file_path=fp,
-  #                          seasonal_period=sp,
-  #                          window_length=window_length,
-  #                          k=j,
-  #                          features_to_calculate=fv,
-  #                          selected_features=sft)
-  #   
-  #   swap_stop <- Sys.time()
-  #   
-  #   swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="mins"))
-  #   
-  #   write.csv(X_knts, file=paste0(fp, "k-nts-plus_", j, "_", f), row.names=FALSE)
-  #   
-  #   ############################################################################
-  #   
-  #   swap_start <- Sys.time()
-  #   
-  #   X_knts_cor <- perform_knts(ts_file=f,
-  #                              ts_file_path=fp,
-  #                              seasonal_period=sp,
-  #                              window_length=window_length,
-  #                              k=j,
-  #                              features_to_calculate=fv,
-  #                              selected_features=sft,
-  #                              corr_based=TRUE)
-  #   
-  #   swap_stop <- Sys.time()
-  #   
-  #   print("Stopping swapping.")
-  #   
-  #   corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
-  #   
-  #   write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
-  #   
-  # }
   
   # computation_row <- tibble(File = f,
   #                           feature_prep = difftime(feature_stop, feature_start, units="mins"),
@@ -890,5 +712,3 @@ for (f in file_names){
 ################################################################################
 ################################################################################
 ################################################################################
-
-## gotta do the step through. Last attempt.

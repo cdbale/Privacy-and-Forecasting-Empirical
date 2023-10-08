@@ -95,7 +95,7 @@ perform_sampling <- function(series, sample_size, sample_index=NULL){
   
   if (is.null(sample_index)){
     
-    max_index <- length(series) - sample_size # not allowing for last value to be included in sample so that it can be assessed in attribute disclosure
+    max_index <- length(series) - sample_size 
     starting_index <- sample(1:max_index, size=1)
     sample <- series[starting_index:(starting_index+sample_size-1)]
     return(list("sample"=sample, "starting_index"=starting_index))
@@ -252,13 +252,23 @@ protected_file_names <- protected_file_names[!protected_file_names %in% file_nam
 
 protected_file_names
 
-privacy_methods = list("AN_" = c(0.25, 0.5, 1, 1.5, 2), 
-                       "DP_" = c(0.1, 1, 4.6, 10, 20), 
-                       "k-nts_" = c(3, 5, 7, 10, 15), 
-                       "k-nts-corr_" = c(3, 5, 7, 10, 15), 
+privacy_methods = list("VAR-simulated" = c("sim"),
+                       # "AN_" = c(0.25, 0.5, 1, 1.5, 2), 
+                       # "DP_" = c(0.1, 1, 4.6, 10, 20), 
+                       # "k-nts_" = c(3, 5, 7, 10, 15), 
+                       # "k-nts-corr_" = c(3, 5, 7, 10, 15), 
                        "k-nts-plus_" = c(3, 5, 7, 10, 15),
-                       "k-nts-plus-corr_" = c(3, 5, 7, 10, 15),
-                       "k-nts-plus-corr-scaled_" = c(3))
+                       "gratis-full-k-nts-plus_" = c(3, 5, 7, 10, 15),
+                       "gratis-k-nts-plus_" = c(3),
+                       # "k-nts-plus-corr_" = c(3, 5, 7, 10, 15),
+                       "preprocess-k-nts-plus_" = c(3, 5, 7, 10, 15))
+                       # "preprocess-lw-k-nts-plus_" = c(3, 5, 7, 10, 15))
+
+var_sim_files <- list.files("../../Outputs/VAR Simulated/")
+# make sure protected versions are excluded
+var_sim_files <- grep("AN_", var_sim_files, value=TRUE, invert=TRUE)
+var_sim_files <- grep("DP_", var_sim_files, value=TRUE, invert=TRUE)
+var_sim_files <- grep("k-nts", var_sim_files, value=TRUE, invert=TRUE)
 
 weighted_ident <- list()
 
@@ -276,30 +286,56 @@ for (i in seq_along(privacy_methods)){
     
     ident_probs <- c()
     
-    # import the files that correspond to the privacy method and parameter
-    pm_files <- grep(current_name, list.files("../../Data/Cleaned/"), value=TRUE)
-    pm_files <- grep(paste0("_", current_param, "_"), pm_files, value=TRUE)
-    pm_files <- grep("_h2", pm_files, value=TRUE, invert=TRUE)
-    
-    ## temporary removal of gratis files
-    pm_files <- grep("gratis", pm_files, value=TRUE, invert=TRUE)
+    if (current_name == "VAR-simulated"){
+      pm_files <- var_sim_files
+    } else {
+      # import the files that correspond to the privacy method and parameter
+      pm_files <- grep(current_name, list.files("../../Data/Cleaned/"), value=TRUE)
+      if (!current_name %in% c("preprocess-k-nts-plus_", "preprocess-lw-k-nts-plus_")){
+        pm_files <- grep("preprocess", pm_files, value=TRUE, invert=TRUE)
+      }
+      if (!current_name %in% c("gratis-full-k-nts-plus_", "gratis-k-nts-plus_")){
+        pm_files <- grep("gratis", pm_files, value=TRUE, invert=TRUE)
+      }
+      pm_files <- grep(paste0("_", current_param, "_"), pm_files, value=TRUE)
+      pm_files <- grep("_h2", pm_files, value=TRUE, invert=TRUE)
+      
+    }
     
     for (f in seq_along(pm_files)){
       
-      confidential_file_prefix <- strsplit(pm_files[f], "_")[[1]][3]
+      if (current_name == "VAR-simulated"){
+        
+        confidential_file_prefix <- strsplit(pm_files[f], "_")[[1]][1]
+        
+        # import the protected series
+        X <- process_series(read.csv(paste0("../../Data/Cleaned/", grep(confidential_file_prefix, file_names, value=TRUE))))
+        
+        # import the protected series
+        Xp <- process_series(read.csv(paste0("../../Outputs/VAR Simulated/", pm_files[f])))
+        
+        for (subex in seq_along(Xp)){
+          
+          ident_probs <- append(ident_probs, simulation_results(confidential_data_list=X[[subex]], protected_data_list=Xp[[subex]], sample_size=E, num_simulations=S))
+          
+        }
+        
+      } else {
       
-      # import the protected series
-      X <- process_series(read.csv(paste0("../../Data/Cleaned/", grep(confidential_file_prefix, file_names, value=TRUE))))
+        confidential_file_prefix <- strsplit(pm_files[f], "_")[[1]][3]
       
-      # import the protected series
-      Xp <- process_series(read.csv(paste0("../../Data/Cleaned/", pm_files[f])))
+        # import the protected series
+        X <- process_series(read.csv(paste0("../../Data/Cleaned/", grep(confidential_file_prefix, file_names, value=TRUE))))
+      
+        # import the protected series
+        Xp <- process_series(read.csv(paste0("../../Data/Cleaned/", pm_files[f])))
 
-      for (subex in seq_along(Xp)){
+        for (subex in seq_along(Xp)){
         
-        ident_probs <- append(ident_probs, simulation_results(confidential_data_list=X[[subex]], protected_data_list=Xp[[subex]], sample_size=E, num_simulations=S))
+          ident_probs <- append(ident_probs, simulation_results(confidential_data_list=X[[subex]], protected_data_list=Xp[[subex]], sample_size=E, num_simulations=S))
         
+        }
       }
-
     }
     
     weighted_ident[[current_name]][[current_param]] <- ident_probs
@@ -312,13 +348,44 @@ library(tidyverse)
 totals <- lapply(weighted_ident, function(x) sapply(x, function(y) sum(y)))
 
 totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_methods)[x],
-                                                      "AvgIdentificationProb" = totals[[x]],
-                                                      "Parameter" = names(totals[[x]])))
+                                                      "AvgIdentificationProb"=totals[[x]],
+                                                      "Parameter"=names(totals[[x]])))
 
 totals <- do.call(rbind, totals)
 
 write.csv(totals, "../../Outputs/Results/Tables/overall_privacy_averages.csv", row.names = FALSE)
 
+totals %>%
+  filter(Method == "gratis-full-k-nts-plus_")
+
+all_length_counts <- unlist(length_counts)
+
+################################################################################
+################################################################################
+################################################################################
+
+# here is the average identification probability for each subset of M3 data.
+probs <- weighted_ident[['k-nts-plus_']][['3']] * (2363/all_length_counts)
+
+ul_length_counts <- unlist(length_counts)
+
+prob_counts <- sapply(length_counts, length)
+
+new_probs <- c()
+for (i in prob_counts){
+  p <- sum(ul_length_counts[1:i]/sum(ul_length_counts[1:i]) * probs[1:i])
+  ul_length_counts <- ul_length_counts[(i+1):length(ul_length_counts)]
+  probs <- probs[(i+1):length(probs)]
+  new_probs <- append(new_probs, p)
+  print(ul_length_counts)
+  print(probs)
+}
+
+# what is the correlation between these identification probabilities and the
+# similarities of the time series? We are looking for time series with similar
+# features, so let's start with the 'fitness' of the time series. Let's start
+# with calculating the three highest fitness values from the neighbors of
+# each time series.
 
 
 

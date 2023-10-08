@@ -1,0 +1,1743 @@
+---
+title: "Data-Exploration-M3-Monthly-Micro"
+author: "Cameron Bale"
+date: "6/3/2022"
+output: html_document
+---
+
+## This file contains exploratory analysis of the M3 Monthly Micro time series.
+
+Import libraries.
+```{r}
+library(tidyverse)
+library(tsfeatures)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(forecast)
+library(e1071)
+library(tsne)
+
+source('custom_feature_functions.R')
+```
+
+Function to import data.
+```{r}
+import_data <- function(file_string, sp, exclude_first_col=FALSE){
+  
+  ts <- read.csv(file_string)
+  
+  if (exclude_first_col){
+    ts <- ts[,2:ncol(ts)]
+  }
+  
+  td <- as.list(as.data.frame(t(ts)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=sp))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  return(td)
+  
+}
+
+feature_calculator <- function(ts, features_to_calculate, scale_series, sp){
+  
+  temp <- tsfeatures(ts, features=features_to_calculate, scale=scale_series) %>%
+    select(-nperiods, -seasonal_period)
+  
+  if(sp > 1){
+    temp <- temp %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+  }
+  
+  return(temp)
+}
+
+feature_calculator_seasonal <- function(ts, features_to_calculate, scale_series, sp){
+  
+  temp <- tsfeatures(ts, features=features_to_calculate, scale=scale_series) %>%
+    select(-nperiods, -seasonal_period)
+  
+  return(temp)
+}
+
+# vector of feature names to calculate in k-nTS+
+fv <- c("entropy_c", "lumpiness", "stability",
+        "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
+        "crossing_points", "flat_spots", "hurst",
+        "unitroot_kpss", "unitroot_pp", "stl_features",
+        "acf_features", "pacf_features",
+        "nonlinearity", "series_mean", "series_variance",
+        "skewness", "kurtosis")
+```
+
+Import the m3 monthly micro data. This will be our baseline to compare the 
+characteristics of these time series to the time series of the other M3 data sets.
+```{r}
+mm_data <- import_data("../../Data/Cleaned/monthly-MICRO_h1_train.csv", 12)
+```
+
+Extract the full set of time series features. For consistency across all time 
+series data sets we are excluding features that derive from seasonality as these 
+cannot be calculated for non-seasonal time series (e.g., yearly). 
+```{r}
+mm_features <- feature_calculator(mm_data, fv, scale=FALSE, 12)
+```
+
+Perform PCA on the monthly micro data. We aren't normalizing the features
+prior to performing PCA since we don't normalize the features prior to calculating
+distances when swapping.
+```{r}
+mm_pca <- prcomp(mm_features, center=FALSE, scale=FALSE)
+
+summary(mm_pca)
+```
+
+Take first two components from the monthly micro data.
+```{r}
+mm_pcs <- as_tibble(mm_pca$x[,1:2]) %>%
+  mutate(data="monthly-MICRO")
+```
+
+Isolate file names for original data sets.
+```{r}
+ts_files <- list.files("../../Data/Cleaned")
+ts_files <- grep("AN_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("DP_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("k-nts", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("Augmented", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("_h2_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("_test", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("monthly-MICRO", ts_files, value=TRUE, invert=TRUE)
+```
+
+Loop over original data sets doing the following:
+(1) Import data
+(2) Calculate features
+(3) Project using weights from monthly micro PCA
+```{r}
+# f <- ts_files[13]
+# 
+# sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+# 
+# df <- import_data(paste0("../../Data/Cleaned/", f), sp)
+# 
+# df_features <- feature_calculator(df, fv, scale=FALSE, sp=sp)
+# 
+# pcs <- as_tibble(predict(mm_pca, df_features)[,1:2]) %>%
+#   mutate(data=substr(f, 1, nchar(f)-13))
+# 
+# combined_pcs <- bind_rows(mm_pcs, pcs)
+```
+
+```{r}
+combined_pcs <- mm_pcs
+
+for (f in ts_files){
+  
+  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+
+  df <- import_data(paste0("../../Data/Cleaned/", f), sp)
+
+  df_features <- feature_calculator(df, fv, scale=FALSE, sp=sp)
+
+  pcs <- as_tibble(predict(mm_pca, df_features)[,1:2]) %>%
+    mutate(data=substr(f, 1, nchar(f)-13))
+
+  combined_pcs <- bind_rows(combined_pcs, pcs)
+  
+}
+```
+
+Plot the time series features of each data set on the principal components space.
+```{r fig.width=10, fig.height=10}
+combined_pcs %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point() +
+  facet_wrap(~data)
+```
+
+***
+
+Plots using t-SNE for dimension reduction.
+
+Perform t-SNE on the monthly-micro data.
+```{r}
+mm_tsne <- tsne(as.matrix(mm_features))
+```
+
+```{r}
+mm_tsne <- tibble("Dim1"=mm_tsne[,1], "Dim2"=mm_tsne[,2])
+```
+
+
+```{r}
+mm_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2)) +
+  geom_point()
+```
+
+```{r}
+mo_data <- import_data("../../Data/Cleaned/monthly-OTHER_h1_train.csv", 12)
+mo_features <- feature_calculator(mo_data, fv, scale=FALSE, 12)
+mo_tsne <- tsne(as.matrix(mm_features))
+mo_tsne <- tibble("Dim1"=mo_tsne[,1], "Dim2"=mo_tsne[,2])
+```
+
+```{r}
+mo_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2)) +
+  geom_point()
+```
+
+Write a function to import a time series data set, compute the features,
+and perform t-SNE dimension reduction.
+```{r}
+calc_feature_density <- function(tsne_features){
+  # also calculate the "density" of the space
+  feature_dists <- dist(tsne_features)
+  feature_density <- sum(feature_dists)/nrow(tsne_features)
+}
+
+feature_tsne <- function(ts_data_file, features_to_calculate, sf, sp){
+  temp <- import_data(paste0("../../Data/Cleaned/", ts_data_file), sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(temp, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- temp[ids]
+  }
+  
+  temp_features <- lapply(Xs, function(x) feature_calculator_seasonal(x, features_to_calculate, scale=FALSE, sp))
+  
+  spec_ents <- lapply(temp_features, function(x) x[,'entropy'] %>% pull(entropy))
+  
+  temp_features <- lapply(temp_features, function(x) x[,sf])
+  
+  temp_tsne <- lapply(temp_features, function(x) tsne(as.matrix(x), whiten=FALSE))
+  
+  tsne_densities <- lapply(temp_tsne, calc_feature_density)
+  
+  all_results <- tibble()
+  
+  for (i in 1:length(temp_tsne)){
+    all_results <- bind_rows(all_results, tibble(dataid=i, 
+                                                 "Dim1"=temp_tsne[[i]][,1], 
+                                                 "Dim2"=temp_tsne[[i]][,2],
+                                                 "SpecEntropy"=spec_ents[[i]],
+                                                 "FeatureDensity"=tsne_densities[[i]]))
+  }
+  
+  return(all_results)
+}
+```
+
+Write a loop that imports time series data, performs the feature t-SNE
+dimension reduction, and combines all the results into a tibble for plotting.
+```{r}
+# paths to the data files and feature files
+fp <- "../../Data/Cleaned/"
+# import names of original data files - this may include protected versions
+# so we have to remove those
+file_names <- grep("_h1_train", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
+
+all_tsne <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][1]
+  
+  tsne_res <- feature_tsne(fname, fv, selected_features[[current_fname]], sp) %>%
+    mutate(data=current_fname)
+  
+  all_tsne <- bind_rows(all_tsne, tsne_res)
+}
+```
+
+```{r}
+all_tsne <- all_tsne %>%
+  mutate(dataid = as.character(dataid),
+         data = paste0(data, "_", dataid)) %>%
+  select(-dataid)
+```
+
+Import the average percent change in accuracy across data sets.
+```{r}
+avg_acc_by_freq <- read_csv("../../Outputs/Results/Tables/averages_by_frequency.csv")
+
+avg_acc_by_freq <- avg_acc_by_freq %>%
+  filter(Protection=="k-nts-plus") %>%
+  select(Data, avg_mase, original_avg_mase, difference)
+
+avg_acc_by_freq <- avg_acc_by_freq %>%
+  mutate(IdentProp = c(0.09875000, 0.09438776, 0.05415225,
+                       0.04960000, 0.03259494, 0.04300000, 
+                       0.15458333, 0.10937500, 0.08117284, 
+                       0.05660920, 0.01200980, 0.14000000,
+                       0.08170732, 0.06493506, 0.01027397),
+         FeatureDensity = unique(all_tsne$FeatureDensity))
+
+avg_acc_by_freq %>%
+  arrange(FeatureDensity) %>%
+  ggplot(aes(x=FeatureDensity, y=IdentProp)) +
+  geom_point(size=2)
+```
+
+The coloring comes from density, which is calculated as the total pairwise
+distances divided by the number of series. A higher value means less dense
+overall. Think of it as the within-data feature distance per series.
+```{r fig.width=14, fig.height=10}
+plt <- all_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point(size=1.75) +
+  facet_wrap(~data)
+
+# ann_text_acc <- data.frame(Dim1=-400, 
+#                            Dim2=500,
+#                            FeatureDensity=1,
+#                            lab=sapply(avg_acc_by_freq$percent_change, function(x) paste0("% Change MAE: ", x)))
+# 
+# ann_text_priv <- data.frame(Dim1=-400,
+#                             Dim2=350,
+#                             FeatureDensity=1,
+#                             lab=sapply(avg_acc_by_freq$IdentProp, function(x) paste0("Prop Ident: ", x)))
+# 
+# plt + 
+#   geom_text(data = ann_text_acc, label = ann_text_acc$lab) +
+#   geom_text(data = ann_text_priv, label = "Text")
+
+plt
+```
+
+Import the original and protected accuracy results.
+```{r}
+acc_original <- read.csv("../../Outputs/Results/Tables/all_original_results.csv")
+
+series_groupings <- function(ts_data_file, sp){
+  temp <- import_data(paste0("../../Data/Cleaned/", ts_data_file), sp)
+  
+  # split X into separate datasets, one for each series length
+  series_group <- rep(NA, length(temp))
+  lengths <- sapply(temp, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    series_group[lengths==unique_lengths[l]] <- l
+  }
+  
+  return(series_group)
+}
+
+all_groupings <- lapply(file_names, function(x) series_groupings(x, 1))
+
+all_groupings
+```
+
+
+```{r}
+all_tsne %>%
+  group_by(data) %>%
+  summarize(mean_spec_entropy = mean(SpecEntropy), .groups='drop') %>%
+  arrange(desc(mean_spec_entropy)) %>%
+  left_join(avg_acc_by_freq, by=c("data"="Data"))
+```
+
+
+Repeat for the k-nTS+ protected data sets.
+```{r}
+# paths to the data files and feature files
+fp <- "../../Data/Cleaned/"
+# import names of original data files - this may include protected versions
+# so we have to remove those
+knts_file_names <- grep("_h1_train", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+knts_file_names <- grep("k-nts-plus_3", knts_file_names, value=TRUE)
+knts_file_names <- grep("gratis", knts_file_names, value=TRUE, invert=TRUE)
+knts_file_names <- grep("preprocess", knts_file_names, value=TRUE, invert=TRUE)
+
+knts_all_tsne <- tibble()
+
+for (fname in knts_file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][3]
+  
+  tsne_res <- feature_tsne(fname, fv, selected_features[[current_fname]], sp) %>%
+    mutate(data=current_fname)
+  
+  knts_all_tsne <- bind_rows(knts_all_tsne, tsne_res)
+}
+```
+
+```{r}
+knts_all_tsne <- knts_all_tsne %>%
+  mutate(dataid = as.character(dataid),
+         data = paste0(data, "_", dataid)) %>%
+  select(-dataid)
+```
+
+The coloring comes from density, which is calculated as the total pairwise
+distances divided by the number of series. A higher value means less dense
+overall. Think of it as the within-data feature distance per series.
+```{r fig.width=14, fig.height=10}
+knts_all_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=FeatureDensity)) +
+  geom_point(size=1.75) +
+  facet_wrap(~data)
+```
+
+```{r}
+all_FD <- all_tsne %>%
+  distinct(data, FeatureDensity) %>%
+  pull(FeatureDensity)
+```
+
+```{r}
+knts_FD <- knts_all_tsne %>%
+  distinct(data, FeatureDensity) %>%
+  pull(FeatureDensity)
+```
+
+```{r}
+FD_diff <- all_FD - knts_FD
+
+FD_diff
+```
+
+```{r}
+plot(FD_diff, ident_probs)
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+unique(all_tsne$FeatureDensity)
+```
+
+
+```{r}
+ident_probs <- c(0.084375000, 0.069531250, 0.156250000, 0.081097561, 0.085344828,
+                 0.067391304, 0.046756757, 0.092105263, 0.036764706, 0.094444444,
+                 0.113888889, 0.021428571, 0.040355330, 0.017241379, 0.066666667,
+                 0.150000000, 0.115625000, 0.118269231, 0.071041667, 0.143750000,
+                 0.087500000, 0.048701299, 0.016216216, 0.022727273, 0.009920635,
+                 0.007894737, 0.140000000, 0.093902439, 0.066233766, 0.011643836)
+
+combined_results <- all_tsne %>%
+  distinct(data, FeatureDensity) %>%
+  bind_cols(ident_probs=ident_probs) %>%
+  mutate(F2 = FeatureDensity^2)
+```
+
+
+```{r}
+combined_results %>%
+  ggplot(aes(x=FeatureDensity, y=ident_probs)) +
+  geom_point()
+
+summary(lm(ident_probs ~ FeatureDensity + F2, data=combined_results))
+```
+
+
+```{r}
+fd <- all_tsne %>%
+  group_by(data) %>%
+  summarize(FeatureDensity=unique(FeatureDensity), .groups='drop') %>%
+  arrange(data) %>%
+  pull(FeatureDensity)
+
+pc <- avg_acc_by_freq %>%
+  filter(Protection=="k-nts-plus") %>%
+  arrange(Data) %>%
+  pull(percent_change)
+
+cor(fd, pc)
+```
+
+
+
+
+
+
+
+
+
+
+Now repeat the t-SNE embeddings but with the k-nTS+ data.
+```{r}
+# paths to the data files and feature files
+fp <- "../../Data/Cleaned/"
+# import names of original data files - this may include protected versions
+# so we have to remove those
+file_names <- grep("_h1_train", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("k-nts-plus_", file_names, value=TRUE)
+
+all_tsne <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  tsne_res <- feature_tsne(fname, fv, sp) %>%
+    mutate(data=strsplit(fname, split="_")[[1]][1])
+  
+  all_tsne <- bind_rows(all_tsne, tsne_res)
+}
+```
+
+
+
+
+
+
+
+
+
+
+***
+
+Repeat PCA plots for M4 data.
+```{r}
+m4_monthly <- import_data("../../Data/Train/Monthly-train.csv", 12, TRUE)
+m4_yearly <- import_data("../../Data/Train/Yearly-train.csv", 1, TRUE)
+m4_quarterly <- import_data("../../Data/Train/Quarterly-train.csv", 4, TRUE)
+```
+
+```{r}
+m4_combined_pcs <- mm_pcs
+
+m4_ts_files <- c("../../Data/Train/Monthly-train.csv", "../../Data/Train/Yearly-train.csv", "../../Data/Train/Quarterly-train.csv")
+
+for (f in m4_ts_files){
+  
+  sp <- ifelse(grepl("Monthly", f), 12, ifelse(grepl("Quarterly", f), 4, 1))
+
+  df <- import_data(f, sp, TRUE)
+
+  df_features <- feature_calculator(df, fv, scale=FALSE, sp=sp)
+
+  pcs <- as_tibble(predict(mm_pca, df_features)[,1:2]) %>%
+    mutate(data=substr(f, 18, nchar(f)-10))
+
+  m4_combined_pcs <- bind_rows(m4_combined_pcs, pcs)
+  
+}
+```
+
+Plot the time series of each data set on the principal components space.
+```{r fig.width=10, fig.height=10}
+m4_combined_pcs %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point() +
+  facet_wrap(~data)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ts_files <- list.files("../../Data/Cleaned")
+ts_files <- grep("AN_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("DP_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("k-nts", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("Augmented", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("_h2_", ts_files, value=TRUE, invert=TRUE)
+ts_files <- grep("_test", ts_files, value=TRUE, invert=TRUE)
+```
+
+Find the distances of the three nearest time series to each original series 
+on the basis of features.
+```{r}
+## Calculate the feature distance matrix D
+D_calc <- function(ts_data){
+  ones_column <- as.matrix(rep(1, ncol(ts_data)), nrow=ncol(ts_data))
+  temp <- ones_column %*% diag(t(ts_data)%*%ts_data) - 2*t(ts_data)%*%ts_data + diag(t(ts_data)%*%ts_data) %*% t(ones_column)
+  return(temp)
+}
+
+fitness <- function(ts_data, num_neighbors){
+  d_matrix <- D_calc(ts_data)
+  fitness_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sorted_indices <- sort(d, index.return=TRUE)$ix[2:(num_neighbors+1)]
+    sort_d <- mean(d[sorted_indices])
+    fitness_vector <- append(fitness_vector, sort_d)
+  }
+  return(fitness_vector)
+}
+
+neighbor_distances <- function(d_matrix, num_neighbors){
+  distance_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    avg_d <- mean(sort_d)
+    distance_vector <- append(distance_vector, avg_d)
+  }
+  return(distance_vector)
+}
+
+neighbor_ratios <- function(d_matrix, num_neighbors){
+  ratio_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    ratio <- sort_d[1]/sort_d[length(sort_d)]
+    ratio_vector <- append(ratio_vector, ratio)
+  }
+  return(ratio_vector)
+}
+```
+
+
+```{r}
+neighbor_fitness <- tibble()
+
+for (f in ts_files){
+  
+  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+
+  df <- import_data(paste0("../../Data/Cleaned/", f), sp)
+  
+  # split df into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(df, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- df[ids]
+  }
+  
+  df_features <- lapply(Xs, function(x) feature_calculator(x, fv, scale=FALSE, sp=sp))
+  
+  fitness_res <- unlist(lapply(df_features, function(x) fitness(t(as.matrix(x)), 3)))
+  
+  fitness_df <- tibble(fitnesses=fitness_res,
+                       data=substr(f, 1, nchar(f)-13))
+  
+  neighbor_fitness <- neighbor_fitness %>% bind_rows(fitness_df)
+  
+}
+```
+
+
+```{r fig.width=10, fig.height=10}
+neighbor_fitness %>%
+  ggplot(aes(x=data, y=fitnesses)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  labs(x = "Data Set",
+       y = "Average Distance",
+       title = "Distribution of Average Feature Distance of k = 3 Nearest Neighbors")
+```
+
+Import forecast errors for all series.
+```{r}
+error_dist_path <- "../../Outputs/Results/Error_Distributions/"
+
+# import results files
+res_files <- list.files(error_dist_path)
+
+res_files <- grep("_all_distributions_h1", res_files, value=TRUE)
+
+all_results <- lapply(res_files, function(x) read_csv(paste0(error_dist_path, x)))
+
+# data frame for calculating protected results
+all_protected_results <- lapply(all_results, function(x) x %>% select(contains("_DP_", ignore.case=FALSE), 
+                                                                      contains("_AN_", ignore.case=FALSE), 
+                                                                      contains("k-nts", ignore.case=FALSE)))
+
+# data frame for calculating protected results
+all_original_results <- lapply(all_results, function(x) x[,grep("_DP_", colnames(x[,grep("_AN_", colnames(x[,grep("k-nts", colnames(x), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)])
+
+# transform to tidy data
+all_protected_results <- lapply(all_protected_results, function(x) x %>% gather(key="name", value="values") %>%
+                                                                         mutate(name = substring(name, 1, nchar(name)-8)) %>%
+                                                                         separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data"), sep="_"))
+
+# transform to tidy data
+all_original_results <- lapply(all_original_results, function(x) x %>% gather(key="name", value="values") %>%
+                                                                       mutate(name = substring(name, 1, nchar(name)-8)) %>%
+                                                                       separate(name, c("Model", "Horizon", "Data"), sep="_"))
+
+# combine into a single dataframe
+all_protected_results <- do.call(rbind, all_protected_results)
+all_original_results <- do.call(rbind, all_original_results)
+```
+
+
+Need to calculate the change in accuracy for each series averaged across models.
+Then plot this against the fitness to see if there is a relationship. Could do
+overall and facet wrap using the data frequency.
+
+Add series number variable.
+```{r}
+all_protected_results <- all_protected_results %>%
+  filter(Protection=="k-nts-plus", Parameter=="3") %>%
+  group_by(Data, Model) %>%
+  mutate(snum=1:n()) %>%
+  group_by(Data, snum) %>%
+  summarize(average_protected_error=mean(values), .groups='drop')
+
+all_original_results <- all_original_results %>%
+  group_by(Data, Model) %>%
+  mutate(snum=1:n()) %>%
+  group_by(Data, snum) %>%
+  summarize(average_original_error=mean(values), .groups='drop')
+```
+
+Join original error results to protected results.
+```{r}
+all_results <- all_protected_results %>%
+  left_join(all_original_results, by=c("Data", "snum")) %>%
+  mutate(pct_change = (average_protected_error-average_original_error)/average_original_error * 100)
+```
+
+```{r}
+neighbor_fitness <- neighbor_fitness %>%
+  group_by(data) %>%
+  mutate(snum = 1:n()) %>%
+  select(data, snum, fitnesses)
+```
+
+
+```{r}
+all_results <- all_results %>%
+  left_join(neighbor_fitness, by=c("Data"="data", "snum"))
+```
+
+Plot fitness against percent change in forecast error.
+```{r fig.width=10, fig.height=10}
+all_results %>%
+  ggplot(aes(x=fitnesses, y=pct_change)) +
+  geom_point() +
+  geom_smooth(method="loess") +
+  labs(x="Average Feature Distance",
+       y="Percent Change in Forecast Accuracy",
+       title="Percent Change in Forecast Accuracy for k-nTS+ (k = 3) Protected Series As a Function of Feature Distance")
+```
+
+Plot fitness against percent change in forecast error across data sets.
+```{r fig.width=10, fig.height=10}
+all_results %>%
+  ggplot(aes(x=fitnesses, y=pct_change)) +
+  geom_point() +
+  geom_smooth(method="loess") +
+  facet_wrap(~Data, scales='free') +
+  labs(x="Fitness",
+       y="Percent Change in Forecast Accuracy",
+       title="Percent Change in Forecast Accuracy for k-nTS+ (k = 3) Protected Series As a Function of Feature Fitness")
+```
+
+Calculate the mean and median fitness for each data set.
+```{r}
+fitness_stats <- neighbor_fitness %>%
+  group_by(data) %>%
+  summarize(avg_fitness = mean(fitnesses),
+            med_fitness = median(fitnesses))
+```
+
+```{r}
+accuracy_results <- read_csv("../../Outputs/Results/Tables/averages_by_frequency.csv") %>%
+  left_join(fitness_stats, by=c("Data"="data"))
+
+accuracy_results %>%
+  filter(Protection == "k-nts-plus") %>%
+  summarize(corr_avg = cor(percent_change, avg_fitness),
+            corr_med = cor(percent_change, med_fitness))
+```
+
+```{r}
+accuracy_results %>%
+  filter(Protection == "preprocess-k-nts-plus") %>%
+  summarize(corr_avg = cor(percent_change, avg_fitness),
+            corr_med = cor(percent_change, med_fitness))
+```
+
+```{r}
+accuracy_results %>%
+  ggplot(aes(x=avg_fitness, y=percent_change, color=Protection)) +
+  geom_point()
+```
+
+***
+***
+***
+
+Let's compare fitness using the time series values themselves. This means
+we find the three nearest neighbors on time series features and then calculate
+their fitness based on the time series points. Essentially, we want to see
+if the similarity of time series points has a relationship between the change
+in forecast accuracy, conditional on the features being as similar as possible.
+
+Find the distances of the three nearest time series to each original series 
+on the basis of features.
+```{r}
+fitness <- function(ts_data, feature_data, num_neighbors){
+  d_matrix <- D_calc(feature_data)
+  sd_matrix <- D_calc(ts_data)
+  fitness_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    s <- sd_matrix[,i]
+    sorted_indices <- sort(d, index.return=TRUE)$ix[2:(num_neighbors+1)]
+    nearest_series_fitness <- mean(s[sorted_indices])
+    fitness_vector <- append(fitness_vector, nearest_series_fitness)
+  }
+  return(fitness_vector)
+}
+```
+
+
+```{r}
+neighbor_fitness <- tibble()
+
+for (f in ts_files){
+  
+  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+
+  df <- import_data(paste0("../../Data/Cleaned/", f), sp)
+  
+  # split df into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(df, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- df[ids]
+  }
+  
+  df_features <- lapply(Xs, function(x) feature_calculator(x, fv, scale=FALSE, sp=sp))
+  
+  Xs <- lapply(Xs, function(x) as.matrix(do.call(cbind, x)))
+  
+  fitness_res <- unlist(lapply(1:length(df_features), function(x) fitness(Xs[[x]], t(as.matrix(df_features[[x]])), 3)))
+  
+  fitness_df <- tibble(fitnesses=fitness_res,
+                       data=substr(f, 1, nchar(f)-13))
+  
+  neighbor_fitness <- neighbor_fitness %>% bind_rows(fitness_df)
+  
+}
+```
+
+
+```{r fig.width=10, fig.height=10}
+neighbor_fitness %>%
+  ggplot(aes(x=data, y=fitnesses)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  labs(x = "Data Set",
+       y = "Average Distance",
+       title = "Distribution of Average Time Series Values Distance of k = 3 Nearest Neighbors")
+```
+
+Import forecast errors for all series.
+```{r}
+error_dist_path <- "../../Outputs/Results/Error_Distributions/"
+
+# import results files
+res_files <- list.files(error_dist_path)
+
+res_files <- grep("_all_distributions_h1", res_files, value=TRUE)
+
+all_results <- lapply(res_files, function(x) read_csv(paste0(error_dist_path, x)))
+
+# data frame for calculating protected results
+all_protected_results <- lapply(all_results, function(x) x %>% select(contains("_DP_", ignore.case=FALSE), 
+                                                                      contains("_AN_", ignore.case=FALSE), 
+                                                                      contains("k-nts", ignore.case=FALSE)))
+
+# data frame for calculating protected results
+all_original_results <- lapply(all_results, function(x) x[,grep("_DP_", colnames(x[,grep("_AN_", colnames(x[,grep("k-nts", colnames(x), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)])
+
+# transform to tidy data
+all_protected_results <- lapply(all_protected_results, function(x) x %>% gather(key="name", value="values") %>%
+                                                                         mutate(name = substring(name, 1, nchar(name)-8)) %>%
+                                                                         separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data"), sep="_"))
+
+# transform to tidy data
+all_original_results <- lapply(all_original_results, function(x) x %>% gather(key="name", value="values") %>%
+                                                                       mutate(name = substring(name, 1, nchar(name)-8)) %>%
+                                                                       separate(name, c("Model", "Horizon", "Data"), sep="_"))
+
+# combine into a single dataframe
+all_protected_results <- do.call(rbind, all_protected_results)
+all_original_results <- do.call(rbind, all_original_results)
+```
+
+Need to calculate the change in accuracy for each series averaged across models.
+Then plot this against the fitness to see if there is a relationship. Could do
+overall and facet wrap using the data frequency.
+
+Add series number variable.
+```{r}
+all_protected_results <- all_protected_results %>%
+  filter(Protection=="k-nts", Parameter=="3") %>%
+  group_by(Data, Model) %>%
+  mutate(snum=1:n()) %>%
+  group_by(Data, snum) %>%
+  summarize(average_protected_error=mean(values), .groups='drop')
+
+all_original_results <- all_original_results %>%
+  group_by(Data, Model) %>%
+  mutate(snum=1:n()) %>%
+  group_by(Data, snum) %>%
+  summarize(average_original_error=mean(values), .groups='drop')
+```
+
+Join original error results to protected results.
+```{r}
+all_results <- all_protected_results %>%
+  left_join(all_original_results, by=c("Data", "snum")) %>%
+  mutate(pct_change = (average_protected_error-average_original_error)/average_original_error * 100)
+```
+
+```{r}
+all_results
+```
+
+```{r}
+neighbor_fitness <- neighbor_fitness %>%
+  group_by(data) %>%
+  mutate(snum = 1:n()) %>%
+  select(data, snum, fitnesses)
+```
+
+
+```{r}
+all_results <- all_results %>%
+  left_join(neighbor_fitness, by=c("Data"="data", "snum"))
+```
+
+Plot fitness against percent change in forecast error.
+```{r fig.width=10, fig.height=10}
+all_results %>%
+  ggplot(aes(x=fitnesses, y=pct_change)) +
+  geom_point() +
+  geom_smooth(method="loess") +
+  labs(x="Average Distance",
+       y="Percent Change in Forecast Accuracy",
+       title="% Change Forecast Accuracy for k-nTS+ (k = 3) Protected Series As a Function of Time Series Value Distance")
+```
+
+Plot fitness against percent change in forecast error across data sets.
+```{r fig.width=10, fig.height=10}
+all_results %>%
+  ggplot(aes(x=fitnesses, y=pct_change)) +
+  geom_point() +
+  geom_smooth(method="loess") +
+  facet_wrap(~Data, scales='free') +
+  labs(x="Fitness",
+       y="Percent Change in Forecast Accuracy",
+       title="Percent Change in Forecast Accuracy for k-nTS+ (k = 3) Protected Series As a Function of Feature Fitness")
+```
+
+Calculate the mean and median fitness for each data set.
+```{r}
+fitness_stats <- neighbor_fitness %>%
+  group_by(data) %>%
+  summarize(avg_fitness = mean(fitnesses),
+            med_fitness = median(fitnesses))
+```
+
+```{r}
+accuracy_results <- read_csv("../../Outputs/Results/Tables/averages_by_frequency.csv") %>%
+  left_join(fitness_stats, by=c("Data"="data"))
+
+accuracy_results %>%
+  filter(Protection == "k-nts-plus") %>%
+  summarize(corr_avg = cor(percent_change, avg_fitness),
+            corr_med = cor(percent_change, med_fitness))
+```
+
+```{r}
+accuracy_results %>%
+  filter(Protection == "preprocess-k-nts-plus") %>%
+  summarize(corr_avg = cor(percent_change, avg_fitness),
+            corr_med = cor(percent_change, med_fitness))
+```
+
+```{r}
+accuracy_results %>%
+  ggplot(aes(x=avg_fitness, y=percent_change, color=Protection)) +
+  geom_point()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+***
+***
+***
+
+
+
+
+```{r}
+neighbor_dists <- tibble()
+
+for (f in ts_files){
+  
+  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+
+  df <- import_data(paste0("../../Data/Cleaned/", f), sp)
+  
+  df_features <- feature_calculator(df, fv, scale=FALSE, sp=sp)
+  
+  D <- D_calc(t(as.matrix(df_features)))
+  
+  df_distances <- neighbor_distances(D, 3)
+  
+  df_ratios <- neighbor_ratios(D, 3)
+  
+  dist_df <- tibble(distances=df_distances,
+                    ratios=df_ratios,
+                    data=substr(f, 1, nchar(f)-13))
+  
+  neighbor_dists <- neighbor_dists %>% bind_rows(dist_df)
+  
+}
+```
+
+
+```{r}
+ts_data=mm_features
+num_neighbors=3
+```
+
+
+
+Plot the average distance to the 3 nearest neighbors for each time series
+in each data set.
+```{r fig.width=10, fig.height=10}
+neighbor_dists %>%
+  filter(distances < 3000) %>%
+  ggplot(aes(x=distances)) +
+  geom_histogram() +
+  facet_wrap(~data)
+```
+
+```{r fig.width=10, fig.height=10}
+neighbor_dists %>%
+  ggplot(aes(x=ratios)) +
+  geom_histogram() +
+  facet_wrap(~data)
+```
+
+
+***
+
+################################################################################
+
+Now, let's look at what features were chosen for each data set.
+```{r}
+# find which features were chosen to be most important for these data sets
+mm_rankings <- read_csv("../../Outputs/RFE Rankings/RFE_monthly-MICRO_h1_train.csv")
+mm_oob <- read_csv("../../Outputs/RFE OOB/RFE_monthly-MICRO_h1_train.csv")
+```
+
+Calculate the average out-of-bag MAE for each number of features for each model.
+```{r}
+mm_avg_oob <- mm_oob %>%
+  group_by(model, num_features) %>%
+  summarize(avg_oob=mean(value), .groups='drop')
+```
+
+```{r}
+# new plot for revision
+mm_avg_oob %>%
+  ggplot(aes(x=num_features, y=avg_oob, color=model, shape=model)) +
+  geom_line(linewidth=0.75) +
+  geom_point(size=3) +
+  labs(x="Number of Features (Subset Size)",
+       y="Out-of-Bag MAE",
+       color="Model",
+       shape="Model") +
+  theme(text = element_text(size = 15))
+```
+
+Calculate the number of features to be selected for swapping.
+```{r}
+nf <- mm_avg_oob %>%
+  group_by(model) %>%
+  mutate(min_error = min(avg_oob),
+         within_5p = ifelse((avg_oob-min_error)/min_error <= 0.05, 1, 0)) %>%
+  ungroup() %>%
+  filter(within_5p == 1) %>%
+  group_by(model) %>%
+  summarize(num_selected = min(num_features), .groups='drop') %>%
+  mutate(avg_selected = floor(mean(num_selected))) %>%
+  distinct(avg_selected) %>%
+  pull()
+```
+
+```{r}
+sf <- mm_rankings %>%
+  group_by(var) %>%
+  summarize(avg_rank = mean(rank)) %>%
+  arrange(avg_rank) %>%
+  slice(1:nf) %>%
+  pull(var)
+```
+
+```{r}
+sf
+```
+
+Now, perform the above process for each of the original time series data sets.
+Store the selected features in a list where the index corresponds to the original
+file.
+```{r}
+selected_features <- list()
+
+# the rankings and OOB files have the same names, just in different folders
+ranking_files <- list.files("../../Outputs/RFE Rankings/")
+
+for (i in seq_along(file_names)){
+  
+  file_id <- substr(file_names[i], 1, nchar(file_names[i])-13)
+  
+  # find which features were chosen to be most important for these data sets
+  rankings <- read_csv(paste0("../../Outputs/RFE Rankings/", ranking_files[i]))
+  oob <- read_csv(paste0("../../Outputs/RFE OOB/", ranking_files[i]))
+  
+  # calculate the average oob for a given number of features for each model
+  current_avg_oob <- oob %>%
+    group_by(model, num_features) %>%
+    summarize(avg_oob=mean(value), .groups='drop')
+  
+  # calculate how many features needed to have within 5% of minimum prediction
+  # error
+  nf <- current_avg_oob %>%
+    group_by(model) %>%
+    mutate(min_error = min(avg_oob),
+           within_5p = ifelse((avg_oob-min_error)/min_error <= 0.05, 1, 0)) %>%
+    ungroup() %>%
+    filter(within_5p == 1) %>%
+    group_by(model) %>%
+    summarize(num_selected = min(num_features), .groups='drop') %>%
+    mutate(avg_selected = floor(mean(num_selected))) %>%
+    distinct(avg_selected) %>%
+    pull()
+  
+  sf <- rankings %>%
+    group_by(var) %>%
+    summarize(avg_rank = mean(rank)) %>%
+    arrange(avg_rank) %>%
+    slice(1:nf) %>%
+    pull(var)
+  
+  selected_features[[file_id]] <- sf
+}
+```
+
+```{r}
+selected_features
+```
+
+Make another comparison across data sets based on similarities based on the 
+chosen features. Requires a couple additional steps:
+(1) normalize the features
+(2) scale the distances by the number of features included in the distance
+calculation. This amounts to a "per feature distance".
+
+```{r}
+neighbor_dists <- tibble()
+
+for (f in seq_along(ts_files)){
+  
+  sp <- ifelse(grepl("monthly", ts_files[f]), 12, ifelse(grepl("quarterly", ts_files[f]), 4, 1))
+
+  df <- import_data(paste0("../../Data/Cleaned/", ts_files[f]), sp)
+  
+  df_features <- feature_calculator_seasonal(df, fv, scale=FALSE, sp=sp)[, selected_features[[f]]]
+  
+  scaled_features <- t(as.matrix(scale(df_features)))
+
+  D <- D_calc(scaled_features)
+
+  df_distances <- neighbor_distances(D, 3)/length(selected_features[[f]])
+
+  dist_df <- tibble(distances=df_distances,
+                    data=substr(ts_files[f], 1, nchar(ts_files[f])-13))
+
+  neighbor_dists <- neighbor_dists %>% bind_rows(dist_df)
+  
+}
+```
+
+
+```{r fig.width=10, fig.height=10}
+neighbor_dists %>%
+  filter(distances < 2.5) %>%
+  ggplot(aes(x=distances)) +
+  geom_histogram() +
+  facet_wrap(~data)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Function to import protected data and perform pca.
+```{r}
+perform_pca <- function(pca_object, protection_data_id, sp, features_to_calculate){
+  
+  protected_data <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", protection_method, ".csv"))
+  
+  td <- as.list(as.data.frame(t(protected_data)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=sp))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  features <- tsfeatures(td, features=features_to_calculate, scale=FALSE)
+  
+  f <- features %>% select(series_mean, trend, curvature, hurst, stability, max_var_shift)
+  
+  f_projected <- predict(pca_object, f)
+  
+  f_projected <- as_tibble(f_projected) %>% bind_cols(f)
+  
+  return(f_projected)
+  
+}
+```
+
+Features to calculate.
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+Correlation statistics and histogram for the M3 monthly micro data. (This is the correlation of the series taken over the length of the shortest series.)
+```{r}
+mm_data <- as.list(as.data.frame(t(mm_data)))
+
+mm_data <- lapply(mm_data, function(x) x[!is.na(x)])
+
+# convert each series to a TS object with appropriate seasonal frequency
+mm_data <- lapply(mm_data, function(x) ts(x, frequency=12))
+
+# take the log of the data
+mm_data <- lapply(mm_data, log)
+
+qf_data <- as.list(as.data.frame(t(qf_data)))
+
+qf_data <- lapply(qf_data, function(x) x[!is.na(x)])
+
+# convert each series to a TS object with appropriate seasonal frequency
+qf_data <- lapply(qf_data, function(x) ts(x, frequency=4))
+
+# take the log of the data
+qf_data <- lapply(qf_data, log)
+```
+
+***
+Summary statistics.
+```{r}
+# lengths = sapply(ts_data, length)
+# 
+# # print the unique lengths
+# print("Series lengths:")
+# unique_lengths <- unique(lengths)
+# unique_lengths
+# 
+# # how many series correspond to each length
+# print("Number of Series per Length:")
+# number_series_per_length <- sapply(unique(lengths), function(x) sum(lengths==x))
+# number_series_per_length
+# 
+# # number of series
+# print("Number of Series:")
+# sum(number_series_per_length)
+# 
+# # minimum value across all series
+# print("Min value across all series:")
+# min(sapply(ts_data, min))
+# 
+# # maximum value across all series
+# print("Max value across all series:")
+# max(sapply(ts_data, max))
+```
+
+***
+
+## Extracting time series features.
+
+```{r}
+# simple outlier detection indicators, one for when an outlier occurs at forecast origin, within 5, and within 10 time periods
+
+# for top coding, we want to see if it corrects positive outliers
+# tsoutliers will find the outliers for us
+# we can determine if they are positive based on whether they are greater than the mean
+
+# outlier_detection <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   within_1 <- 1 * (length(series) %in% outliers)
+#   within_5 <- 1 * any((outliers > (length(series)-5)))
+#   within_10 <- 1 * any((outliers > (length(series)-10)))
+#   features <- c(within_1, within_5, within_10)
+#   names(features) <- c("Outlier_within_1", "Outlier_within_5", "Outlier_within_10")
+#   return(features)
+# }
+# 
+# outlier_detection_1 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * (length(series) %in% outliers))
+# }
+# 
+# outlier_detection_5 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * any((outliers > (length(series)-5))))
+# }
+# 
+# outlier_detection_10 <- function(series){
+#   outliers <- tsoutliers(series)$index
+#   return(1 * any((outliers > (length(series)-10))))
+# }
+```
+
+Going to look at quarterly finance for comparison.
+```{r}
+# find which features were chosen to be most important for these data sets
+mm_rankings <- read_csv("../../Outputs/RFE Rankings/RFE_monthly-MICRO_h1_train.csv")
+qf_rankings <- read_csv("../../Outputs/RFE Rankings/RFE_quarterly-FINANCE_h1_train.csv")
+```
+
+Which features were chosen by each model in monthly micro.
+```{r}
+mm_model_features <- mm_rankings %>%
+  group_by(model, var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(model, avg_rank) %>%
+  group_by(model) %>%
+  slice(1:6)
+
+qf_model_features <- qf_rankings %>%
+  group_by(model, var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(model, avg_rank) %>%
+  group_by(model) %>%
+  slice(1:6)
+```
+
+What were the overall top features chosen for both data sets.
+```{r}
+mm_rankings %>%
+  group_by(var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(avg_rank)
+```
+
+```{r}
+qf_rankings %>%
+  group_by(var) %>%
+  summarize(avg_rank=mean(rank), .groups='drop') %>%
+  arrange(avg_rank)
+```
+
+Extract features for both data sets.
+```{r}
+mm_features <- tsfeatures(mm_data, features=c("series_variance", "stl_features", "max_level_shift_c", "max_var_shift_c", "series_mean", "kurtosis"), scale=FALSE)
+qf_features <- tsfeatures(qf_data, features=c("series_variance", "stl_features", "max_level_shift_c", "max_var_shift_c", "series_mean", "kurtosis"), scale=FALSE)
+```
+
+Select desired features.
+```{r}
+mm_features <- mm_features %>%
+  select("series_variance", "spike", "max_level_shift", "max_var_shift", "series_mean", "kurtosis")
+
+qf_features <- qf_features %>%
+  select("series_variance", "spike", "max_level_shift", "max_var_shift", "series_mean", "kurtosis")
+```
+
+```{r}
+# perform pca on desired features
+feat_pca <- mm_features %>% prcomp(center=FALSE, scale=FALSE)
+
+mm_pcs <- as_tibble(feat_pca$x[,1:2]) %>%
+  mutate(data="monthly-MICRO")
+
+qf_pcs <- as_tibble(predict(feat_pca, qf_features)[,1:2]) %>%
+  mutate(data="quarterly-FINANCE")
+
+combined_pcs <- bind_rows(mm_pcs, qf_pcs)
+```
+
+View PCA summary.
+```{r}
+summary(feat_pca)
+```
+
+View matrix of variable loadings.
+```{r}
+feat_pca$rotation[,1:2]
+```
+
+Visualize principal component distributions.
+```{r}
+combined_pcs %>%
+  ggplot(aes(x=PC1, y=PC2)) +
+  geom_point() +
+  facet_wrap(~data)
+```
+
+Look at the distances between series based on the features.
+```{r}
+## Calculate the feature distance matrix D
+D_calc <- function(ts_data){
+  ones_column <- as.matrix(rep(1, ncol(ts_data)), nrow=ncol(ts_data))
+  temp <- ones_column %*% diag(t(ts_data)%*%ts_data) - 2*t(ts_data)%*%ts_data + diag(t(ts_data)%*%ts_data) %*% t(ones_column)
+  return(temp)
+}
+
+neighbor_distances <- function(d_matrix, num_neighbors){
+  distance_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    distance_vector <- append(distance_vector, sort_d)
+  }
+  return(distance_vector)
+}
+
+qf_D <- D_calc(t(as.matrix(qf_features)))
+
+mm_D <- D_calc(t(as.matrix(mm_features)))
+
+qf_distances <- neighbor_distances(qf_D, 3)
+mm_distances <- neighbor_distances(mm_D, 3)
+
+hist(qf_distances)
+hist(mm_distances)
+```
+
+Plot original and k-nTS+ protected versions for sanity check.
+```{r}
+mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
+qf_data <- read.csv("../../Data/Cleaned/yearly-DEMOGRAPHIC_h1_train.csv")
+
+mm_protected <- read.csv("../../Data/Cleaned/k-nts-plus_3_monthly-MICRO_h1_train.csv")
+qf_protected <- read.csv("../../Data/Cleaned/gratis-full-k-nts-plus_3_yearly-DEMOGRAPHIC_h1_train.csv")
+```
+
+```{r}
+s1 <- as_vector(qf_data[5,])
+s1 <- unname(s1[!is.na(s1)])
+
+ps1 <- as_vector(qf_protected[5,])
+ps1 <- unname(ps1[!is.na(ps1)])
+```
+
+```{r}
+qf_protected_or <- import_data("../../Data/Cleaned/gratis-full-k-nts-plus_3_yearly-DEMOGRAPHIC_h1_train.csv", sp=1)
+
+replacements <- tsoutliers(qf_protected_or[[3]])
+
+plot(qf_protected_or[[3]])
+
+qf_protected_or[[3]][replacements$index] <- replacements$replacements
+
+plot(qf_protected_or[[3]])
+```
+
+
+```{r fig.width=10, fig.height=10}
+qf_data <- as_tibble(t(qf_data)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='original')
+
+qf_protected <- as_tibble(t(qf_protected)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='protected')
+
+full <- bind_rows(qf_data, qf_protected)
+
+full %>%
+  filter(Series %in% c("V1", "V2", "V3", "V4", "V5")) %>%
+  ggplot(aes(x=time, y=value, color=type)) +
+  geom_line() +
+  facet_wrap(~Series)
+```
+
+See if series with shorter windows had higher identification probabilities.
+See if series in smaller sets had higher identification probabilities.
+
+```{r}
+library(tsoutliers)
+```
+
+
+```{r}
+test_series <- qf_protected %>%
+  filter(Series == "V9") %>%
+  pull(value)
+```
+
+
+```{r}
+test_series <- ts(test_series, frequency=4)
+```
+
+```{r}
+replacements <- tsoutliers(test_series)
+
+replacements
+```
+
+```{r}
+test_series[replacements$index] <- replacements$replacements
+```
+
+```{r}
+plot(test_series)
+```
+
+
+
+
+What about the inter-series distances?
+```{r}
+qf_data <- read.csv("../../Data/Cleaned/quarterly-FINANCE_h1_train.csv")
+
+# take the log of the data
+qf_data <- log(qf_data)
+
+# convert C to a t x J matrix (num time periods by num series)
+qf_data <- t(qf_data)
+
+qf_D <- D_calc(qf_data)
+```
+
+```{r}
+mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
+
+mm_data <- as.list(as.data.frame(t(mm_data)))
+
+mm_data <- lapply(mm_data, function(x) x[!is.na(x)])
+
+# take the log of the data
+mm_data <- lapply(mm_data, log)
+
+# split X into separate datasets, one for each series length
+Xs <- list()
+lengths <- sapply(mm_data, length)
+unique_lengths <- unique(lengths)
+for (l in seq_along(unique_lengths)){
+  ids <- lengths==unique_lengths[l]
+  Xs[[l]] <- mm_data[ids]
+}
+
+Xs <- lapply(Xs, function(x) do.call(rbind, x))
+
+mm_Ds <- lapply(Xs, D_calc)
+```
+
+Extract the distances from the lower triangular.
+
+Look at the distribution of distances.
+```{r}
+qf_distances <- qf_D[lower.tri(qf_D)]
+
+mm_distances <- lapply(mm_Ds, function(x) x[lower.tri(x)])
+```
+
+
+***
+
+```{r}
+temp <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_k-nts_3.csv"))
+temp
+```
+
+Function to import protected data and produce a side-by-side comparison of a protected series.
+```{r}
+protected_series_plot <- function(protection_method, series_number, which_to_plot, ylims, main_title){
+  
+  td_original <- read.csv("../../Data/Train/Clean/m3_monthly_micro_h1.csv")
+  td_protected <- read.csv(paste0("../../Data/Train/Clean/protected_m3_monthly_micro_h1_", protection_method, ".csv"))
+  
+  td_original <- as.list(as.data.frame(t(td_original)))
+  td_protected <- as.list(as.data.frame(t(td_protected)))
+  
+  td_original <- lapply(td_original, function(x) x[!is.na(x)])
+  td_protected <- lapply(td_protected, function(x) x[!is.na(x)])
+  
+  s_original <- td_original[[series_number]]
+  s_protected <- td_protected[[series_number]]
+  
+  s_original <- bind_cols("values"=s_original, "time"=1:length(s_original))
+  s_protected <- bind_cols("values"=s_protected, "time"=1:length(s_protected))
+  
+  is_protected <- rep(c(0,1), each=nrow(s_original))
+  
+  s <- bind_rows(s_original, s_protected) %>% bind_cols("protected"=is_protected)
+  
+  plt <- s %>%
+    filter(protected %in% which_to_plot) %>%
+    ggplot(aes(x=time, y=values, color=factor(protected))) +
+    geom_line(size=.7) +
+    geom_point() +
+    theme_classic() +
+    scale_colour_manual(labels = c("Original", "Protected"), values=c("#66CCFF", "#3399CC")) +
+    labs(x="Time",
+         y="Y",
+         title=main_title,
+         color="Series") +
+    ylims
+  
+  return(plt)
+  
+}
+```
+
+```{r}
+protected_series_plot("DP_1", 1, c(0), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
+```
+
+```{r}
+dp_example <- protected_series_plot("DP_1", 1, c(0,1), ylim(-60000,50000), main_title = "Original Series vs. Differentially Private Series (\u03f5 = 1)")
+```
+
+```{r}
+protected_series_plot("Top_0.4", 1, c(0), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
+```
+
+```{r}
+top_example <- protected_series_plot("Top_0.4", 1, c(0,1), ylim(0, 10000), main_title = "Original Series vs. Top-Coded Series (40%)")
+```
+
+```{r}
+knts_example1 <- protected_series_plot("k-nts_3", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example2 <- protected_series_plot("k-nts_5", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example3 <- protected_series_plot("k-nts_7", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example4 <- protected_series_plot("k-nts_10", 155, c(0,1), ylim(0, 10000), main_title = "")
+
+knts_example5 <- protected_series_plot("k-nts_15", 155, c(0,1), ylim(0, 10000), main_title = "")
+```
+
+```{r fig.height=6}
+library(gridExtra)
+plt <- ggarrange(knts_example1, knts_example2, knts_example3, knts_example4, knts_example5,
+                 labels=c("k = 3", "k = 5", "k = 7", "k = 10", "k = 15"),
+                 nrow=5, common.legend=TRUE, legend="bottom")
+
+annotate_figure(plt, top=text_grob("Comparison of Original and k-nTS Protected Series", face="bold", size=14))
+```
+
+***
+
+Plot change in accuracy for models across differential privacy parameters.
+```{r}
+all_dp <- read_csv("../../Outputs/Tables/DP.csv")
+```
+
+```{r}
+all_dp <- all_dp %>%
+  select(Model, Original_1, contains("h1_")) %>%
+  gather(key="epsilon", value="mae", -Model) %>%
+  mutate(epsilon = factor(epsilon, levels = c("h1_0.1", "h1_1", "h1_4.6", "h1_10", "h1_20", "Original_1"), labels = c("\u03f5 = 0.1", "\u03f5 = 1", "\u03f5 = 4.6", "\u03f5 = 10", "\u03f5 = 20", "Original")))
+```
+
+```{r}
+all_dp %>%
+  ggplot(aes(x = epsilon, y = mae, color=Model)) +
+  geom_point(size=3) +
+  geom_line()
+```
+

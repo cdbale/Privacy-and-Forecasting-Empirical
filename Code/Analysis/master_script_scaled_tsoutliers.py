@@ -216,15 +216,15 @@ results_path = "../../Outputs/Results/"
 
 # # now we store all the cleaned data file names including the baseline
 # # protected data sets
-cleaned_data_path = "../../Data/Cleaned/"
+cleaned_data_path = "../../Data/Cleaned/M3/"
 cleaned_files = os.listdir(cleaned_data_path)
 
 # # # training data for feature selection
-h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "gratis-full" in x]
+h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "scaled-tsoutliers" in x]
 h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
-forecasts_path = "../../Outputs/Forecasts/"
-results_path = "../../Outputs/Results/"
+forecasts_path = "../../Outputs/Forecasts/M3/"
+results_path = "../../Outputs/Results/M3/"
 
 # loop over forecasting models and training data files
 
@@ -273,7 +273,8 @@ for m in forecasting_models.items():
         test_file = [x for x in h1_test_files if x[:-9] in f]
         [test_file] = test_file
 
-        generate_and_save_forecasts(train_file=f,
+        generate_and_save_forecasts(data_folder="M3/",
+                                    train_file=f,
                                     test_file=test_file,
                                     forecasts_path=forecasts_path,
                                     results_path=results_path,

@@ -26,7 +26,7 @@ from darts import TimeSeries
 
 ################################################################################
 
-def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_path, model, model_args, h, file_suffix):
+def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_path, results_path, model, model_args, h, file_suffix):
 
     """
 
@@ -41,8 +41,8 @@ def generate_and_save_forecasts(train_file, test_file, forecasts_path, results_p
 
     # import time series and test data
     # ignore header and skip the first row to use integers as column names
-    train = pd.read_csv("../../Data/Cleaned/" + train_file, header=None, skiprows=1)
-    test = pd.read_csv("../../Data/Cleaned/" + test_file, header=None, skiprows=1).T
+    train = pd.read_csv("../../Data/Cleaned/" + data_folder + train_file, header=None, skiprows=1)
+    test = pd.read_csv("../../Data/Cleaned/" + data_folder + test_file, header=None, skiprows=1).T
 
     # convert to a list of series, and drop missing values
     train = [x.dropna() for _, x in train.iterrows()]
@@ -361,11 +361,11 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
                 newpath = "../../Outputs/VAR Weights/"
                 if not os.path.exists(newpath):
                     os.makedirs(newpath)
-                pd_intercepts.to_csv(newpath + param_save_file + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
+                pd_intercepts.to_csv(newpath + param_save_file[:-9] + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
 
                 # extract lag coefficients
                 lag_coefs = pd.concat([pd.DataFrame(results.coefs[:,:,i]) for i in range(results.coefs.shape[2])], axis=1)
-                lag_coefs.to_csv(newpath + param_save_file + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
+                lag_coefs.to_csv(newpath + param_save_file[:-9] + "lag_coefs_" + str(k) + "_" + str(i) + ".csv", index=False)
             
             if simulate_series:
                 ## simulating VAR time series
@@ -410,7 +410,7 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
         sim_path = "../../Outputs/VAR Simulated/"
         if not os.path.exists(sim_path):
             os.makedirs(sim_path)
-        simulated.to_csv(sim_path + param_save_file + ".csv", index=False)
+        simulated.to_csv(sim_path + param_save_file, index=False)
 
     return processed
 

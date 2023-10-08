@@ -777,22 +777,22 @@ for (f in file_names[3:15]){
     
     write.csv(X_k, file=paste0(fp, "gratis-k-nts-plus_", k, "_", f), row.names=FALSE)
     
-    X_k_cor <- lapply(1:length(Xs), function(x) knts_alg(Xs[[x]], 
-                                                         Xs_augmented[[x]], 
-                                                         sp=sp, 
-                                                         window_length=window_length, 
-                                                         k=k, 
-                                                         features_to_calculate=fv, 
-                                                         selected_features=sft, 
-                                                         corr_based=TRUE))
-    
-    X_k_cor <- lapply(X_k_cor, function(x) as.data.frame(t(x)))
-    
-    X_k_cor <- lapply(X_k_cor, exp)
-    
-    X_k_cor <- do.call(rbind.fill, X_k_cor)
-    
-    write.csv(X_k_cor, file=paste0(fp, "gratis-k-nts-plus-corr_", k, "_", f), row.names=FALSE)
+    # X_k_cor <- lapply(1:length(Xs), function(x) knts_alg(Xs[[x]], 
+    #                                                      Xs_augmented[[x]], 
+    #                                                      sp=sp, 
+    #                                                      window_length=window_length, 
+    #                                                      k=k, 
+    #                                                      features_to_calculate=fv, 
+    #                                                      selected_features=sft, 
+    #                                                      corr_based=TRUE))
+    # 
+    # X_k_cor <- lapply(X_k_cor, function(x) as.data.frame(t(x)))
+    # 
+    # X_k_cor <- lapply(X_k_cor, exp)
+    # 
+    # X_k_cor <- do.call(rbind.fill, X_k_cor)
+    # 
+    # write.csv(X_k_cor, file=paste0(fp, "gratis-k-nts-plus-corr_", k, "_", f), row.names=FALSE)
   }
   
   # swap_times <- c()

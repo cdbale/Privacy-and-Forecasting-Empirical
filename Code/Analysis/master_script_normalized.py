@@ -220,7 +220,7 @@ cleaned_data_path = "../../Data/Cleaned/"
 cleaned_files = os.listdir(cleaned_data_path)
 
 # # # training data for feature selection
-h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "gratis-full" in x]
+h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "normalized" in x]
 h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
 forecasts_path = "../../Outputs/Forecasts/"

@@ -15,15 +15,15 @@ from sktime.performance_metrics.forecasting import mean_absolute_error
 
 ### need the file string to just be the beginning e.g., "monthly-demographic"
 
-def error_distribution_generator(file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, track_comp_time=False):
+def error_distribution_generator(data_folder, file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, track_comp_time=False):
     
-    test_files = os.listdir("../../Data/Cleaned/")
+    test_files = os.listdir("../../Data/Cleaned/" + data_folder)
     
     test_file = [x for x in test_files if forecast_horizon + "_test" in x and file_string in x]
     
     [test_file] = test_file
     
-    test_data = pd.read_csv("../../Data/Cleaned/" + test_file).T
+    test_data = pd.read_csv("../../Data/Cleaned/" + data_folder + test_file).T
 
     distribution_dict = {}
     

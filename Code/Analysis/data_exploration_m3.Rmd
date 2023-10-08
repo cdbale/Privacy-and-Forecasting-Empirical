@@ -151,7 +151,7 @@ qf_rankings %>%
   arrange(avg_rank)
 ```
 
-Extract features both both data sets.
+Extract features for both data sets.
 ```{r}
 # custom feature functions
 source("custom_feature_functions.R")
