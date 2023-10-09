@@ -65,7 +65,7 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters){
   relief_start <- Sys.time()
   
   # Stage 1: RReliefF
-  evals <- lapply(scaled_feature_data, function(x) attrEval("values", data=x, estimator="RReliefFexpRank"))
+  evals <- lapply(scaled_feature_data, function(x) attrEval("values", data=x, estimator="RReliefFexpRank", ReliefIterations=-2))
   
   evals_combined <- lapply(1:length(evals), function(x) as_tibble(evals[[x]], rownames="feature") %>% mutate(model = models[x]))
   
@@ -351,9 +351,9 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
 
 # paths to the data files and feature files
 fp <- paste0("../../Data/Cleaned/", data_folder)
-features_path <- "../../Data/Features/"
+features_path <- paste0("../../Data/Features/", data_folder)
 # path to files with error distributions
-ed_file_path <- "../../Outputs/Results/Error_Distributions/"
+ed_file_path <- paste0("../../Outputs/Results/", data_folder, "Error_Distributions/")
 
 # import names of original data files - this may include protected versions
 # so we have to remove those
@@ -381,7 +381,7 @@ num_iter <- 25
 
 # track computation time for k-nTS+ swapping
 
-feature_file_names <- grep("h2_train", list.files("../../Data/Features/"), value=TRUE)
+feature_file_names <- grep("h2_train", list.files(features_path), value=TRUE)
 
 # file_names <- file_names[file_names %in% c("monthly-MICRO_h1_train.csv", "quarterly-FINANCE_h1_train.csv")]
 
@@ -413,7 +413,7 @@ for (f in file_names){
   # import protected features and assign new variable values for linking to errors
   for (ff in current_feature_file_names){
     
-    features <- read_csv(paste0("../../Data/Features/", ff))
+    features <- read_csv(paste0("../../Data/Features/", data_folder, ff))
     
     params <- strsplit(ff, split="_")[[1]]
     
@@ -480,54 +480,54 @@ for (f in file_names){
   print("Feature selection done.")
   
   # check if sub directory exists 
-  if (file.exists("../../Outputs/RReliefF Rankings/")){
+  if (file.exists(paste0("../../Outputs/RReliefF Rankings/", data_folder))){
     
-    write.csv(fsr[["evals_combined"]], file=paste0("../../Outputs/RReliefF Rankings/RReliefF_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["evals_combined"]], file=paste0("../../Outputs/RReliefF Rankings/", data_folder, "RReliefF_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   } else {
     
     # create a new sub directory inside
     # the main path
-    dir.create(file.path("../../Outputs/RReliefF Rankings/"))
+    dir.create(file.path(paste0("../../Outputs/RReliefF Rankings/", data_folder)))
     
     # specifying the working directory
-    write.csv(fsr[["evals_combined"]], file=paste0("../../Outputs/RReliefF Rankings/RReliefF_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["evals_combined"]], file=paste0("../../Outputs/RReliefF Rankings/", data_folder, "RReliefF_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   }
   
   ## save RFE feature rankings
   
   # check if sub directory exists 
-  if (file.exists("../../Outputs/RFE Rankings/")){
+  if (file.exists(paste0("../../Outputs/RFE Rankings/", data_folder))){
     
-    write.csv(fsr[["rank_df"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["rank_df"]], file=paste0("../../Outputs/RFE Rankings/", data_folder, "RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   } else {
     
     # create a new sub directory inside
     # the main path
-    dir.create(file.path("../../Outputs/RFE Rankings/"))
+    dir.create(file.path(paste0("../../Outputs/RFE Rankings/", data_folder)))
     
     # specifying the working directory
-    write.csv(fsr[["rank_df"]], file=paste0("../../Outputs/RFE Rankings/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["rank_df"]], file=paste0("../../Outputs/RFE Rankings/", data_folder, "RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   }
   
   ## save RFE oob results
   
   # check if sub directory exists 
-  if (file.exists("../../Outputs/RFE OOB/")){
+  if (file.exists(paste0("../../Outputs/RFE OOB/", data_folder))){
     
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/", data_folder, "RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   } else {
     
     # create a new sub directory inside
     # the main path
-    dir.create(file.path("../../Outputs/RFE OOB/"))
+    dir.create(file.path(paste0("../../Outputs/RFE OOB/", data_folder)))
     
     # specifying the working directory
-    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
+    write.csv(fsr[["combined_oob"]], file=paste0("../../Outputs/RFE OOB/", data_folder, "RFE_", prefix, "_h1_train.csv"), row.names=FALSE)
     
   }
   
@@ -543,7 +543,7 @@ for (f in file_names){
   ### the shortest window with a seasonal period (quarterly)
   
   # determine sp
-  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+  sp <- ifelse(grepl("Monthly", f), 12, ifelse(grepl("Quarterly", f), 4, 1))
   
   # minimum window length of 11 so that x_acf10 can be calculated
   window_length <- max(c(2*sp + 1, 11))
@@ -573,7 +573,7 @@ for (f in file_names){
     
     swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="mins"))
     
-    write.csv(X_knts, file=paste0(fp, "k-nts-plus_", j, "_", f), row.names=FALSE)
+    write.csv(X_knts, file=paste0(fp, "k-nts-plus-M4_", j, "_", f), row.names=FALSE)
     
     ############################################################################
     
