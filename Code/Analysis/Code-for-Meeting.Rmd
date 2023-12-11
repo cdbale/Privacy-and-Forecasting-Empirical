@@ -1,0 +1,942 @@
+---
+title: "k-nTS Swapping Analysis"
+author: "Cameron Bale"
+date: "2023-10-10"
+output: html_document
+---
+
+*** Need to figure out whether to include model fixed effects or to run a different model for each (model) results.
+
+Why is scaling (normalization or scaling by point prior to forecast origin) so damaging for privacy? --> We are assessing privacy through an identification disclosure attack which measures the distance between known confidential points and the protected series. Without any scaling, the exact confidential points may be contained in the protected series since they were swapped in and no other transformation occurred. Scaling improves forecast accuracy by improving the similarity between these swapped points and the target time series, but this significantly reduces privacy.
+
+Our goal is to understand why our method performed so well on the M3 monthly micro data, but so poorly on the rest of the M3 data sets. My theory is that the similarity (based on features) and the spectral entropies (proxying for how well the original series can be forecast) will help determine when our method will perform well and when it won't. In theory, our method is selecting a few features that are not only more likely to vary across time series with different forecast accuracies (RReliefF), but they are also almost as predictive as using all selected features to predict forecast accuracy across the original and baseline protected data sets (RFE). So, if we include these features in the swapping process, we should maintain their values (assuming there are similar series to swap with) and thereby maintain forecast accuracy. HOWEVER, we saw in the previous M3 monthly micro results that the spectral entropies of the protected series tended to be higher than those of the original series. This makes sense - even though we are preserving features that are important/predictive for forecast accuracy, we are by definition introducing randomness into the time series, which reduces autocorrelation, which increases spectral entropy. Past research (Spiliotis et al. 2020) shows through multiple linear regression that, holding many other features constant (strength of trend, strength of seasonality, skewness, kurtosis, etc.) an increase in spectral entropy is associated with an increase in the MASE of the forecasted M4 time series at a statistically significant level.
+
+Based on these findings, I predict that data sets with time series that (1) are highly similar on the selected features, and (2) have high
+spectral entropy will have the best results from k-nTS+. Data sets with series that are less similar on the important features will not be
+able to swap values without destroying forecast accuracy. And, even if we have time series with very similar features, the forecast accuracy for series with low spectral entropies may still be unacceptable since we are introducing randomness.
+
+We perform four analyses to assess the performance of k-nTS+ on the M3 data. We will perform two dimension reduction methods (PCA and t-SNE), calculate the feature similarity of the dimension reduced time series, and use linear regression to determine whether there is a statistically significant relationship between the spectral entropy of the original series, the similarities, and the resulting performance under data protection.
+
+Import libraries.
+```{r}
+library(tidyverse)
+library(tsfeatures)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(forecast)
+library(e1071)
+library(tsne)
+
+source('custom_feature_functions.R')
+```
+
+Custom functions.
+```{r}
+import_data <- function(file_string, sp, exclude_first_col=FALSE){
+  
+  ts <- read.csv(file_string)
+  
+  if (exclude_first_col){
+    ts <- ts[,2:ncol(ts)]
+  }
+  
+  td <- as.list(as.data.frame(t(ts)))
+  
+  td <- lapply(td, function(x) x[!is.na(x)])
+  
+  td <- lapply(td, function(x) ts(x, frequency=sp))
+  
+  td <- lapply(td, function(x) ifelse(x >= 1, x, 1))
+  
+  td <- lapply(td, log)
+  
+  return(td)
+  
+}
+
+feature_calculator <- function(ts, features_to_calculate, scale_series, sp){
+  
+  temp <- tsfeatures(ts, features=features_to_calculate, scale=scale_series) %>%
+    select(-nperiods, -seasonal_period)
+  
+  if(sp > 1){
+    temp <- temp %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+  }
+  
+  return(temp)
+}
+
+feature_calculator_seasonal <- function(ts, features_to_calculate, scale_series, sp){
+  
+  temp <- tsfeatures(ts, features=features_to_calculate, scale=scale_series) %>%
+    select(-nperiods, -seasonal_period)
+  
+  return(temp)
+}
+
+## Calculate the feature distance matrix D
+D_calc <- function(ts_data){
+  ones_column <- as.matrix(rep(1, ncol(ts_data)), nrow=ncol(ts_data))
+  temp <- ones_column %*% diag(t(ts_data)%*%ts_data) - 2*t(ts_data)%*%ts_data + diag(t(ts_data)%*%ts_data) %*% t(ones_column)
+  return(temp)
+}
+
+# function to calculate the distance to the three nearest neighbors
+neighbor_distances <- function(d_matrix, num_neighbors){
+  distance_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    avg_d <- mean(sort_d)
+    distance_vector <- append(distance_vector, avg_d)
+  }
+  return(distance_vector)
+}
+
+feature_tsne <- function(ts_data_file, features_to_calculate, sp, sf=NULL){
+  
+  temp <- import_data(paste0("../../Data/Cleaned/M3/", ts_data_file), sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(temp, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- temp[ids]
+  }
+  
+  if (!is.null(sf)){
+    temp_features <- lapply(Xs, function(x) feature_calculator_seasonal(x, features_to_calculate, scale=FALSE, sp))
+    spec_ents <- lapply(temp_features, function(x) x[,'entropy'] %>% pull(entropy))
+    temp_features <- lapply(temp_features, function(x) x[,sf])
+  } else {
+    temp_features <- lapply(Xs, function(x) feature_calculator(x, features_to_calculate, scale=FALSE, sp))
+    spec_ents <- lapply(temp_features, function(x) x[,'entropy'] %>% pull(entropy))
+  }
+  
+  temp_tsne <- lapply(temp_features, function(x) tsne(as.matrix(x), whiten=FALSE))
+  
+  tsne_avg_distance <- lapply(temp_tsne, function(x) neighbor_distances(D_calc(t(x)), num_neighbors=3))
+  
+  all_results <- tibble()
+  
+  for (i in 1:length(temp_tsne)){
+    all_results <- bind_rows(all_results, tibble(dataid=i, 
+                                                 "Dim1"=temp_tsne[[i]][,1], 
+                                                 "Dim2"=temp_tsne[[i]][,2],
+                                                 "SpecEntropy"=spec_ents[[i]],
+                                                 "AvgNeighborDistance"=tsne_avg_distance[[i]]))
+  }
+  
+  return(all_results)
+}
+
+feature_pca <- function(ts_data_file, features_to_calculate, sp, sf=NULL){
+  
+  temp <- import_data(paste0("../../Data/Cleaned/M3/", ts_data_file), sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(temp, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- temp[ids]
+  }
+  
+  if (!is.null(sf)){
+    temp_features <- lapply(Xs, function(x) feature_calculator_seasonal(x, features_to_calculate, scale=FALSE, sp))
+    spec_ents <- lapply(temp_features, function(x) x[,'entropy'] %>% pull(entropy))
+    temp_features <- lapply(temp_features, function(x) x[,sf])
+  } else {
+    temp_features <- lapply(Xs, function(x) feature_calculator(x, features_to_calculate, scale=FALSE, sp))
+    spec_ents <- lapply(temp_features, function(x) x[,'entropy'] %>% pull(entropy))
+  }
+  
+  temp_pca <- lapply(temp_features, function(x) prcomp(x, center=FALSE, scale=FALSE)$x[,1:2])
+  
+  pca_avg_distance <- lapply(temp_pca, function(x) neighbor_distances(D_calc(t(x)), num_neighbors=3))
+  
+  all_results <- tibble()
+  
+  for (i in 1:length(temp_pca)){
+    all_results <- bind_rows(all_results, tibble(dataid=i, 
+                                                 "Dim1"=temp_pca[[i]][,1], 
+                                                 "Dim2"=temp_pca[[i]][,2],
+                                                 "SpecEntropy"=spec_ents[[i]],
+                                                 "AvgNeighborDistance"=pca_avg_distance[[i]]))
+  }
+  
+  return(all_results)
+}
+
+# vector of feature names to calculate in k-nTS+
+fv <- c("entropy_c", "lumpiness", "stability",
+        "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
+        "crossing_points", "flat_spots", "hurst",
+        "unitroot_kpss", "unitroot_pp", "stl_features",
+        "acf_features", "pacf_features",
+        "nonlinearity", "series_mean", "series_variance",
+        "skewness", "kurtosis")
+```
+
+Create a vector of the names of the original data files.
+```{r}
+# paths to the data files and feature files
+fp <- "../../Data/Cleaned/M3/"
+# import names of original data files - this may include protected versions
+# so we have to remove those
+file_names <- grep("_h1_train", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
+```
+
+***
+
+################################################################################
+
+Import the feature rankings from RFE for each of the original data sets.
+Determine which features were used for swapping.
+```{r}
+selected_features <- list()
+
+# the rankings and OOB files have the same names, just in different folders
+ranking_files <- list.files("../../Outputs/RFE Rankings/M3/")
+
+for (i in seq_along(file_names)){
+  
+  file_id <- substr(file_names[i], 1, nchar(file_names[i])-13)
+  
+  # find which features were chosen to be most important for these data sets
+  rankings <- read_csv(paste0("../../Outputs/RFE Rankings/M3/", ranking_files[i]))
+  oob <- read_csv(paste0("../../Outputs/RFE OOB/M3/", ranking_files[i]))
+  
+  # calculate the average oob for a given number of features for each model
+  current_avg_oob <- oob %>%
+    group_by(model, num_features) %>%
+    summarize(avg_oob=mean(value), .groups='drop')
+  
+  # calculate how many features needed to have within 5% of minimum prediction
+  # error
+  nf <- current_avg_oob %>%
+    group_by(model) %>%
+    mutate(min_error = min(avg_oob),
+           within_5p = ifelse((avg_oob-min_error)/min_error <= 0.05, 1, 0)) %>%
+    ungroup() %>%
+    filter(within_5p == 1) %>%
+    group_by(model) %>%
+    summarize(num_selected = min(num_features), .groups='drop') %>%
+    mutate(avg_selected = floor(mean(num_selected))) %>%
+    distinct(avg_selected) %>%
+    pull()
+  
+  sf <- rankings %>%
+    group_by(var) %>%
+    summarize(avg_rank = mean(rank)) %>%
+    arrange(avg_rank) %>%
+    slice(1:nf) %>%
+    pull(var)
+  
+  selected_features[[file_id]] <- sf
+}
+```
+
+View selected features.
+```{r}
+selected_features
+```
+
+***
+
+PCA analysis using all features.
+```{r}
+all_pca <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][1]
+  
+  pca_res <- feature_pca(ts_data_file=fname, features_to_calculate=fv, sp=sp) %>%
+    mutate(Data=current_fname)
+  
+  all_pca <- bind_rows(all_pca, pca_res)
+}
+
+all_pca <- all_pca %>%
+  mutate(DataSubset = paste0(Data, dataid)) %>%
+  group_by(Data) %>%
+  mutate(Snum = 1:n()) %>%
+  ungroup()
+```
+
+Plot the time series features of each data set on the principal components space.
+
+Kang et al. (2020) discuss how PCA is a linear dimension reduction method that focuses on keeping dissimilar data points far apart, rather than keeping similar data points close together. It may be misleading when there are many time series features with potentially nonlinear correlations. However, many recent papers use PCA to visualize time series feature distributions, so we will examine it here as well.
+
+Notice, there is variation in how closely series are grouped together, and in the spectral entropies of the series within each subset. M3 monthly micro data tend to have high spectral entropies. Most other subsets tend to have low spectral entropies (darker) or are a mix of low with a few high spectral entropy series.
+```{r fig.width=10, fig.height=10}
+all_pca %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point() +
+  facet_wrap(~DataSubset)
+```
+
+***
+
+Let's compare the feature space of the k-nTS+ protected data to the feature space of the original data. We plot the principal component
+values of the original and protected series on the same axes. Original will be colored blue, and protected will be colored red.
+
+Create vector of k-nTS+ file names.
+```{r}
+knts_plus3_file_names <- grep("k-nts-plus_3", list.files(fp), value=TRUE)
+# make sure protected versions are excluded
+knts_plus3_file_names <- grep("gratis", knts_plus3_file_names, value=TRUE, invert=TRUE)
+knts_plus3_file_names <- grep("preprocess", knts_plus3_file_names, value=TRUE, invert=TRUE)
+```
+
+```{r}
+combined_pca <- tibble()
+
+for (fname in file_names){
+  
+  # identify the file and seasonal frequency
+  fid <- strsplit(fname, split="_")[[1]][1]
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  orig_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", fname), sp=sp)
+  prot_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", grep(fid, knts_plus3_file_names, value=TRUE)), sp=sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(orig_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- orig_data[ids]
+  }
+  
+  # split X into separate datasets, one for each series length
+  prot_Xs <- list()
+  lengths <- sapply(prot_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    prot_Xs[[l]] <- prot_data[ids]
+  }
+  
+  # import the original version and compute features
+  orig_features <- lapply(Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # import the protected version
+  protected_features <- lapply(prot_Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # perform PCA on the original version
+  orig_pca <- lapply(orig_features, function(x) prcomp(x, center=FALSE, scale=FALSE))
+  orig_pca_features <- lapply(orig_pca, function(y) y$x[,1:2])
+  
+  # project the protected versions onto original principal component axes
+  prot_pca_features <- lapply(1:length(protected_features), function(x) predict(orig_pca[[x]], protected_features[[x]])[,1:2])
+
+  orig_and_prot <- tibble()
+  for (i in 1:length(orig_pca_features)){
+    # convert to tibble
+    o <- as_tibble(orig_pca_features[[i]])
+    p <- as_tibble(prot_pca_features[[i]])
+    
+    # add appropriate column names
+    colnames(o) <- c("PC1", "PC2")
+    colnames(p) <- c("PC1", "PC2")
+    
+    p <- p %>% mutate(Type="k-nTS+ (k = 3)")
+    o <- o %>% mutate(Type="original")
+    
+    # combine to one tibble
+    o_and_p <- bind_rows(o, p) %>%
+      mutate(Data=fid,
+             dataid=i,
+             DataSubset=paste0(Data, dataid))
+    
+    orig_and_prot <- orig_and_prot %>% bind_rows(o_and_p)
+    
+  }
+  
+  combined_pca <- combined_pca %>% bind_rows(orig_and_prot)
+}
+```
+
+Plot both original and k-nTS+ principal component values.
+```{r fig.width=10, fig.height=10}
+combined_pca %>%
+  ggplot(aes(x=PC1, y=PC2, color=Type)) +
+  geom_point(alpha=0.6) +
+  facet_wrap(~DataSubset)
+```
+
+***
+
+Now repeat but for the k-nTS+ preprocessing series.
+
+Create vector of k-nTS+ file names.
+```{r}
+knts_plusp3_file_names <- grep("preprocess-k-nts-plus_3", list.files(fp), value=TRUE)
+```
+
+```{r}
+combined_pca <- tibble()
+
+for (fname in file_names){
+  
+  # identify the file and seasonal frequency
+  fid <- strsplit(fname, split="_")[[1]][1]
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  orig_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", fname), sp=sp)
+  prot_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", grep(fid, knts_plusp3_file_names, value=TRUE)), sp=sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(orig_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- orig_data[ids]
+  }
+  
+  # split X into separate datasets, one for each series length
+  prot_Xs <- list()
+  lengths <- sapply(prot_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    prot_Xs[[l]] <- prot_data[ids]
+  }
+  
+  # import the original version and compute features
+  orig_features <- lapply(Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # import the protected version
+  protected_features <- lapply(prot_Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # perform PCA on the original version
+  orig_pca <- lapply(orig_features, function(x) prcomp(x, center=FALSE, scale=FALSE))
+  orig_pca_features <- lapply(orig_pca, function(y) y$x[,1:2])
+  
+  # project the protected versions onto original principal component axes
+  prot_pca_features <- lapply(1:length(protected_features), function(x) predict(orig_pca[[x]], protected_features[[x]])[,1:2])
+
+  orig_and_prot <- tibble()
+  for (i in 1:length(orig_pca_features)){
+    # convert to tibble
+    o <- as_tibble(orig_pca_features[[i]])
+    p <- as_tibble(prot_pca_features[[i]])
+    
+    # add appropriate column names
+    colnames(o) <- c("PC1", "PC2")
+    colnames(p) <- c("PC1", "PC2")
+    
+    p <- p %>% mutate(Type="k-nTS+ (k = 3)")
+    o <- o %>% mutate(Type="original")
+    
+    # combine to one tibble
+    o_and_p <- bind_rows(o, p) %>%
+      mutate(Data=fid,
+             dataid=i,
+             DataSubset=paste0(Data, dataid))
+    
+    orig_and_prot <- orig_and_prot %>% bind_rows(o_and_p)
+    
+  }
+  
+  combined_pca <- combined_pca %>% bind_rows(orig_and_prot)
+}
+```
+
+Plot both original and k-nTS+ principal component values.
+```{r fig.width=10, fig.height=10}
+combined_pca %>%
+  ggplot(aes(x=PC1, y=PC2, color=Type)) +
+  geom_point(alpha=0.6) +
+  facet_wrap(~DataSubset)
+```
+
+***
+
+Perform t-SNE on the combined data sets. Calculate the miscoverage to compare
+the value of k-nTS+ protected series relative to VAR simulated series.
+
+```{r}
+combined_tsne <- tibble()
+
+for (fname in file_names){
+  
+  # identify the file and seasonal frequency
+  fid <- strsplit(fname, split="_")[[1]][1]
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  orig_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", fname), sp=sp)
+  prot_data <- import_data(file_string=paste0("../../Data/Cleaned/M3/", grep(fid, knts_plus3_file_names, value=TRUE)), sp=sp)
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(orig_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- orig_data[ids]
+  }
+  
+  # split X into separate datasets, one for each series length
+  prot_Xs <- list()
+  lengths <- sapply(prot_data, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    prot_Xs[[l]] <- prot_data[ids]
+  }
+  
+  # import the original version and compute features
+  orig_features <- lapply(Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # import the protected version
+  protected_features <- lapply(prot_Xs, function(x) feature_calculator(ts=x, features_to_calculate=fv, scale_series=FALSE, sp=sp))
+  
+  # combine the features and perform t-SNE
+  combined_features <- lapply(1:length(orig_features), function(x) orig_features[[x]] %>% bind_rows(protected_features[[x]]))
+  
+  both_tsne <- lapply(combined_features, function(x) tsne(as.matrix(x), whiten=FALSE))
+  
+  o_and_p_tsne <- list()
+  for (i in 1:length(both_tsne)){
+    o_and_p_tsne[[i]] <- as_tibble(both_tsne[[i]]) %>%
+      mutate(Type=rep(c("original", "k-nts+ (k = 3)"), each=nrow(orig_features[[i]])),
+             Data=fid,
+             dataid=i,
+             DataSubset=paste0(Data, dataid))
+  }
+
+  o_and_p_tsne <- bind_rows(o_and_p_tsne)
+  
+  combined_tsne <- combined_tsne %>% bind_rows(o_and_p_tsne)
+}
+```
+
+```{r fig.width=10, fig.height=10}
+combined_tsne %>%
+  ggplot(aes(x=V1, y=V2, color=Type)) +
+  geom_point(alpha=0.6) +
+  facet_wrap(~DataSubset, scales='free')
+```
+
+***
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+We can also compute the average spectral entropy within each data subset. The M3 monthly micro data takes three of the top five spots for highest spectral entropy (both of the top 2 spots).
+```{r}
+all_pca %>%
+  group_by(DataSubset) %>%
+  summarize(Average_SpecEntropy = mean(SpecEntropy), .groups='drop') %>%
+  arrange(desc(Average_SpecEntropy))
+```
+
+Import the accuracy results for the original and protected data sets.
+```{r}
+all_original_results <- read_csv("../../Outputs/Results/Tables/all_original_results.csv")
+
+all_protected_results <- read_csv("../../Outputs/Results/Tables/all_protected_results.csv") %>%
+  filter(Protection=="k-nts-plus", Parameter==3)
+```
+
+Rename variables for distinguishability.
+```{r}
+all_original_results <- all_original_results %>%
+  rename(original_MAE = values, original_MASE = MASE)
+
+all_protected_results <- all_protected_results %>%
+  rename(protected_MAE = values, protected_MASE = MASE)
+```
+
+Merge the accuracy results from the original and protected data.
+```{r}
+all_acc_results <- all_protected_results %>%
+  left_join(all_original_results, by=c("Model", "Data", "Snum", "Denominators", "Horizon"))
+```
+
+Add the accuracy results to the full PCA data.
+```{r}
+pca_all_results <- all_acc_results %>%
+  group_by(Model) %>%
+  left_join(all_pca, by=c("Data", "Snum")) %>%
+  ungroup()
+```
+
+Create variables identifying the difference in MASE and the percentage change in MAE, and drop unneeded columns.
+```{r}
+pca_all_results <- pca_all_results %>%
+  select(-Horizon, -Parameter) %>%
+  mutate(MASE_diff = protected_MASE - original_MASE,
+         MAE_pct_change = (protected_MAE - original_MAE)/original_MAE)
+```
+
+Build models for predicting the difference in MASE and the percent change in MAE.
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance, data=pca_all_results))
+```
+
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=pca_all_results))
+```
+
+These models are not statistically significant.
+
+Build models for predicting the change in MASE.
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance, data=pca_all_results))
+```
+
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=pca_all_results))
+```
+
+The spectral entropy is the only meaningful statistically significant variable. For a one unit increase in the spectral entropy, (this would require going from spectral entropy of 0 to 1, which is the maximum change) the expected value of the difference in MASE goes down by about 8. This implies that higher spectral entropy series see smaller increases in MASE from data protection. However, the amount of variation this model explains is minimal.
+
+Next, we perform the same analysis using only the features that were selected as important using RReliefF and RFE.
+
+***
+
+PCA analysis using only selected features.
+```{r}
+selected_pca <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][1]
+  
+  pca_res <- feature_pca(ts_data_file=fname, features_to_calculate=fv, sp=sp, sf=selected_features[[current_fname]]) %>%
+    mutate(Data=current_fname)
+  
+  selected_pca <- bind_rows(selected_pca, pca_res)
+}
+
+selected_pca <- selected_pca %>%
+  mutate(DataSubset = paste0(Data, dataid)) %>%
+  group_by(Data) %>%
+  mutate(Snum = 1:n()) %>%
+  ungroup()
+```
+
+Plot the selected time series features of each data set on the principal components space.
+
+Using only the selected features for PCA actually does even less to differentiate between subsets.
+```{r fig.width=10, fig.height=10}
+selected_pca %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point() +
+  facet_wrap(~DataSubset)
+```
+
+Add the accuracy results to the full PCA data.
+```{r}
+pca_selected_results <- all_acc_results %>%
+  group_by(Model) %>%
+  left_join(selected_pca, by=c("Data", "Snum")) %>%
+  ungroup()
+```
+
+Create variables identifying the difference in MASE and the percentage change in MAE, and drop unneeded columns.
+```{r}
+pca_selected_results <- pca_selected_results %>%
+  select(-Horizon, -Parameter) %>%
+  mutate(MASE_diff = protected_MASE - original_MASE,
+         MAE_pct_change = (protected_MAE - original_MAE)/original_MAE)
+```
+
+Build models for predicting the difference in MASE and the percent change in MAE.
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance, data=pca_selected_results))
+```
+
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=pca_selected_results))
+```
+
+These models are not statistically significant.
+
+Build models for predicting the change in MASE.
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance, data=pca_selected_results))
+```
+
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=pca_selected_results))
+```
+
+The results are similar to when we used all features.
+
+***
+
+Perform the same analysis using t-SNE using all features.
+
+t-SNE is used by Kang et al. (2020) to visualize the time series feature space, and it conducts a non-linear dimension reduction capable of maintaining both local and global structure.
+```{r}
+all_tsne <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][1]
+  
+  tsne_res <- feature_tsne(ts_data_file=fname, features_to_calculate=fv, sp=sp) %>%
+    mutate(Data=current_fname)
+  
+  all_tsne <- bind_rows(all_tsne, tsne_res)
+}
+```
+
+Data containing the t-SNE dimensions, the spectral entropy, and the average distance across the three nearest neighbors
+to each time series in each data subset.
+```{r}
+all_tsne <- all_tsne %>%
+  mutate(DataSubset = paste0(Data, dataid)) %>%
+  group_by(Data) %>%
+  mutate(Snum = 1:n()) %>%
+  ungroup()
+```
+
+Plot the selected time series features of each data set on the t-SNE space.
+
+Plotting the t-SNE results shows clear variation in the similarity of the series within each subset as well as their spectral entropy. This ranges from monthly-FINANCE1 which has relatively low spectral entropies but the series are relatively dissimilar on the feature space.
+```{r fig.width=10, fig.height=10}
+all_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point() +
+  facet_wrap(~DataSubset)
+```
+
+Add the accuracy results to the t-SNE data.
+```{r}
+all_tsne_results <- all_acc_results %>%
+  group_by(Model) %>%
+  left_join(all_tsne, by=c("Data", "Snum")) %>%
+  ungroup()
+```
+
+Create variables identifying the difference in MASE and the percent change in MAE and drop unneeded columns.
+```{r}
+all_tsne_results <- all_tsne_results %>%
+  select(-Horizon, -Parameter) %>%
+  mutate(MASE_diff = protected_MASE - original_MASE,
+         MAE_pct_change = (protected_MAE - original_MAE)/original_MAE)
+```
+
+Build models for predicting the difference in MASE and the percent change in MAE.
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance, data=all_tsne_results))
+```
+
+```{r}
+summary(lm(MAE_pct_change ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=all_tsne_results))
+```
+
+These models are not statistically significant.
+
+Build models for predicting the change in MASE.
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance, data=all_tsne_results))
+```
+
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=all_tsne_results))
+```
+
+
+***
+
+Perform the same analysis using t-SNE using selected features only.
+
+t-SNE is used by Kang et al. (2020) to visualize the time series feature space, and it conducts a non-linear dimension reduction capable of maintaining both local and global structure.
+```{r}
+selected_tsne <- tibble()
+
+for (fname in file_names){
+  
+  sp <- ifelse(grepl("monthly", fname), 12, ifelse(grepl("quarterly", fname), 4, 1))
+  
+  current_fname <- strsplit(fname, split="_")[[1]][1]
+  
+  tsne_res <- feature_tsne(ts_data_file=fname, features_to_calculate=fv, sp=sp, sf=selected_features[[current_fname]]) %>%
+    mutate(Data=current_fname)
+  
+  selected_tsne <- bind_rows(selected_tsne, tsne_res)
+}
+```
+
+Data containing the t-SNE dimensions, the spectral entropy, and the average distance across the three nearest neighbors
+to each time series in each data subset.
+```{r}
+selected_tsne <- selected_tsne %>%
+  mutate(DataSubset = paste0(Data, dataid)) %>%
+  group_by(Data) %>%
+  mutate(Snum = 1:n()) %>%
+  ungroup()
+```
+
+Plot the selected time series features of each data set on the t-SNE space.
+
+Plotting the t-SNE results shows clear variation in the similarity of the series within each subset as well as their spectral entropy. This ranges from monthly-FINANCE1 which has relatively low spectral entropies but the series are relatively dissimilar on the feature space.
+```{r fig.width=10, fig.height=10}
+selected_tsne %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point() +
+  facet_wrap(~DataSubset)
+```
+
+Add the accuracy results to the t-SNE data.
+```{r}
+selected_tsne_results <- all_acc_results %>%
+  group_by(Model) %>%
+  left_join(selected_tsne, by=c("Data", "Snum")) %>%
+  ungroup()
+```
+
+Create variables identifying the difference in MASE and the percent change in MAE and drop unneeded columns.
+```{r}
+selected_tsne_results <- selected_tsne_results %>%
+  select(-Horizon, -Parameter) %>%
+  mutate(MASE_diff = protected_MASE - original_MASE,
+         MAE_pct_change = (protected_MAE - original_MAE)/original_MAE)
+```
+
+Build models for predicting the protected MASE and the protected MAE.
+```{r}
+summary(lm(protected_MASE ~ SpecEntropy * AvgNeighborDistance, data=selected_tsne_results))
+```
+
+```{r}
+summary(lm(protected_MASE ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=selected_tsne_results))
+```
+
+```{r}
+summary(lm(protected_MAE ~ SpecEntropy * AvgNeighborDistance, data=selected_tsne_results))
+```
+
+```{r}
+summary(lm(protected_MAE ~ AvgNeighborDistance + original_MAE + Model, data=selected_tsne_results))
+```
+
+```{r}
+selected_tsne_results <- selected_tsne_results %>%
+  group_by(DataSubset, Model) %>%
+  mutate(num_series = n())
+```
+
+
+```{r}
+for (i in unique(selected_tsne_results$Model)){
+  temp <- selected_tsne_results %>% filter(Model==i)
+  print(i)
+  print(summary(lm(protected_MAE ~ original_MAE + SpecEntropy*AvgNeighborDistance*num_series, data=temp)))
+}
+```
+
+```{r}
+selected_tsne_results %>%
+  group_by(DataSubset) %>%
+  summarize(average_original_MAE = mean(original_MAE),
+            average_protected_MAE = mean(protected_MAE),
+            avg_pct_change = mean(MAE_pct_change),
+            avg_neighbor_distance = mean(AvgNeighborDistance),
+            n = n()/length(unique(selected_tsne_results$Model)), .groups='drop') %>%
+  mutate(pct_change_overall_mae = (average_protected_MAE-average_original_MAE)/average_original_MAE * 100) %>%
+  arrange(pct_change_overall_mae)
+```
+
+
+
+
+```{r}
+for (i in unique(selected_tsne_results$Model)){
+  temp <- selected_tsne_results %>% filter(Model==i)
+  print(i)
+  print(summary(lm(protected_MASE ~ original_MASE + SpecEntropy*AvgNeighborDistance, data=temp)))
+}
+```
+
+
+
+
+
+
+```{r}
+selected_tsne_results %>%
+  filter(DataSubset == "monthly-MICRO2")
+```
+
+
+These models are not statistically significant.
+
+Build models for predicting the change in MASE.
+```{r}
+summary(lm(MASE_diff ~ SpecEntropy * AvgNeighborDistance, data=selected_tsne_results))
+```
+
+```{r}
+summary(lm(protected_MASE ~ SpecEntropy * AvgNeighborDistance + DataSubset + Model, data=selected_tsne_results))
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

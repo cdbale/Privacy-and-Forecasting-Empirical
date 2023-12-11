@@ -52,6 +52,8 @@ def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_pa
                                     h=h,
                                     forecasting_model=model,
                                     sp=model_args["sp"],
+                                    truncate=model_args["truncate"],
+                                    log=model_args["log"],
                                     mean_normalize=model_args["mean_normalize"],
                                     options=model_args["options"],
                                     file_suffix=file_suffix)
@@ -76,10 +78,12 @@ def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_pa
 
 ################################################################################
 
-def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=False, options=None, file_suffix=None):
+def full_forecast_analysis(Y, h, forecasting_model, sp=None, log=True, truncate=True, mean_normalize=False, options=None, file_suffix=None):
 
     Y_processed = pre_process(ts_data=Y,
                               h=h,
+                              truncate=truncate,
+                              log=log,
                               mean_normalize=mean_normalize,
                               sp=sp)
 
@@ -95,6 +99,8 @@ def full_forecast_analysis(Y, h, forecasting_model, sp=None, mean_normalize=Fals
     forecasts = post_process(full_ts_data=Y,
                              forecasts=forecasts,
                              h=h,
+                             truncate=truncate,
+                             log=log,
                              mean_normalize=mean_normalize,
                              sp=sp)
 

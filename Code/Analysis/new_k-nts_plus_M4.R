@@ -4,6 +4,19 @@
 
 # ------------------------------------------------------------------------- #
 
+###
+###
+###
+###
+
+# To reduce computational complexity while testing, we are only using'
+# the DP baseline data sets.
+
+###
+###
+###
+###
+
 library(plyr)
 library(tidyverse)
 library(tsfeatures)
@@ -191,18 +204,15 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
   
-  if (corr_based){
-    X_cor <- cor(do.call(cbind, X_window))
-  }
-  
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   
-  # normalize features
-  # C <- as.data.frame(scale(C))
-  
   # convert C to a c x J matrix (num features by num series)
   C <- t(C)
+  
+  if ("x_acf1" %in% rownames(C)){
+    C["x_acf1",][is.na(C["x_acf1",])] <- 0.0 
+  }
   
   ## Calculate the feature distance matrix D
   ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
@@ -220,27 +230,11 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     # select from index 2 to k+1 since first index corresponds to the series itself
     K <- sorted$ix[2:(k+1)]
     
-    if (corr_based){
-      #############################
-      
-      # obtain the correlations corresponding to the K indexes
-      cors <- X_cor[,j][K]
-      
-      swap_weights <- exp(cors)/sum(exp(cors))
-      
-      #############################
-    }
-    
     # for each series
     for (t in 1:window_length){
       
-      if (corr_based){
-        # sample an index based on correlation
-        i <- sample(K, size=1, prob=swap_weights)
-      } else {
-        # sample an index
-        i <- sample(K, size=1)
-      }
+      # sample an index
+      i <- sample(K, size=1)
       
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
@@ -257,19 +251,15 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     # restrict the data to the current window
     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
     
-    if (corr_based){
-      ##################################
-      
-      X_cor <- cor(do.call(cbind, X_window))
-      
-      ##################################
-    }
-    
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
     
     # transpose C to a c x J matrix (num features by num series)
     C <- t(C)
+    
+    if ("x_acf1" %in% rownames(C)){
+      C["x_acf1",][is.na(C["x_acf1",])] <- 0.0 
+    }
     
     ## Calculate the feature distance matrix D
     # ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
@@ -286,30 +276,16 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
       # select from index 2 to k+1 since first index corresponds to the series itself
       K <- sorted$ix[2:(k+1)]
       
-      if (corr_based){
-        #############################
-        
-        # obtain the correlations corresponding to the K indexes
-        cors <- X_cor[,j][K]
-        
-        swap_weights <- exp(cors)/sum(exp(cors))
-        
-        #############################
-      }
-      
-      if (corr_based){
-        # sample an index based on correlation
-        i <- sample(K, size=1, prob=swap_weights)
-      } else{
-        # sample an index
-        i <- sample(K, size=1)
-      }
-      
+      # sample an index
+      i <- sample(K, size=1)
+    
       # replace the value
       X_new[t,j] <- time_series[[i]][t]
       
     }
   }
+  
+  print("swapping complete.")
   
   return(X_new)
   
@@ -386,7 +362,7 @@ feature_file_names <- grep("h2_train", list.files(features_path), value=TRUE)
 # file_names <- file_names[file_names %in% c("monthly-MICRO_h1_train.csv", "quarterly-FINANCE_h1_train.csv")]
 
 # loop over file names
-for (f in file_names){
+for (f in file_names[2:3]){
   
   # store file prefix
   prefix <- strsplit(f, split="_")[[1]][1]
@@ -403,7 +379,8 @@ for (f in file_names){
     separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data"), sep="_") %>%
     mutate(Protection = if_else(is.na(Protection), "Original", ifelse(Protection == prefix, "Original", Protection)),
            Parameter = if_else(is.na(Parameter), "Original", Parameter)) %>%
-    select(-Data)
+    select(-Data) %>%
+    filter(Protection %in% c("DP", "Original"))
   
   ### now import corresponding time series features and link to forecast errors
   current_feature_file_names <- grep(prefix, feature_file_names, value=TRUE)
@@ -473,7 +450,7 @@ for (f in file_names){
   
   ## Perform feature selection
   
-  fsr <- feature_selection(full_data_scaled, num_iter)
+  fsr <- feature_selection(scaled_feature_data=full_data_scaled, num_rfe_iters=num_iter)
   
   ## save RReliefF feature rankings (across forecasting models)
   
@@ -555,7 +532,7 @@ for (f in file_names){
   swap_times <- c()
   corr_swap_times <- c()
   
-  for (j in c(3, 5, 7, 10, 15)){
+  for (j in c(3)){
     
     print("Starting swapping.")
     

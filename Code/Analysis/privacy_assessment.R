@@ -3,11 +3,13 @@
 
 # Author: Cameron Bale
 
+data_folder = "M3/"
+
 ######## start with calculating the identification risk from
 ######## random guessing
 
 # paths to the data files and feature files
-fp <- "../../Data/Cleaned/"
+fp <- paste0("../../Data/Cleaned/", data_folder)
 
 # import names of original data files - this may include protected versions
 # so we have to remove those
@@ -200,7 +202,7 @@ simulation_results <- function(confidential_data_list, protected_data_list, samp
   
   # results <- lapply(1:length(confidential_data_list), function(x) run_simulations(confidential_data_list[[x]], protected_data_list[[x]], sample_size=E, num_simulations=S))
   
-  results <- run_simulations(confidential_data_list, protected_data_list, sample_size=E, num_simulations=S)
+  results <- run_simulations(confidential_data_list, protected_data_list, sample_size=sample_size, num_simulations=num_simulations)
   
   # AvgProbIdent <- mean(unlist(sapply(results, function(x) x$ProbIdent)))
   
@@ -237,18 +239,13 @@ E <- 10
 S <- 20
 
 # obtain names of files for protected data for forecasting the last period
-protected_file_names <- list.files("../../Data/Cleaned/")
+protected_file_names <- list.files(paste0("../../Data/Cleaned/", data_folder))
 
 protected_file_names <- grep("h2", protected_file_names, value=TRUE, invert=TRUE)
 
 protected_file_names <- grep("_test.csv", protected_file_names, value=TRUE, invert=TRUE)
 
 protected_file_names <- protected_file_names[!protected_file_names %in% file_names]
-
-
-########## don't do it this way anymore, make a function that does the
-########## privacy simulation for a given protection method and parameter value.
-########## run the function for each combination.
 
 protected_file_names
 
@@ -257,14 +254,15 @@ privacy_methods = list("VAR-simulated" = c("sim"),
                        # "DP_" = c(0.1, 1, 4.6, 10, 20), 
                        # "k-nts_" = c(3, 5, 7, 10, 15), 
                        # "k-nts-corr_" = c(3, 5, 7, 10, 15), 
-                       "k-nts-plus_" = c(3, 5, 7, 10, 15),
-                       "gratis-full-k-nts-plus_" = c(3, 5, 7, 10, 15),
-                       "gratis-k-nts-plus_" = c(3),
+                       "k-nts-plus_" = c(3),
+                       "gratis-full-k-nts-plus_" = c(3),
+                       # "gratis-k-nts-plus_" = c(3),
                        # "k-nts-plus-corr_" = c(3, 5, 7, 10, 15),
-                       "preprocess-k-nts-plus_" = c(3, 5, 7, 10, 15))
-                       # "preprocess-lw-k-nts-plus_" = c(3, 5, 7, 10, 15))
+                       "preprocess-k-nts-plus_" = c(3),
+                       "k-nts-plus-scaled-tsoutliers_" = c(3),
+                       "preprocess-lw-k-nts-plus_" = c(3))
 
-var_sim_files <- list.files("../../Outputs/VAR Simulated/")
+var_sim_files <- list.files(paste0("../../Outputs/VAR Simulated/", data_folder))
 # make sure protected versions are excluded
 var_sim_files <- grep("AN_", var_sim_files, value=TRUE, invert=TRUE)
 var_sim_files <- grep("DP_", var_sim_files, value=TRUE, invert=TRUE)
@@ -290,7 +288,7 @@ for (i in seq_along(privacy_methods)){
       pm_files <- var_sim_files
     } else {
       # import the files that correspond to the privacy method and parameter
-      pm_files <- grep(current_name, list.files("../../Data/Cleaned/"), value=TRUE)
+      pm_files <- grep(current_name, list.files(fp), value=TRUE)
       if (!current_name %in% c("preprocess-k-nts-plus_", "preprocess-lw-k-nts-plus_")){
         pm_files <- grep("preprocess", pm_files, value=TRUE, invert=TRUE)
       }
@@ -309,11 +307,11 @@ for (i in seq_along(privacy_methods)){
         confidential_file_prefix <- strsplit(pm_files[f], "_")[[1]][1]
         
         # import the protected series
-        X <- process_series(read.csv(paste0("../../Data/Cleaned/", grep(confidential_file_prefix, file_names, value=TRUE))))
+        X <- process_series(read.csv(paste0(fp, grep(confidential_file_prefix, file_names, value=TRUE))))
         
         # import the protected series
-        Xp <- process_series(read.csv(paste0("../../Outputs/VAR Simulated/", pm_files[f])))
-        
+        Xp <- process_series(read.csv(paste0("../../Outputs/VAR Simulated/", data_folder, pm_files[f])))
+
         for (subex in seq_along(Xp)){
           
           ident_probs <- append(ident_probs, simulation_results(confidential_data_list=X[[subex]], protected_data_list=Xp[[subex]], sample_size=E, num_simulations=S))
@@ -325,10 +323,10 @@ for (i in seq_along(privacy_methods)){
         confidential_file_prefix <- strsplit(pm_files[f], "_")[[1]][3]
       
         # import the protected series
-        X <- process_series(read.csv(paste0("../../Data/Cleaned/", grep(confidential_file_prefix, file_names, value=TRUE))))
+        X <- process_series(read.csv(paste0(fp, grep(confidential_file_prefix, file_names, value=TRUE))))
       
         # import the protected series
-        Xp <- process_series(read.csv(paste0("../../Data/Cleaned/", pm_files[f])))
+        Xp <- process_series(read.csv(paste0(fp, pm_files[f])))
 
         for (subex in seq_along(Xp)){
         
@@ -354,9 +352,6 @@ totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_met
 totals <- do.call(rbind, totals)
 
 write.csv(totals, "../../Outputs/Results/Tables/overall_privacy_averages.csv", row.names = FALSE)
-
-totals %>%
-  filter(Method == "gratis-full-k-nts-plus_")
 
 all_length_counts <- unlist(length_counts)
 
@@ -386,102 +381,3 @@ for (i in prob_counts){
 # features, so let's start with the 'fitness' of the time series. Let's start
 # with calculating the three highest fitness values from the neighbors of
 # each time series.
-
-
-
-
-
-
-
-
-
-
-# 
-# #### loop over privacy methods
-# #### calculate the average identification disclosure risk for each method
-# 
-# privacy_methods = list("AN_" = c(0.25, 0.5, 1, 1.5, 2), 
-#                        "DP_" = c(0.1, 1, 4.6, 10, 20), 
-#                        "k-nts_" = c(3, 5, 7, 10, 15), 
-#                        "k-nts-corr_" = c(3, 5, 7, 10, 15), 
-#                        "k-nts-plus_" = c(3, 5, 7, 10, 15),
-#                        "k-nts-plus-corr_" = c(3, 5, 7, 10, 15))
-# 
-# pnames <- names(privacy_methods)
-# 
-# res_list <- list()
-# 
-# # loop over privacy methods
-# for (pm in seq_along(privacy_methods)){
-#   res_list[[pnames[pm]]] <- list()
-#   for (param in privacy_methods[[pm]]){
-#     print(param)
-#     # res_list[[pnames[pm]]][[str(param)]] <- list()
-#     # res_list[[pnames[pm]]][[str(param)]][[1]] <- "stuff"
-#   }
-# }
-# 
-# #   
-# #   pm_file_names <- grep(pm, protected_file_names, value=TRUE)
-# #   
-# #   for (cf in file_names){
-# #     
-# #     res_list[[pm]][[cf]] <- list()
-# #     
-# #     # import the confidential series
-# #     X <- process_series(read.csv(paste0("../../Data/Cleaned/", cf)))
-# #     
-# #     # loop over confidential subsets
-# #     file_type <- strsplit(cf, split="_")[[1]][1]
-# #     
-# #     spf <- grep(file_type, pm_file_names, value=TRUE)
-# #     
-# #     for (pf in spf){
-# #       
-# #       params <- strsplit(pf, split="_")[[1]][1:2]
-# #       
-# #       X_p <- read.csv(paste0("../../Data/Cleaned/", pf))
-# #       
-# #       if (pm %in% c("k-nts", "k-nts-corr")){
-# #         X_p <- X_p[,2:ncol(X_p)]
-# #       }
-# #       
-# #       X_p <- process_series(X_p)
-# #       
-# #       res_list[[pm]][[cf]][[params[2]]] <- simulation_results(confidential_data_list=X, protected_data_list=X_p, sample_size=E, num_simulations=S)
-# #       
-# #     }
-# #     
-# #   }
-# #   
-# # }
-# 
-# temp <- res_list
-# 
-# an_temp <- res_list[[1]]
-# 
-# # there are 2,363 series total
-# 
-# for (i in an_temp){
-#   for (j in i){
-#     ttt <- j
-#   }
-# }
-# 
-# 
-# 
-# for (i in seq_along(1:length(temp))){
-#   for (j in seq_along(1:length(i))){
-#     for (k in seq_along(1:length(j))){
-#       temp[[i]][[j]][[k]] <- as.data.frame(do.call(rbind, temp[[i]][[j]][[k]]))
-#     }
-#   }
-# }
-# 
-# 
-# temp[[1]][[1]][[1]]
-# 
-
-
-
-

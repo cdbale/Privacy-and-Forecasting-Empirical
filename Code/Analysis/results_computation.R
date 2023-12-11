@@ -8,9 +8,11 @@
 library(tidyverse)
 library(forecast)
 
-import_data <- function(file_string, sp){
+data_folder <- "M3/"
+
+import_data <- function(data_folder, file_string, sp){
   
-  ts <- read.csv(paste0("../../Data/Cleaned/", file_string))
+  ts <- read.csv(paste0("../../Data/Cleaned/", data_folder, file_string))
   
   td <- as.list(as.data.frame(t(ts)))
   
@@ -37,7 +39,7 @@ import_data <- function(file_string, sp){
 # do we want the seasonal MASE for seasonal series?
 
 # paths to the data files and feature files
-fp <- "../../Data/Cleaned/"
+fp <- paste0("../../Data/Cleaned/", data_folder)
 
 # import names of original data files - this may include protected versions
 # so we have to remove those
@@ -72,7 +74,7 @@ for (fname in file_names){
   
   sp <- ifelse(grepl("monthly", file_prefix), 12, ifelse(grepl("quarterly", file_prefix), 4, 1))
   
-  X <- import_data(file_string=fname, sp=sp)
+  X <- import_data(data_folder=data_folder, file_string=fname, sp=sp)
   
   denoms <- unname(mase_denominators(time_series_list = X, seasonal_period = sp))
   
@@ -84,7 +86,7 @@ for (fname in file_names){
 }
 
 # now import mean absolute errors for all forecasts
-error_dist_path <- "../../Outputs/Results/Error_Distributions/"
+error_dist_path <- paste0("../../Outputs/Results/", data_folder, "Error_Distributions/")
 
 # import results files
 res_files <- list.files(error_dist_path)
@@ -118,6 +120,11 @@ all_original_results <- lapply(all_original_results, function(x) x %>% gather(ke
 all_protected_results <- do.call(rbind, all_protected_results)
 all_original_results <- do.call(rbind, all_original_results)
 
+
+
+
+
+
 all_original_results <- all_original_results %>%
   group_by(Model) %>%
   left_join(all_denoms, by=c("Data", "Snum")) %>%
@@ -137,24 +144,24 @@ write.csv(all_protected_results, file="../../Outputs/Results/Tables/all_protecte
 ################################################################################
 ################################################################################
 
-to_exclude <- all_protected_results %>%
-  group_by(Protection, Parameter, Model, Data) %>%
-  summarize(avg_MASE = mean(MASE), .groups='drop') %>%
-  arrange(desc(avg_MASE)) %>%
-  unite('file', Protection:Data) %>%
-  slice(1:5) %>%
-  pull(file)
-
-# # notice that there are some outlying errors (VAR tends to be the culprit)
-# # so we will exclude these from the averages
-# # somewhat subjective choice here...
 # to_exclude <- all_protected_results %>%
 #   group_by(Protection, Parameter, Model, Data) %>%
-#   summarize(avg_AE = mean(values), .groups='drop') %>%
-#   arrange(desc(avg_AE)) %>%
+#   summarize(avg_MASE = mean(MASE), .groups='drop') %>%
+#   arrange(desc(avg_MASE)) %>%
 #   unite('file', Protection:Data) %>%
-#   slice(1:13) %>%
+#   slice(1:5) %>%
 #   pull(file)
+
+# notice that there are some outlying errors (VAR tends to be the culprit)
+# so we will exclude these from the averages
+# somewhat subjective choice here...
+to_exclude <- all_protected_results %>%
+  group_by(Protection, Parameter, Model, Data) %>%
+  summarize(avg_AE = mean(values), .groups='drop') %>%
+  arrange(desc(avg_AE)) %>%
+  unite('file', Protection:Data) %>%
+  slice(1:13) %>%
+  pull(file)
 
 # remove the large outlying errors
 all_protected_results <- all_protected_results %>%
@@ -173,34 +180,23 @@ all_protected_results <- all_protected_results %>%
 
 ### calculate the average accuracy across all models and data sets
 # for each privacy method
-original_global_avg_mase <- all_original_results %>%
-  summarize(global_avg_MASE = mean(MASE)) %>%
-  pull(global_avg_MASE)
-
 original_global_avg_mae <- all_original_results %>%
   summarize(global_avg_MAE = mean(values)) %>%
   pull(global_avg_MAE)
 
 protection_avgs <- all_protected_results %>%
   group_by(Protection, Parameter) %>%
-  summarize(global_avg_MASE = mean(MASE),
-            global_avg_MAE = mean(values), .groups="drop") %>%
-  mutate(original_global_avg_MASE=original_global_avg_mase,
-         original_global_avg_MAE=original_global_avg_mae,
-         difference = global_avg_MASE-original_global_avg_MASE,
+  summarize(global_avg_MAE = mean(values), .groups="drop") %>%
+  mutate(original_global_avg_MAE=original_global_avg_mae,
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100,
          Parameter = as.numeric(Parameter)) %>%
   arrange(Protection, Parameter)
 
-write.csv(protection_avgs, file="../../Outputs/Results/Tables/protection_avgs.csv", row.names=FALSE)
-
 protection_avgs %>%
-  filter(Protection == "gratis-full-k-nts-plus") %>%
-  select(Protection, Parameter, percent_change_mae)
+  filter(Protection %in% c("k-nts-plus", "k-nts-plus-tsoutliers", "k-nts-plus-weighted-euclidean"),
+         Parameter == 3)
 
-
-
-
+write.csv(protection_avgs, file="../../Outputs/Results/Tables/protection_avgs.csv", row.names=FALSE)
 
 
 
@@ -209,13 +205,13 @@ protection_avgs %>%
 ### calculate the overall averages for each privacy method and model
 original_avg_model <- all_original_results %>%
   group_by(Model) %>%
-  summarize(original_avg_mase = mean(MASE), .groups="drop")
+  summarize(original_avg_mae = mean(values), .groups="drop")
 
 protection_model_avgs <- all_protected_results %>%
   group_by(Protection, Parameter, Model) %>%
-  summarize(avg_mase = mean(MASE), .groups="drop") %>%
+  summarize(avg_mae = mean(values), .groups="drop") %>%
   left_join(original_avg_model, by="Model") %>%
-  mutate(difference = avg_mase-original_avg_mase)
+  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
 
 
@@ -228,7 +224,7 @@ protection_model_avgs <- all_protected_results %>%
 ### calculate the overall averages for each privacy method, model, data set
 original_avg_model_data <- all_original_results %>%
   group_by(Model, Data) %>%
-  summarize(original_avg_mase = mean(MASE), .groups="drop")
+  summarize(original_avg_mae = mean(values), .groups="drop")
 
 protection_model_data_avgs <- all_protected_results %>%
   group_by(Protection, Parameter, Model, Data) %>%
@@ -248,14 +244,14 @@ protection_model_data_avgs <- all_protected_results %>%
 ### calculate overall average for each privacy method and data set
 original_avg_data <- all_original_results %>%
   group_by(Data) %>%
-  summarize(original_avg_mase = mean(MASE), .groups="drop")
+  summarize(original_avg_mae = mean(values), .groups="drop")
 
 protection_data_avgs <- all_protected_results %>%
   group_by(Protection, Parameter, Data) %>%
-  summarize(avg_mase = mean(MASE), .groups="drop") %>%
+  summarize(avg_protected_mae = mean(values), .groups="drop") %>%
   left_join(original_avg_data, by=c("Data")) %>%
-  mutate(difference = avg_mase-original_avg_mase) %>%
-  filter(Protection %in% c("preprocess-k-nts-plus", "k-nts-plus", "gratis-full-k-nts-plus", "gratis-k-nts-plus") & Parameter %in% c(3, 1)) %>%
+  mutate(pct_change_mae = (avg_protected_mae - original_avg_mae)/original_avg_mae * 100) %>%
+  filter(Protection %in% c("AN", "DP", "k-nts-plus", "k-nts-plus-tsoutliers", "k-nts-plus-weighted-euclidean")) %>%
   arrange(Data)
 
 write.csv(protection_data_avgs, "../../Outputs/Results/Tables/averages_by_frequency.csv", row.names=FALSE)

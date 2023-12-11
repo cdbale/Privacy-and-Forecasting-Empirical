@@ -198,14 +198,34 @@ mo_tsne %>%
 Write a function to import a time series data set, compute the features,
 and perform t-SNE dimension reduction.
 ```{r}
-calc_feature_density <- function(tsne_features){
-  # also calculate the "density" of the space
-  feature_dists <- dist(tsne_features)
-  feature_density <- sum(feature_dists)/nrow(tsne_features)
+# calc_feature_density <- function(tsne_features){
+#   # also calculate the "density" of the space
+#   feature_dists <- dist(tsne_features)
+#   feature_density <- sum(feature_dists)/nrow(tsne_features)
+# }
+
+## Calculate the feature distance matrix D
+D_calc <- function(ts_data){
+  ones_column <- as.matrix(rep(1, ncol(ts_data)), nrow=ncol(ts_data))
+  temp <- ones_column %*% diag(t(ts_data)%*%ts_data) - 2*t(ts_data)%*%ts_data + diag(t(ts_data)%*%ts_data) %*% t(ones_column)
+  return(temp)
+}
+
+# function to calculate the distance to the three nearest neighbors
+neighbor_distances <- function(d_matrix, num_neighbors){
+  distance_vector <- c()
+  for (i in 1:ncol(d_matrix)){
+    d <- d_matrix[,i]
+    sort_d <- sort(d)[2:(num_neighbors+1)]
+    avg_d <- mean(sort_d)
+    distance_vector <- append(distance_vector, avg_d)
+  }
+  return(distance_vector)
 }
 
 feature_tsne <- function(ts_data_file, features_to_calculate, sf, sp){
-  temp <- import_data(paste0("../../Data/Cleaned/", ts_data_file), sp)
+  
+  temp <- import_data(paste0("../../Data/Cleaned/M3/", ts_data_file), sp)
   
   # split X into separate datasets, one for each series length
   Xs <- list()
@@ -224,7 +244,7 @@ feature_tsne <- function(ts_data_file, features_to_calculate, sf, sp){
   
   temp_tsne <- lapply(temp_features, function(x) tsne(as.matrix(x), whiten=FALSE))
   
-  tsne_densities <- lapply(temp_tsne, calc_feature_density)
+  tsne_avg_distance <- lapply(temp_tsne, function(x) neighbor_distances(D_calc(t(x)), num_neighbors=3))
   
   all_results <- tibble()
   
@@ -233,7 +253,7 @@ feature_tsne <- function(ts_data_file, features_to_calculate, sf, sp){
                                                  "Dim1"=temp_tsne[[i]][,1], 
                                                  "Dim2"=temp_tsne[[i]][,2],
                                                  "SpecEntropy"=spec_ents[[i]],
-                                                 "FeatureDensity"=tsne_densities[[i]]))
+                                                 "AvgNeighborDistance"=tsne_avg_distance[[i]]))
   }
   
   return(all_results)
@@ -244,7 +264,7 @@ Write a loop that imports time series data, performs the feature t-SNE
 dimension reduction, and combines all the results into a tibble for plotting.
 ```{r}
 # paths to the data files and feature files
-fp <- "../../Data/Cleaned/"
+fp <- "../../Data/Cleaned/M3/"
 # import names of original data files - this may include protected versions
 # so we have to remove those
 file_names <- grep("_h1_train", list.files(fp), value=TRUE)
@@ -271,40 +291,98 @@ for (fname in file_names){
 ```{r}
 all_tsne <- all_tsne %>%
   mutate(dataid = as.character(dataid),
-         data = paste0(data, "_", dataid)) %>%
-  select(-dataid)
+         data_subset = paste0(data, "_", dataid))
 ```
+
+```{r}
+all_tsne %>% group_by(data_subset) %>% summarize(AvgNeighborDistance = mean(AvgNeighborDistance))
+```
+
 
 Import the average percent change in accuracy across data sets.
 ```{r}
-avg_acc_by_freq <- read_csv("../../Outputs/Results/Tables/averages_by_frequency.csv")
+all_original_results <- read_csv("../../Outputs/Results/Tables/all_original_results.csv")
 
-avg_acc_by_freq <- avg_acc_by_freq %>%
-  filter(Protection=="k-nts-plus") %>%
-  select(Data, avg_mase, original_avg_mase, difference)
+all_protected_results <- read_csv("../../Outputs/Results/Tables/all_protected_results.csv")
+```
 
-avg_acc_by_freq <- avg_acc_by_freq %>%
-  mutate(IdentProp = c(0.09875000, 0.09438776, 0.05415225,
-                       0.04960000, 0.03259494, 0.04300000, 
-                       0.15458333, 0.10937500, 0.08117284, 
-                       0.05660920, 0.01200980, 0.14000000,
-                       0.08170732, 0.06493506, 0.01027397),
-         FeatureDensity = unique(all_tsne$FeatureDensity))
+```{r}
+all_original_results <- all_original_results %>%
+  filter(Model == "ARIMA") %>%
+  rename(original_MAE = values, original_MASE = MASE)
 
-avg_acc_by_freq %>%
-  arrange(FeatureDensity) %>%
-  ggplot(aes(x=FeatureDensity, y=IdentProp)) +
-  geom_point(size=2)
+all_protected_results <- all_protected_results %>%
+  filter(Model == "ARIMA") %>%
+  filter(Protection == "k-nts-plus", Parameter == 3) %>%
+  rename(protected_MAE = values, protected_MASE = MASE)
+```
+
+
+```{r}
+all_acc_results <- all_original_results %>% left_join(all_protected_results, by=c("Data", "Snum", "Horizon", "Model", "Denominators"))
+
+all_acc_results
+```
+
+```{r}
+all_tsne
+```
+
+```{r}
+acc_tsne <- bind_cols(all_acc_results, all_tsne[,c("SpecEntropy", "AvgNeighborDistance")]) %>%
+  mutate(MASEDiff = protected_MASE - original_MASE)
+
+acc_tsne
+```
+
+
+```{r}
+summary(lm(MASEDiff ~ SpecEntropy + AvgNeighborDistance + I(SpecEntropy*AvgNeighborDistance) + Data, data=acc_tsne))
+```
+
+
+```{r}
+acc_tsne %>%
+  ggplot(aes(x=MASE_diff, y=AvgNeighborDistance)) +
+  geom_point()
+```
+
+
+
+
+```{r}
+all_original_results <- all_original_results %>%
+  group_by(Data, Snum) %>%
+  summarize(AvgMAE = mean(values),
+            AvgMASE = mean(MASE), .groups='drop')
+
+all_protected_results <- all_protected_results %>%
+  filter(Protection == "k-nts-plus", Parameter == 3) %>%
+  group_by(Data, Snum) %>%
+  summarize(AvgProtectedMAE = mean(values),
+            AvgProtectedMASE = mean(MASE), .groups='drop')
+```
+
+```{r}
+all_tsne
+```
+
+```{r}
+tsne_acc <- bind_cols(all_original_results, all_protected_results[,c("AvgProtectedMAE", "AvgProtectedMASE")], all_tsne)
+```
+
+```{r}
+tsne_acc
 ```
 
 The coloring comes from density, which is calculated as the total pairwise
 distances divided by the number of series. A higher value means less dense
 overall. Think of it as the within-data feature distance per series.
 ```{r fig.width=14, fig.height=10}
-plt <- all_tsne %>%
+plt <- tsne_acc %>%
   ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
   geom_point(size=1.75) +
-  facet_wrap(~data)
+  facet_wrap(~data_subset, scales='free')
 
 # ann_text_acc <- data.frame(Dim1=-400, 
 #                            Dim2=500,
@@ -322,6 +400,50 @@ plt <- all_tsne %>%
 
 plt
 ```
+
+```{r}
+tsne_acc %>%
+  filter(data_subset=="other-OTHER_1") %>%
+  ggplot(aes(x=Dim1, y=Dim2, color=SpecEntropy)) +
+  geom_point(size=1.75)
+```
+
+
+```{r}
+tsne_acc_priv <- tsne_acc %>%
+  group_by(data_subset) %>%
+  summarize(AvgMAE = mean(AvgMAE),
+            AvgMASE = mean(AvgMASE),
+            AvgProtectedMAE = mean(AvgProtectedMAE),
+            AvgProtectedMASE = mean(AvgProtectedMASE),
+            AvgSE = mean(SpecEntropy),
+            AvgND = mean(AvgNeighborDistance),
+            .groups='drop') %>%
+  mutate(IdentProp = c(0.090625000, 0.104687500, 0.150000000, 0.075609756, 0.087931034,
+                       0.050000000, 0.044054054, 0.086842105, 0.037500000, 0.101851852,
+                       0.136111111, 0.023166023, 0.042131980, 0.018965517, 0.061904762, 
+                       0.157500000, 0.125000000, 0.123076923, 0.066458333, 0.131250000, 
+                       0.092500000, 0.041558442, 0.014864865, 0.036363636, 0.009126984, 
+                       0.013157895, 0.117500000, 0.089024390, 0.062337662, 0.009931507))
+```
+
+
+```{r}
+tsne_acc_priv %>%
+  ggplot(aes(x=AvgND, y=AvgProtectedMASE-AvgMASE)) +
+  geom_point()
+```
+
+```{r}
+summary(lm(AvgProtectedMASE ~ AvgSE, data=tsne_acc_priv))
+```
+
+
+
+
+
+
+
 
 Import the original and protected accuracy results.
 ```{r}
@@ -1151,15 +1273,15 @@ file.
 selected_features <- list()
 
 # the rankings and OOB files have the same names, just in different folders
-ranking_files <- list.files("../../Outputs/RFE Rankings/")
+ranking_files <- list.files("../../Outputs/RFE Rankings/M3/")
 
 for (i in seq_along(file_names)){
   
   file_id <- substr(file_names[i], 1, nchar(file_names[i])-13)
   
   # find which features were chosen to be most important for these data sets
-  rankings <- read_csv(paste0("../../Outputs/RFE Rankings/", ranking_files[i]))
-  oob <- read_csv(paste0("../../Outputs/RFE OOB/", ranking_files[i]))
+  rankings <- read_csv(paste0("../../Outputs/RFE Rankings/M3/", ranking_files[i]))
+  oob <- read_csv(paste0("../../Outputs/RFE OOB/M3/", ranking_files[i]))
   
   # calculate the average oob for a given number of features for each model
   current_avg_oob <- oob %>%
@@ -1504,11 +1626,11 @@ hist(mm_distances)
 
 Plot original and k-nTS+ protected versions for sanity check.
 ```{r}
-mm_data <- read.csv("../../Data/Cleaned/monthly-MICRO_h1_train.csv")
-qf_data <- read.csv("../../Data/Cleaned/yearly-DEMOGRAPHIC_h1_train.csv")
+mm_data <- read.csv("../../Data/Cleaned/M3/monthly-MICRO_h1_train.csv")
+qf_data <- read.csv("../../Data/Cleaned/M3/quarterly-FINANCE_h1_train.csv")
 
-mm_protected <- read.csv("../../Data/Cleaned/k-nts-plus_3_monthly-MICRO_h1_train.csv")
-qf_protected <- read.csv("../../Data/Cleaned/gratis-full-k-nts-plus_3_yearly-DEMOGRAPHIC_h1_train.csv")
+mm_protected <- read.csv("../../Data/Cleaned/M3/k-nts-plus_3_monthly-MICRO_h1_train.csv")
+qf_protected <- read.csv("../../Data/Cleaned/M3/k-nts-plus_3_quarterly-FINANCE_h1_train.csv")
 ```
 
 ```{r}
@@ -1519,16 +1641,43 @@ ps1 <- as_vector(qf_protected[5,])
 ps1 <- unname(ps1[!is.na(ps1)])
 ```
 
+```{r fig.width=10, fig.height=10}
+qf_data <- as_tibble(t(qf_data)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='original')
+
+qf_protected <- as_tibble(t(qf_protected)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='protected')
+
+full <- bind_rows(qf_data, qf_protected)
+
+full %>%
+  ggplot(aes(x=time, y=value, color=type)) +
+  geom_line() +
+  facet_wrap(~Series)
+```
+
+
+
+
+Plot original and k-nTS+ protected versions for sanity check.
 ```{r}
-qf_protected_or <- import_data("../../Data/Cleaned/gratis-full-k-nts-plus_3_yearly-DEMOGRAPHIC_h1_train.csv", sp=1)
+mm_data <- read.csv("../../Data/Cleaned/M3/monthly-MICRO_h1_train.csv")
+qf_data <- read.csv("../../Data/Cleaned/M3/quarterly-FINANCE_h1_train.csv")
 
-replacements <- tsoutliers(qf_protected_or[[3]])
+mm_protected <- read.csv("../../Data/Cleaned/M3/k-nts-plus_3_monthly-MICRO_h1_train.csv")
+qf_protected <- read.csv("../../Data/Cleaned/M3/k-nts-plus-full-normalized_3_quarterly-FINANCE_h1_train.csv")
+```
 
-plot(qf_protected_or[[3]])
+```{r}
+apply(qf_data, 1, mean)
+```
 
-qf_protected_or[[3]][replacements$index] <- replacements$replacements
-
-plot(qf_protected_or[[3]])
+```{r}
+apply(qf_protected, 1, mean)
 ```
 
 
@@ -1546,11 +1695,61 @@ qf_protected <- as_tibble(t(qf_protected)) %>%
 full <- bind_rows(qf_data, qf_protected)
 
 full %>%
-  filter(Series %in% c("V1", "V2", "V3", "V4", "V5")) %>%
   ggplot(aes(x=time, y=value, color=type)) +
   geom_line() +
   facet_wrap(~Series)
 ```
+
+
+
+
+
+
+
+
+
+```{r}
+full %>%
+  filter(type=='original') %>%
+  ggplot(aes(x=time, y=value, color=Series)) +
+  geom_line() +
+  theme(legend.position='none')
+```
+
+```{r}
+mm_data <- read.csv("../../Data/Cleaned/M3/monthly-MICRO_h1_train.csv")
+mm_protected <- read.csv("../../Data/Cleaned/M3/k-nts-plus_3_monthly-MICRO_h1_train.csv")
+```
+
+
+```{r fig.width=10, fig.height=10}
+mm_data <- as_tibble(t(mm_data)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='original')
+
+mm_protected <- as_tibble(t(mm_protected)) %>%
+  mutate(time=1:n()) %>%
+  gather(key='Series', value='value', -time) %>%
+  mutate(type='protected')
+
+mm_full <- bind_rows(mm_data, mm_protected)
+
+mm_full %>%
+  group_by(Series, type) %>%
+  mutate(Series_length = n()) %>%
+  ungroup() %>%
+  mutate(Series_length = as.character(Series_length)) %>%
+  filter(type=='original') %>%
+  ggplot(aes(x=time, y=value, color=Series)) +
+  geom_line() +
+  facet_wrap(~Series_length, scales='free') +
+  theme(legend.position='none')
+```
+
+
+
+
 
 See if series with shorter windows had higher identification probabilities.
 See if series in smaller sets had higher identification probabilities.

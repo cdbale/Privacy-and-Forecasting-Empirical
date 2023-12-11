@@ -3,6 +3,7 @@
 
 # Author: Cameron Bale
 
+from cgi import print_exception
 import os, time
 import pandas as pd
 import numpy as np
@@ -15,12 +16,18 @@ from sktime.performance_metrics.forecasting import mean_absolute_error
 
 ### need the file string to just be the beginning e.g., "monthly-demographic"
 
-def error_distribution_generator(data_folder, file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, track_comp_time=False):
+def error_distribution_generator(data_folder, file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, is_rate=False, track_comp_time=False):
     
     test_files = os.listdir("../../Data/Cleaned/" + data_folder)
     
-    test_file = [x for x in test_files if forecast_horizon + "_test" in x and file_string in x]
-    
+    if is_rate:
+
+        test_file = [x for x in test_files if forecast_horizon + "_test" in x and file_string in x]
+        
+    else:
+        
+        test_file = [x for x in test_files if forecast_horizon + "_test" in x and file_string in x and "rate" not in x]
+
     [test_file] = test_file
     
     test_data = pd.read_csv("../../Data/Cleaned/" + data_folder + test_file).T
@@ -35,7 +42,7 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
     
     if track_comp_time:
         computation_time = pd.read_csv("../../Data/Computation Results/computation_time.csv")
-    
+
     for f in forecast_files:
         
         split_f = f.split("_")[2:]

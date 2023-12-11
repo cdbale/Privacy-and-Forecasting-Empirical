@@ -1,3 +1,91 @@
+Download repository with preset file structure.
+
+# Steps for M3 data
+
+1. Run `Data_Cleaning_M3.py`. This creates the train and test data for the original M3 data set. h1 indicates which time period is
+	to be forecasted, e.g., h1 means the last period is to be forecasted (function as future value in T+1), h2 means the second to 
+	last period (functioning as value in T).
+
+2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files using additive noise and differential privacy
+	for the parameter values in the paper.
+
+3. Run `Forecast_for_Feature_Selection_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
+	baseline protected data sets. The forecast errors will be predicted using the corresponding time series features in the feature
+	selection methodology in k-nTS+.
+
+4. Run `k-nts_M3.R` which protects the M3 data using k-nTS based on manual feature selection. See the paper for discussion of the chosen features.
+	This protects the data through time T, which the last period being treated as the period to be forecasted (i.e., T+1). The accuracy of 
+	forecasts from the data from this method will be 
+
+5. Run `original_and_baseline_tsfeatures_extraction_M3.R`. This R script calculates the time series features for the original and baseline
+	protected M3 data sets. These features will be combined with the forecast errors from step 3. to be used in the machine learning
+	feature selection method in k-nTS+.
+
+6. Run `k-nts-plus_M3.R` which protects the M3 data using the k-nTS+ methodology based on the machine-learning based feature selection method.
+
+7. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
+	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
+
+
+
+# Steps for M3 rate data
+
+1. Run `Data_Cleaning_M3_rate.py`. Same as step 1. above but for the M3 rates.
+
+2. Run `Create_AN_DP_M3_rate.py`. Same as step 2. above but for the M3 rates.
+
+3. Run `Forecast_for_Feature_Selection_M3_rate.py`. Same as step 3. above but for the M3 rates.
+
+4. Run `k-nts_M3_rate.R`. Same as step 4. above but for the M3 rates.
+
+5. Run `original_and_baseline_tsfeatures_extraction_M3_rate.R`. Same as step 4. above but for the M3 rates.
+
+6. Run `k-nts-plus_M3_rate.R`. Same as above but for M3 rates.
+
+7. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
+
+
+
+
+
+
+
+***# Steps for M4 data
+
+1. Run `Data_Cleaning_M4.py`. Same as step 1. above but for the M4 data.
+
+2. Run `Create_AN_DP_M4.py`. Same as step 2. above but for the M4 data.
+
+3. Run `Forecast_for_Feature_Selection_M4.py`. Same as step 3. above but for the M4 data.
+
+4. Run `k-nts_M4.R`. Same as step 4. above but for the M4 data.
+
+5. Run `original_and_baseline_tsfeatures_extraction_M4.R`. Same as step 4. above but for the M4 data.
+
+6. ....
+
+
+
+
+
+# Steps for M4 rate data
+
+1. Run `Data_Cleaning_M4_rate.py`. Same as step 1. above but for the M4 data.
+
+2. Run `Create_AN_DP_M4_rate.py`. Same as step 2. above but for the M4 data.
+
+3. Run `Forecast_for_Feature_Selection_M4_rate.py`. Same as step 3. above but for the M4 data.
+
+4. Run `k-nts_M4_rate.R`. Same as step 4. above but for the M4 data.
+
+5. Run `original_and_baseline_tsfeatures_extraction_M4_rate.R`. Same as step 4. above but for the M4 data.
+
+6. ....
+
+
+
+
+
 ### Code Directory ###
 
 - Run saving_protected_datasets.py for additive noise and differential privacy (no knts)

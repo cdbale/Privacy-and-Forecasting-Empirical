@@ -179,33 +179,33 @@ results_path = "../../Outputs/Results/M4/"
 # used in k-nTS+
 
 # create a list of the original file names
-og_files = os.listdir(cleaned_data_path)
-og_files = [x[:-12] for x in og_files if not any(y in x for y in ['_train', '_h1_', 'k-nts', 'AN_', 'DP_'])]
+# og_files = os.listdir(cleaned_data_path)
+# og_files = [x[:-12] for x in og_files if not any(y in x for y in ['_train', '_h1_', 'k-nts', 'AN_', 'DP_'])]
 
-print(og_files)
+# print(og_files)
 
-# for each of these, we need to extract the error distributions for all forecasting models and 
-# baseline data sets
+# # for each of these, we need to extract the error distributions for all forecasting models and 
+# # baseline data sets
 
-models = ["SES", "DES", "TES"] #, "ARIMA", "VAR", "LGBM", "RNN"]
+# models = ["SES", "DES", "TES"] #, "ARIMA", "VAR", "LGBM", "RNN"]
 
-protection_methods = {"original": [""],
-                      "AN": [0.25, 0.5, 1, 1.5, 2],
-                      "DP": [0.1, 1, 4.6, 10, 20]}
+# protection_methods = {"original": [""],
+#                       "AN": [0.25, 0.5, 1, 1.5, 2],
+#                       "DP": [0.1, 1, 4.6, 10, 20]}
 
-computation_time["error_computation"] = np.zeros(computation_time.shape[0])
+# computation_time["error_computation"] = np.zeros(computation_time.shape[0])
 
-computation_time.to_csv("../../Data/Computation Results/M4_computation_time.csv", index=False)
+# computation_time.to_csv("../../Data/Computation Results/M4_computation_time.csv", index=False)
 
-for f in og_files:
-    error_distribution_generator(data_folder=data_folder,
-                                 file_string=f,
-                                 forecasts_path=forecasts_path, 
-                                 results_path=results_path, 
-                                 model_list=models, 
-                                 protection_method_dict=protection_methods, 
-                                 forecast_horizon="h2",
-                                 track_comp_time=True)
+# for f in og_files:
+#     error_distribution_generator(data_folder=data_folder,
+#                                  file_string=f,
+#                                  forecasts_path=forecasts_path, 
+#                                  results_path=results_path, 
+#                                  model_list=models, 
+#                                  protection_method_dict=protection_methods, 
+#                                  forecast_horizon="h2",
+#                                  track_comp_time=True)
 
 #############################
 
@@ -223,17 +223,17 @@ for f in og_files:
 
 # forecasting for all protected data sets
 
-# # now we store all the cleaned data file names including the baseline
-# # protected data sets
-# cleaned_data_path = "../../Data/Cleaned/"
+# now we store all the cleaned data file names including the baseline
+# protected data sets
+# cleaned_data_path = "../../Data/Cleaned/" + data_folder
 # cleaned_files = os.listdir(cleaned_data_path)
 
 # # # # training data for feature selection
-# h1_train_files = [x for x in cleaned_files if "_h1_train" in x]
+# h1_train_files = [x for x in cleaned_files if "_h1_train" in x and "Monthly" in x]
 # h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
-# forecasts_path = "../../Outputs/Forecasts/"
-# results_path = "../../Outputs/Results/"
+# forecasts_path = "../../Outputs/Forecasts/" + data_folder
+# results_path = "../../Outputs/Results/" + data_folder
 
 # # loop over forecasting models and training data files
 
@@ -242,11 +242,11 @@ for f in og_files:
 
 # forecasting_models = {"SES": {"sp":None, "mean_normalize":False, "options":None},
 #                       "DES": {"sp":None, "mean_normalize":False, "options":None},
-#                       "TES": {"sp":None, "mean_normalize":False, "options":None},
-#                       "ARIMA": {"sp":None, "mean_normalize":False, "options":None},
-#                       "VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
-#                       "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-#                       "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
+#                       "TES": {"sp":None, "mean_normalize":False, "options":None}}
+#                       # "ARIMA": {"sp":None, "mean_normalize":False, "options":None},
+#                       # "VAR": {"sp":None, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
+#                       # "LGBM": {"sp":None, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
+#                       # "RNN": {"sp":None, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
 
 # for m in forecasting_models.items():
     
@@ -282,7 +282,8 @@ for f in og_files:
 #         test_file = [x for x in h1_test_files if x[:-9] in f]
 #         [test_file] = test_file
 
-#         generate_and_save_forecasts(train_file=f,
+#         generate_and_save_forecasts(data_folder=data_folder,
+#                                     train_file=f,
 #                                     test_file=test_file,
 #                                     forecasts_path=forecasts_path,
 #                                     results_path=results_path,
@@ -297,54 +298,57 @@ for f in og_files:
 #########################################################################################
 #########################################################################################
 
-## Forecasting is done, now we compile results.
+# Forecasting is done, now we compile results.
 
-# ## start with generating the series level absolute errors for all models and data sets
-# cleaned_data_path = "../../Data/Cleaned/"
-# forecasts_path = "../../Outputs/Forecasts/"
-# results_path = "../../Outputs/Results/"
+## start with generating the series level absolute errors for all models and data sets
+cleaned_data_path = "../../Data/Cleaned/" + data_folder
+forecasts_path = "../../Outputs/Forecasts/" + data_folder
+results_path = "../../Outputs/Results/" + data_folder
 
-# # create a list of the original file names
-# files = os.listdir(cleaned_data_path)
-# files = [x[:-12] for x in files if not any(y in x for y in ['Augmented', '_train', '_h2_', 'k-nts', 'AN_', 'DP_'])]
+# create a list of the original file names
+files = os.listdir(cleaned_data_path)
+files = [x[:-12] for x in files if not any(y in x for y in ['Augmented', '_train', '_h2_', 'k-nts', 'AN_', 'DP_'])]
 
-# # for each of these, we need to extract the error distributions for all forecasting models and 
-# # baseline data sets
+print(files)
 
-# ################
-# ################
-# # *********** RNN is left out ************* #
+# for each of these, we need to extract the error distributions for all forecasting models and 
+# baseline data sets
 
-# models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM"] # "RNN"]
+################
+################
+# *********** RNN is left out ************* #
 
-# # protection methods dictionary
-# protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
-#                       "DP": [0.1, 1, 4.6, 10, 20],
-#                       "k-nts_": [3, 5, 7, 10, 15],
-#                       "k-nts-corr_": [3, 5, 7, 10, 15],
-#                       "gratis-full-k-nts-plus_": [3, 5, 7, 10, 15],
-#                       "k-nts-plus_": [3, 5, 7, 10, 15],
-#                       "k-nts-plus-corr_": [3, 5, 7, 10, 15],
-#                       "k-nts-plus-scaled_": [3, 5, 7, 10, 15],
-#                       "k-nts-plus-corr-scaled_": [3, 5, 7, 10, 15],
-#                       "preprocess-k-nts-plus_": [3, 5, 7, 10, 15],
-#                       "preprocess-lw-k-nts-plus_": [3, 5, 7, 10, 15]}
+models = ["SES", "DES", "TES"] #, "ARIMA", "VAR", "LGBM", "RNN"]
 
-# for f in files:
-#     error_distribution_generator(file_string=f,
-#                                  forecasts_path=forecasts_path, 
-#                                  results_path=results_path, 
-#                                  model_list=models, 
-#                                  protection_method_dict=protection_methods, 
-#                                  forecast_horizon="h1")
+# protection methods dictionary
+protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
+                      "DP": [0.1, 1, 4.6, 10, 20],
+                      # "k-nts_": [3, 5, 7, 10, 15],
+                      # "k-nts-corr_": [3, 5, 7, 10, 15],
+                      # "gratis-full-k-nts-plus_": [3, 5, 7, 10, 15],
+                      "k-nts-plus_": [3]}
+                      # "k-nts-plus-corr_": [3, 5, 7, 10, 15],
+                      # "k-nts-plus-scaled_": [3, 5, 7, 10, 15],
+                      # "k-nts-plus-corr-scaled_": [3, 5, 7, 10, 15],
+                      # "preprocess-k-nts-plus_": [3, 5, 7, 10, 15],
+                      # "preprocess-lw-k-nts-plus_": [3, 5, 7, 10, 15]}
 
-#############################
+for f in files:
+    error_distribution_generator(data_folder=data_folder,
+                                 file_string=f,
+                                 forecasts_path=forecasts_path, 
+                                 results_path=results_path, 
+                                 model_list=models, 
+                                 protection_method_dict=protection_methods, 
+                                 forecast_horizon="h1")
 
-## run R file 'results_computation.R' to compute average results across data sets, models, protection methods, etc.
+############################
 
-#############################
+# run R file 'results_computation.R' to compute average results across data sets, models, protection methods, etc.
 
-#############################
+############################
 
-# ### run tsfeatures extraction on k-nts protected data sets
-# # run code in R file 'k-nts_tsfeatures_extraction.R'
+############################
+
+### run tsfeatures extraction on k-nts protected data sets
+# run code in R file 'k-nts_tsfeatures_extraction.R'

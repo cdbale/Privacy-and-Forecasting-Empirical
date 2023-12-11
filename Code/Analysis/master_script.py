@@ -7,6 +7,8 @@ from data_protection_functions import *
 from forecasting_functions import *
 from error_distribution_generator import *
 
+data_folder = "M3/"
+
 ################## Step 0: Clean and prep data. See `Data Cleaning (M3).ipynb`
 
 ######### Step 1: Create protected data sets for forecasting the second to last period
@@ -294,13 +296,13 @@ results_path = "../../Outputs/Results/"
 ## Forecasting is done, now we compile results.
 
 ## start with generating the series level absolute errors for all models and data sets
-cleaned_data_path = "../../Data/Cleaned/"
-forecasts_path = "../../Outputs/Forecasts/"
-results_path = "../../Outputs/Results/"
+cleaned_data_path = "../../Data/Cleaned/" + data_folder
+forecasts_path = "../../Outputs/Forecasts/" + data_folder
+results_path = "../../Outputs/Results/" + data_folder
 
 # create a list of the original file names
 files = os.listdir(cleaned_data_path)
-files = [x[:-12] for x in files if not any(y in x for y in ['Augmented', '_train', '_h2_', 'k-nts', 'AN_', 'DP_'])]
+files = [x[:-12] for x in files if not any(y in x for y in ['Augmented', '_train', '_h2_', 'k-nts', 'AN_', 'DP_', 'rate'])]
 
 # for each of these, we need to extract the error distributions for all forecasting models and 
 # baseline data sets
@@ -315,17 +317,19 @@ models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM"] # "RNN"]
 protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
                       "DP": [0.1, 1, 4.6, 10, 20],
                       "k-nts_": [3, 5, 7, 10, 15],
-                      "k-nts-corr_": [3, 5, 7, 10, 15],
                       "gratis-full-k-nts-plus_": [3, 5, 7, 10, 15],
                       "k-nts-plus_": [3, 5, 7, 10, 15],
-                      "k-nts-plus-corr_": [3, 5, 7, 10, 15],
                       "k-nts-plus-scaled_": [3, 5, 7, 10, 15],
                       "k-nts-plus-corr-scaled_": [3, 5, 7, 10, 15],
                       "preprocess-k-nts-plus_": [3, 5, 7, 10, 15],
-                      "preprocess-lw-k-nts-plus_": [3, 5, 7, 10, 15]}
+                      "preprocess-lw-k-nts-plus_": [3, 5, 7, 10, 15],
+                      "k-nts-plus-scaled-tsoutliers": [3],
+                      "k-nts-plus-tsoutliers": [3],
+                      "k-nts-plus-weighted-euclidean": [3]}
 
 for f in files:
-    error_distribution_generator(file_string=f,
+    error_distribution_generator(data_folder=data_folder,
+                                 file_string=f,
                                  forecasts_path=forecasts_path, 
                                  results_path=results_path, 
                                  model_list=models, 

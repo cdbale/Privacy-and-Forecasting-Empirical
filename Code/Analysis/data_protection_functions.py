@@ -170,7 +170,7 @@ def DP_protection(sensitive_data, epsilon):
     num_series = len(sensitive_data)
 
     # calculate global sensitivity for each series
-    GS = [x.max() - x.min() for x in sensitive_data]
+    GS = [np.abs(x.max() - x.min()) for x in sensitive_data]
 
     # For each series, add random noise sampled from 0-centered laplace
     # distribution with scale parameter = GS/epsilon

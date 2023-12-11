@@ -4,6 +4,7 @@
 
 ################################################################################
 
+from re import I
 import pandas as pd
 import numpy as np
 import pmdarima as pm
@@ -55,7 +56,7 @@ def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False
     return reversed_forecasts
 
 # pre-process the data using various pre-processing steps
-def pre_process(ts_data, h, mean_normalize=False, sp=None, transform_dict={}):
+def pre_process(ts_data, h, truncate=True, log=True, mean_normalize=False, sp=None, transform_dict={}):
     """
     Performs various pre-processing steps. Data independent steps are implemented
     using boolean values. Data-dependent steps are implemented using a transform_dict
@@ -86,14 +87,16 @@ def pre_process(ts_data, h, mean_normalize=False, sp=None, transform_dict={}):
     # Step 1: truncate any values less than 1 - this only comes into play for
     # data protected using random noise - we do this because we know the M3
     # monthly micro data is strictly positive
-    processed = [pd.Series([i if i >= 1 else 1 for i in x]) for x in processed]
+    if truncate:
+        processed = [pd.Series([i if i >= 1 else 1 for i in x]) for x in processed]
 
     # Step 2: mean normalize
     if mean_normalize:
         processed = [x.divide(np.mean(x)) for x in processed]
 
     # Step 3: log transform each series
-    processed = [np.log(x) for x in processed]
+    if log:
+        processed = [np.log(x) for x in processed]
 
     # Step 4: make stationary series using differencing
     # if make_stationary:
@@ -102,10 +105,10 @@ def pre_process(ts_data, h, mean_normalize=False, sp=None, transform_dict={}):
     return processed
 
 # post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None, var_sim=False):
+def post_process(full_ts_data, forecasts, h, truncate=True, log=True, mean_normalize=False, sp=None, var_sim=False):
 
     # create processed copy of forecasts, store the number of series
-    processed = forecasts
+    processed = [pd.Series(x) for x in forecasts]
     num_series = len(forecasts)
 
     # reverse seasonal and first differencing
@@ -127,13 +130,15 @@ def post_process(full_ts_data, forecasts, h, mean_normalize=False, sp=None, var_
 
     # use the below version if debugging - it allows you to return the original
     # data values when testing the pre-process function
-    processed = [np.exp(processed[i]) for i in range(num_series)]
+    if log:
+        processed = [np.exp(processed[i]) for i in range(num_series)]
 
     if mean_normalize:
         processed = [x * np.mean(full_ts_data[i]) for i, x in enumerate(processed)]
 
     # make sure forecasts are non-negative
-    processed = [pd.Series([x if x >=0 else 0 for x in y]) for y in processed]
+    if truncate:
+        processed = [pd.Series([x if x >=0 else 0 for x in y]) for y in processed]
 
     if var_sim:
         processed = pd.DataFrame([x.reset_index(drop=True) for x in processed])
