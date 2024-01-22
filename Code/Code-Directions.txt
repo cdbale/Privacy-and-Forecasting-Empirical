@@ -1,3 +1,6 @@
+* Note for authors: When cleaning up repository, check in git repo for needed code files at each step. If not there,
+get them from the Mac code folder in google drive.
+
 Download repository with preset file structure.
 
 # Steps for M3 data
