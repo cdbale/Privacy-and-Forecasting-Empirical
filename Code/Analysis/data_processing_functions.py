@@ -32,7 +32,7 @@ def difference_to_stationarity(ts_data):
     return differenced_series
 
 # function to reverse first differencing
-def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False):
+def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False, lag_orders=None):
 
     # list to store reversed forecasts
     reversed_forecasts = []
@@ -40,10 +40,11 @@ def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False
     for i, f in enumerate(forecasts):
         
         if is_simulated:
-            start_value = ts_data[i].iloc[0]
+            start_value = ts_data[i].iloc[lag_orders[i]]
+            # start_value = ts_data[i].iloc[0]
             reverse_diffed = np.r_[start_value, f].cumsum()
-            reverse_diffed = pd.Series(reverse_diffed)
-            reverse_diffed.index = ts_data[i].index
+            reverse_diffed = pd.Series(reverse_diffed[1:])
+            reverse_diffed.index = ts_data[i].index[(lag_orders[i]+1):]
             reversed_forecasts.append(reverse_diffed)
 
         else:
@@ -56,7 +57,7 @@ def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False
     return reversed_forecasts
 
 # pre-process the data using various pre-processing steps
-def pre_process(ts_data, h, truncate=True, log=True, mean_normalize=False, sp=None, transform_dict={}):
+def pre_process(ts_data, h, truncate, log, mean_normalize, sp, transform_dict={}):
     """
     Performs various pre-processing steps. Data independent steps are implemented
     using boolean values. Data-dependent steps are implemented using a transform_dict
@@ -92,7 +93,7 @@ def pre_process(ts_data, h, truncate=True, log=True, mean_normalize=False, sp=No
 
     # Step 2: mean normalize
     if mean_normalize:
-        processed = [x.divide(np.mean(x)) for x in processed]
+        processed = [x.divide(np.mean(x)) if np.mean(x) != 0.0 else x for x in processed]
 
     # Step 3: log transform each series
     if log:
@@ -105,7 +106,7 @@ def pre_process(ts_data, h, truncate=True, log=True, mean_normalize=False, sp=No
     return processed
 
 # post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, h, truncate=True, log=True, mean_normalize=False, sp=None, var_sim=False):
+def post_process(full_ts_data, forecasts, h, truncate, log, mean_normalize, sp, var_sim=False):
 
     # create processed copy of forecasts, store the number of series
     processed = [pd.Series(x) for x in forecasts]

@@ -26,6 +26,8 @@ Download repository with preset file structure.
 7. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
 
+8. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final protected data sets.
+
 
 
 # Steps for M3 rate data
@@ -44,9 +46,7 @@ Download repository with preset file structure.
 
 7. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
-
-
-
+8. Run `updated_tsfeatures_extraction_M3_rate.R` Same as above but for the M3 rate data.
 
 
 
@@ -83,33 +83,8 @@ Download repository with preset file structure.
 6. ....
 
 
-
-
-
-### Code Directory ###
-
-- Run saving_protected_datasets.py for additive noise and differential privacy (no knts)
-	for periods t-2 and t-1
-
-Next two steps can run at the same time.
-
-- Run generating_and_saving_forecasts.py for period t-2
-	- For additive noise and differential privacy only
-
-- Run feature extraction and k-nts.R to protect data up through period t-1
-
-- Run error_distribution_generator.py for period t-2
-	- get error distributions for models forecasting additive noise and differential privacy data sets
-
-- Run k-nts-plus.R using RReliefF and random forest to select the features whose changes are most
-	predictive of forecast accurracy for additive noise and differential privacy data in t-2,
-	which generates protected data up through period t-1
-
-- Run generating_and_saving_forecasts.py for period t-1
-	- Include data from all privacy methods
-
-- Run results_generator.py
-
-- Run error_distribution_generator.py (with h=1)
-
-- Run results analysis files
+* get rid of DP 0.1 files
+* catch up on running M4-rate code. Run M4 and M4 rate code at the same steps until finished, putting results in appendix of revision.
+CHECK THAT EACH STEP USES THE CORRECT SEASONAL IDENTIFIERS
+*check that window length used is consistent from k-nTS files to k-nTS+ files
+* not running k-nTS, only k-nTS+ and differential privacy

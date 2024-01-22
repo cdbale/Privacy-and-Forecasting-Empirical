@@ -19,9 +19,16 @@ source('custom_feature_functions.R')
 
 file_path <- paste0("../../Data/Cleaned/", data_folder)
 
+# check if sub directory exists 
+if (file.exists(paste0("../../Data/Features/", data_folder))){
+  NULL
+} else {
+  # create a new sub directory for storing time series features
+  dir.create(file.path(paste0("../../Data/Features/", data_folder)))
+}
+
 # import names of original and baseline protected data files
-file_names <- grep("k-nts", list.files(file_path), value=TRUE, invert=TRUE)
-file_names <- grep("test", file_names, value=TRUE, invert=TRUE)
+file_names <- grep("_h2_train", list.files(file_path), value=TRUE)
 
 file_names
 
@@ -76,45 +83,24 @@ fv <- c("entropy_c", "lumpiness", "stability",
         "nonlinearity", "series_mean", "series_variance",
         "skewness", "kurtosis")
 
-################################################################################
-# file_names[1]
-# file_names[30]
-# 
-# temp_data1 <- read.csv(paste0(file_path, file_names[547]))
-# temp_data30 <- read.csv(paste0(file_path, file_names[30]))
-# 
-# temp_features1 <- extract_features(temp_data1, sp=4, feature_vector=fv)
-# temp_features30 <- extract_features(temp_data30, sp=1, feature_vector=fv)
-# 
-# columns1 <- colnames(temp_features1)
-# columns30 <- colnames(temp_features30)
-# 
-# columns1[!columns1 %in% columns30]
-
-## These features are unavailable when we don't have seasonal data.
-# "seasonal_strength" "peak"              "trough"            "seas_acf1"         "seas_pacf" 
-################################################################################
-
-### Perform feature extraction for all original and baseline data sets.
-
-################################################################################
-################################################################################
-################################################################################
-################################################################################
+# import file with computation times
+computation_time <- read.csv("../../Data/Computation_Time/M4_computation_time.csv")
 
 for (f in file_names){
   data_set <- read.csv(paste0(file_path, f))
-  sp_l <- ifelse(grepl("Monthly", f), 12, ifelse(grepl("Quarterly", f), 4, 1))
-  if (grepl("h2_train", f)){
-    start <- Sys.time()
-    features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
-    stop <- Sys.time()
-    features <- features %>% select(-nperiods, -seasonal_period)
-    # computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="mins")
-    # write.csv(computation_time, file="../../Data/Computation Results/computation_time.csv", row.names=FALSE)
-  }
-  else {
-    features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
-  }
+  sp_l <- ifelse(grepl("Daily", f), 7,
+                 ifelse(grepl("Hourly", f), 24,
+                        ifelse(grepl("Monthly", f), 12,
+                               ifelse(grepl("Quarterly", f), 4,
+                                      ifelse(grepl("Weekly", f), 52, 1)))))
+  
+  start <- Sys.time()
+  features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
+  stop <- Sys.time()
+  features <- features %>% select(-nperiods, -seasonal_period)
+  computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="secs")
   write.csv(features, file=paste0("../../Data/Features/", data_folder, "features_", f), row.names=FALSE)
+  print(f)
 }
+
+write.csv(computation_time, file="../../Data/Computation_Time/M4_computation_time.csv", row.names=FALSE)

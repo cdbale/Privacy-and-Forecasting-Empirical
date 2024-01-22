@@ -237,11 +237,11 @@ results_path = "../../Outputs/Results/" + data_folder
 # for seasonal models, we have to account for some data not having a seasonal period.
 # for TES, we only apply it to monthly and quarterly data
 
-forecasting_models = {"SES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
-                      "DES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
-                      "TES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
-                      "ARIMA": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
-                      "VAR": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
+forecasting_models = {# "SES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
+                      # "DES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
+                      # "TES": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
+                      # "ARIMA": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
+                      # "VAR": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
                       "LGBM": {"sp":None, "truncate":False, "log":False, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}}}
                       #"RNN": {"sp":None, log=False, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 5}}}
 
@@ -319,7 +319,7 @@ models = ["SES", "DES", "TES", "ARIMA", "VAR", "LGBM"] # "RNN"]
 protection_methods = {"AN": [0.25, 0.5, 1, 1.5, 2],
                       "DP": [0.1, 1, 4.6, 10, 20],
                       "k-nts-plus-rate_": [3],
-                      "k-nts-plus-rate-GA": [3, 15]}
+                      "k-nts-plus-rate-GA": [3]}
 
 for f in files:
     error_distribution_generator(data_folder=data_folder,

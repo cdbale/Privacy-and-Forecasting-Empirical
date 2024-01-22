@@ -1755,6 +1755,21 @@ orig_features_b <- tsfeatures(tslist=b_simulated_series_train, features=fv, scal
 r_orig_features_g <- tsfeatures(tslist=g_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
 r_orig_features_b <- tsfeatures(tslist=b_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
 
+# an_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+# an_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+#  
+# dp_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+# dp_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+# 
+# temp_knts_g <- as.list(as.data.frame(knts_alg(time_series=g_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_g$selected_features, importance_weights=r_fs_g$importance_weights)))
+# temp_knts_b <- as.list(as.data.frame(knts_alg(time_series=b_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_b$selected_features, importance_weights=r_fs_b$importance_weights)))
+# 
+# temp_knts_g <- lapply(temp_knts_g, function(x) ts(x, frequency=sp))
+# temp_knts_b <- lapply(temp_knts_b, function(x) ts(x, frequency=sp))
+# 
+# knts_features_g <- tsfeatures(tslist=temp_knts_g, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+# knts_features_b <- tsfeatures(tslist=temp_knts_b, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+
 # combine feature dataframes and plot
 features_df <- orig_features_b %>%
   bind_rows(orig_features_g, r_orig_features_b, r_orig_features_g) %>%
@@ -1794,7 +1809,7 @@ pc_g <- prcomp(x=features_g, center=TRUE, scale.=TRUE)
 full_pc <- as_tibble(pc_b$x[,1:2]) %>%
   bind_rows(as_tibble(pc_g$x[,1:2])) %>%
   mutate(Form = rep(rep(c("Original", "Rate"), each=nrow(orig_features_g)), 2),
-         Set = rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)*2))
+         Set = rep(rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)*2)
 
 # plot on the PC axes
 
@@ -1812,28 +1827,13 @@ full_pc %>%
 ################################################################################
 ################################################################################
 ################################################################################
-
-# what features were selected for each data set?
-
-fs_b$selected_features
-
-fs_g$selected_features
-
-an_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) additive_noise(x, s=r_best_an_param_g)), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-an_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) additive_noise(x, s=r_best_an_param_b)), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-  
-dp_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) differential_privacy(x, epsilon=r_best_dp_param_g)), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-dp_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) differential_privacy(x, epsilon=r_best_dp_param_b)), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-
-temp_knts_g <- as.list(as.data.frame(knts_alg(time_series=g_simulated_rates_train, sp=1, window_length=25, k=r_best_knts_param_g, features_to_calculate=fv, selected_features=r_fs_g$selected_features, importance_weights=r_fs_g$importance_weights)))
-temp_knts_b <- as.list(as.data.frame(knts_alg(time_series=b_simulated_rates_train, sp=1, window_length=25, k=r_best_knts_param_b, features_to_calculate=fv, selected_features=r_fs_b$selected_features, importance_weights=r_fs_b$importance_weights)))
- 
-temp_knts_g <- lapply(temp_knts_g, function(x) ts(x, frequency=sp))
-temp_knts_b <- lapply(temp_knts_b, function(x) ts(x, frequency=sp))
- 
-knts_features_g <- tsfeatures(tslist=temp_knts_g, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-knts_features_b <- tsfeatures(tslist=temp_knts_b, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-
-
-
-
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################

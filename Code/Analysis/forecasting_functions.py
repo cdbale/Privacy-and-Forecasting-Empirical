@@ -6,6 +6,7 @@
 ################################################################################
 
 from ast import Param
+from statistics import mean
 import subprocess
 import pickle
 import pandas as pd
@@ -56,7 +57,8 @@ def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_pa
                                     log=model_args["log"],
                                     mean_normalize=model_args["mean_normalize"],
                                     options=model_args["options"],
-                                    file_suffix=file_suffix)
+                                    file_suffix=file_suffix,
+                                    data_folder=data_folder)
 
     # save the forecasts and fitted values based on confidential data to .csv file
     horizon = train_file.split("_")[-2]
@@ -78,7 +80,7 @@ def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_pa
 
 ################################################################################
 
-def full_forecast_analysis(Y, h, forecasting_model, sp=None, log=True, truncate=True, mean_normalize=False, options=None, file_suffix=None):
+def full_forecast_analysis(Y, h, forecasting_model, sp, log, truncate, mean_normalize, options=None, file_suffix=None, data_folder=None):
 
     Y_processed = pre_process(ts_data=Y,
                               h=h,
@@ -91,9 +93,13 @@ def full_forecast_analysis(Y, h, forecasting_model, sp=None, log=True, truncate=
     forecasts = train_and_forecast(ts_data=Y_processed,
                                    h=h,
                                    forecasting_model=forecasting_model,
+                                   truncate=truncate,
+                                   log=log,
+                                   mean_normalize=mean_normalize,
                                    sp=sp,
                                    options=options,
-                                   file_suffix=file_suffix)
+                                   file_suffix=file_suffix,
+                                   data_folder=data_folder)
 
     # post-process the forecasts
     forecasts = post_process(full_ts_data=Y,
@@ -109,7 +115,7 @@ def full_forecast_analysis(Y, h, forecasting_model, sp=None, log=True, truncate=
 ################################################################################
 
 # general function for training a model and generating forecasts.
-def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, file_suffix=None):
+def train_and_forecast(ts_data, h, forecasting_model, truncate=False, log=False, mean_normalize=False, sp=None, options=None, file_suffix=None, data_folder=None):
     """
     Performs model training and forecasting using the supplied model applied to
     the supplied time series data. Model-specific arguments have a default of
@@ -162,9 +168,14 @@ def train_and_forecast(ts_data, h, forecasting_model, sp=None, options=None, fil
     elif forecasting_model == "VAR":
         fcasts = VAR_forecast(ts_data=ts_data,
                               h=h,
+                              truncate=truncate,
+                              log=log,
+                              mean_normalize=mean_normalize,
+                              sp=sp,
                               save_params=options["save_params"],
                               simulate_series=options["simulate_series"],
-                              param_save_file=file_suffix)
+                              param_save_file=file_suffix,
+                              data_folder=data_folder)
 
     elif forecasting_model == "LGBM":
         lags = options['window_length']
@@ -193,7 +204,6 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
     unique_lengths = np.unique(series_lengths)
 
     full_fcasts = {}
-    full_fitted_values = {}
 
     for length in unique_lengths:
 
@@ -252,7 +262,7 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
 
-    return full_fcasts
+    return list(full_fcasts.values())
 
 # function for forecasting with LGBM
 def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
@@ -317,9 +327,9 @@ def LGBM_forecast(ts_data, h, lags, max_samples_per_ts):
         for i,j in enumerate(tsi):
             full_fcasts[j] = fcasts[i]
 
-    return full_fcasts
+    return list(full_fcasts.values())
 
-def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None):  
+def VAR_forecast(ts_data, h, save_params, simulate_series, truncate=False, log=False, mean_normalize=False, sp=None, param_save_file=None, data_folder=None):  
 
     series_means = [np.mean(x) for x in ts_data]
 
@@ -338,6 +348,8 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
     
     # list to store simulated time series
     simulated = [0 for x in range(num_series)]
+    
+    lag_orders = [0 for x in range(num_series)]
 
     for k, l in enumerate(unique_lengths):
 
@@ -364,7 +376,7 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
             if save_params:
                 intercepts = results.coefs_exog
                 pd_intercepts = pd.DataFrame(intercepts)
-                newpath = "../../Outputs/VAR Weights/"
+                newpath = "../../Outputs/VAR Weights/" + data_folder
                 if not os.path.exists(newpath):
                     os.makedirs(newpath)
                 pd_intercepts.to_csv(newpath + param_save_file[:-9] + "intercepts_" + str(k) + "_" + str(i) + ".csv", index=False)
@@ -375,12 +387,26 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
             
             if simulate_series:
                 ## simulating VAR time series
-                sim_series = results.simulate_var(steps=group.shape[0]+lag_order,
+                burn_in_sim_series = results.simulate_var(steps=2*lag_order+1,
+                                                          seed=42,
+                                                          initial_values=group.iloc[:lag_order,:],
+                                                          nsimulations=5000)
+                
+                burn_in_sim_series = np.average(burn_in_sim_series, axis=0)
+                
+                sim_series = results.simulate_var(steps=group.shape[0]-lag_order-1,
                                                   seed=42,
-                                                  initial_values=np.zeros((lag_order, group.shape[1])))
+                                                  initial_values=burn_in_sim_series[(lag_order+1):,:],
+                                                  nsimulations=5000)
+                
+                sim_series = np.average(sim_series, axis=0)
+                
+                # add the first simulated value
+                sim_series = np.vstack((burn_in_sim_series[lag_order,:], sim_series))
                 
                 for s, p in enumerate(j):
-                    simulated[p] = sim_series[lag_order:,s]
+                    simulated[p] = sim_series[:,s]
+                    lag_orders[p] = lag_order
                 
             # generate forecasts
             if lag_order == 0:
@@ -390,6 +416,8 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
 
             # store forecasts in dataframe for all series
             full_forecasts[j,:] = y_pred.T
+            
+    # lag_orders = [x if x >= 0 else 0 for x in lag_orders]
 
     full_forecasts = [pd.Series(full_forecasts[i,:]) for i in range(num_series)]
 
@@ -398,89 +426,28 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, param_save_file=None)
         full_forecasts[i].index = np.arange(last_time+1, last_time+1+h)
 
     processed = reverse_difference_to_stationarity(h, full_forecasts, ts_data)
-    
-    ######## how do we handle first differencing with the simulated time series???
-    ######## save the simulated series as a dataframe
-    ######## we are going to save the simulated versions in first differenced form,
-    ######## and have the adversary match on the first differenced version
 
     if simulate_series:
 
         # reverse the differencing to stationarity on the simulated time series - use the
         # mean of the original series?
         
-        simulated = reverse_difference_to_stationarity(h, simulated, ts_data, is_simulated=True)
+        simulated = reverse_difference_to_stationarity(h, simulated, ts_data, is_simulated=True, lag_orders=lag_orders)
         
-        simulated = post_process(full_ts_data=ts_data, forecasts=simulated, h=h, var_sim=True)
+        simulated = post_process(full_ts_data=ts_data,
+                                 forecasts=simulated,
+                                 h=h,
+                                 truncate=truncate,
+                                 log=log,
+                                 mean_normalize=mean_normalize,
+                                 sp=sp,
+                                 var_sim=True)
     
-        sim_path = "../../Outputs/VAR Simulated/"
+        sim_path = "../../Outputs/VAR Simulated/" + data_folder
+        
         if not os.path.exists(sim_path):
             os.makedirs(sim_path)
+        
         simulated.to_csv(sim_path + param_save_file, index=False)
-
+        
     return processed
-
-
-
-# function to calculate metrics for the original and protected forecasts
-def forecast_results(test_data, original_forecasts, protected_forecasts):
-    """
-    Compares the accuracy of forecasts from the original confidential data,
-    and forecasts from the protected data.
-
-    param: test_data: (horizon, num_series) shaped dataframe with actual test values
-    param: original_forecasts: (horizon, num_series) shaped dataframe with values
-            forecasted based on the confidential training data
-    param: protected_forecasts: (horizon, num_series) shaped dataframe with values
-            forecasted based on the protected training data
-    return: results_dict: Returns a dictionary of tuples containing various comparisons.
-             The first and second values of each tuple are based on MAPE and MdAPE, respectively.
-    """
-
-    ############## Comparison 1 ###############
-    ##### Global MAPE and MdAPE
-
-    mae_global = mean_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
-    mdae_global = median_absolute_error(test_data, original_forecasts, multioutput="uniform_average")
-
-    mae_global_protected = mean_absolute_error(test_data, protected_forecasts, multioutput="uniform_average")
-    mdae_global_protected = median_absolute_error(test_data, protected_forecasts, multioutput="uniform_average")
-
-    ############################################################################
-
-    ############## Comparison 2 ###############
-    ##### The MAPE and MdAPE for upward vs. downward adjusted forecasts
-
-    # boolean values for whether a forecasted point was adjusted up or down after protection
-    adjusted_up = original_forecasts < protected_forecasts
-    adjusted_up = pd.concat([row for i, row in adjusted_up.iterrows()], ignore_index=True)
-    adjusted_down = original_forecasts > protected_forecasts
-    adjusted_down = pd.concat([row for i, row in adjusted_down.iterrows()], ignore_index=True)
-
-    # collapse forecasts and test data for indexing using adjustment directions
-    collapsed_original = pd.concat([row for i, row in original_forecasts.iterrows()], ignore_index=True)
-    collapsed_protected = pd.concat([row for i, row in protected_forecasts.iterrows()], ignore_index=True)
-    collapsed_test = pd.concat([row for i, row in test_data.iterrows()], ignore_index=True)
-
-    # mean absolute error for original forecasts (without adjustment)
-    mae_up = mean_absolute_error(collapsed_test[adjusted_up], collapsed_original[adjusted_up])
-    mae_down = mean_absolute_error(collapsed_test[adjusted_down], collapsed_original[adjusted_down])
-
-    # mean absolute percentage error for protected forecasts (with adjustment)
-    mae_up_protected = mean_absolute_error(collapsed_test[adjusted_up], collapsed_protected[adjusted_up])
-    mae_down_protected = mean_absolute_error(collapsed_test[adjusted_down], collapsed_protected[adjusted_down])
-
-    results_dict = {
-        "Original MAE Up": mae_up,
-        "Protected MAE Up": mae_up_protected,
-        "Original MAE Down": mae_down,
-        "Protected MAE Down": mae_down_protected,
-        "Original MdAE Up": mdae_up,
-        "Protected MdAE Up": mdae_up_protected,
-        "Original MdAE Down": mdae_down,
-        "Protected MdAE Down": mdae_down_protected,
-    }
-
-    results_dict = {k: np.round(v, 4) for k, v in results_dict.items()}
-
-    return results_dict

@@ -33,7 +33,7 @@ my_features <- function(y) {
   # 
   c(entropy = entropy(y),
     acf = acf(y, plot = FALSE)$acf[2:3, 1, 1])
-    # slope = unname(lm(y~ seq(1, length(y)))[['coefficients']][2]))
+  # slope = unname(lm(y~ seq(1, length(y)))[['coefficients']][2]))
 }
 
 # function to perform additive noise protection
@@ -44,9 +44,9 @@ additive_noise <- function(time_series, s){
 
 # function to perform differential privacy protection
 differential_privacy <- function(time_series, epsilon, original=FALSE){
-
+  
   # calculate global sensitivity
-  gs = abs(max(time_series) - min(time_series))
+  gs = max(time_series) - min(time_series)
   
   # add random noise sampled from 0-centered laplace
   # distribution with scale parameter = GS/epsilon
@@ -220,10 +220,9 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters, models){
   
   ns <- combined_oob %>%
     group_by(model) %>%
-    mutate(min_error = min(value),
-           within_5p = ifelse((value-min_error)/min_error <= 0.05, 1, 0)) %>%
+    mutate(min_error = min(value)) %>%
     ungroup() %>%
-    filter(within_5p == 1) %>%
+    filter(value == min_error) %>%
     group_by(model) %>%
     summarize(num_selected = min(num_features), .groups='drop') %>%
     mutate(avg_selected = floor(mean(num_selected))) %>%
@@ -258,34 +257,35 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters, models){
               "rf" = rf_res))
 }
 
-knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features, importance_weights){
-
+knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features, importance_weights, corr_based=FALSE){
+  
   # number of time series
   num_series <- length(time_series)
-
+  
   # number of time periods
   num_periods <- length(time_series[[1]])
-
+  
   # matrix to hold new series
   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
-
+  
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
-
+  
+  if (corr_based){
+    X_cor <- cor(do.call(cbind, X_window))
+  }
+  
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-
-  ## allow to remove a constant column if it exists
-  to_keep <- apply(C, 2, var) != 0
-  # rescale weights if necessary
-  imp_weights <- importance_weights[to_keep]/sum(importance_weights[to_keep])
-  C <- C[, to_keep]
   
-  # normalize features convert C to a c x J matrix (num features by num series)
-  C <- t(as.data.frame(scale(C)))
+  # normalize features
+  C <- as.data.frame(scale(C))
+  
+  # convert C to a c x J matrix (num features by num series)
+  C <- t(C)
   
   # create weights matrix
-  W <- diag(x=imp_weights)
+  W <- diag(x=importance_weights)
   
   ## Calculate the feature distance matrix D
   ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
@@ -294,58 +294,79 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # for each time period in the initial window
   for (j in 1:num_series){
     
+    # select the jth column
+    d <- D[,j]
+    
     # sort the distances in the jth column smallest to largest
+    sorted <- sort(d, index.return=TRUE)
+    
     # select from index 2 to k+1 since first index corresponds to the series itself
-    K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
+    K <- sorted$ix[2:(k+1)]
     
     # for each series
     for (t in 1:window_length){
       
-      # sample an index and replace the value
-      X_new[t,j] <- time_series[[sample(K, size=1)]][t]
+      if (corr_based){
+        # sample an index based on correlation
+        i <- sample(K, size=1, prob=swap_weights)
+      } else {
+        # sample an index
+        i <- sample(K, size=1)
+      }
+      
+      # replace the value
+      X_new[t,j] <- time_series[[i]][t]
       
     }
   }
-
+  
   ########################################
   ### Continue swapping for the rest of the time periods using a rolling window approach
   ########################################
-
+  
   for (t in (window_length+1):num_periods){
-
+    
     # restrict the data to the current window
     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
-
+    
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-  
-    ## allow to remove a constant column if it exists
-    to_keep <- apply(C, 2, var) != 0
-    # rescale weights if necessary
-    imp_weights <- importance_weights[to_keep]/sum(importance_weights[to_keep])
-    C <- C[, to_keep]
     
-    # normalize features convert C to a c x J matrix (num features by num series)
-    C <- t(as.data.frame(scale(C)))
+    # normalize features
+    C <- as.data.frame(scale(C))
     
-    # create weights matrix
-    W <- diag(x=imp_weights)
-
+    # transpose C to a c x J matrix (num features by num series)
+    C <- t(C)
+    
     ## Calculate the feature distance matrix D
+    # ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
     D <- ones_column %*% diag(t(C)%*%W%*%C) - 2*t(C)%*%W%*%C + diag(t(C)%*%W%*%C) %*% t(ones_column)
-
+    
     for (j in 1:num_series){
       
-      # sort the distances in the jth column smallest to largest
-      # select from index 2 to k+1 since first index corresponds to the series itself
-      K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
+      # select the jth column
+      d <- D[,j]
       
-      # sample an index and replace the value
-      X_new[t,j] <- time_series[[sample(K, size=1)]][t]
+      # sort the distances in the jth column smallest to largest
+      sorted <- sort(d, index.return=TRUE)
+      
+      # select from index 2 to k+1 since first index corresponds to the series itself
+      K <- sorted$ix[2:(k+1)]
+      
+      if (corr_based){
+        # sample an index based on correlation
+        i <- sample(K, size=1, prob=swap_weights)
+      } else{
+        # sample an index
+        i <- sample(K, size=1)
+      }
+      
+      # replace the value
+      X_new[t,j] <- time_series[[i]][t]
       
     }
   }
-
+  
   # remove outliers using tsoutliers
   X_new <- as.list(as.data.frame(X_new))
   
@@ -357,7 +378,7 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   X_new <- as.matrix(do.call(cbind, X_new))
   
   return(X_new)
-
+  
 }
 
 # function for replacing outliers
@@ -403,15 +424,15 @@ g_simulated_series <- tibble()
 for (i in 1:num_series){
   g_simulated_series <- g_simulated_series %>%
     bind_rows(generate_target(
-    nseries = 1,
-    length = 50, 
-    feature_function = my_features, 
-    target = c(target_spectral_entropy[i], target_acf1[i], target_acf2[i]),
-    tolerance = 0.05) %>%
-    as_tibble() %>%
-    mutate(Series=i) %>%
-    mutate(value = value*stdevs[i] + means[i]) %>%
-    mutate(value = ifelse(rep(min(value) < 1, n()), value + abs(min(value)) + 1, value))) 
+      nseries = 1,
+      length = 50, 
+      feature_function = my_features, 
+      target = c(target_spectral_entropy[i], target_acf1[i], target_acf2[i]),
+      tolerance = 0.05) %>%
+        as_tibble() %>%
+        mutate(Series=i) %>%
+        mutate(value = value*stdevs[i] + means[i]) %>%
+        mutate(value = ifelse(rep(min(value) < 1, n()), value + abs(min(value)) + 1, value))) 
 }
 
 ###########################################################################################
@@ -460,10 +481,8 @@ full_simulated_series %>%
   theme(legend.position='none') +
   labs(x = 'Time',
        y = 'Value') +
-  ylim(0, 13000) +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
-  
+  ylim(0, 13000)
+
 ######## Forecast using SES, DES, TES
 
 # split into a list of series, convert to ts objects, create train and test data
@@ -481,8 +500,8 @@ g_simulated_series_test <- sapply(g_simulated_series, function(x) x[length(x)])
 g_simulated_series_train <- lapply(g_simulated_series, function(x) x[1:(length(x)-1)])
 
 ## create vectors of privacy parameters for additive noise and differential privacy
-svals <- seq(from=0, to=3.0, length.out=40)
-epsvals <- seq(from=20, to=1, length.out=39)
+svals <- seq(from=0, to=30.0, length.out=40)
+epsvals <- seq(from=20, to=0.01, length.out=39)
 
 # loop over privacy parameters, creating protected versions of the time series
 # and saving forecasts for each version
@@ -842,42 +861,54 @@ avg_knts_results <- knts_results %>%
 #   geom_line() +
 #   facet_wrap(~Type, scales='free')
 
-# what is the best privacy parameter we can have that still preserves
-# forecast accuracy within 15%?
+# what is the forecast accuracy under the privacy parameter that 
+# achieves acceptable privacy?
 
-an_avg_mae_g <- rowMeans(cbind(an_mae_ses_g, an_mae_des_g))
-an_pct_mae_g <- (an_avg_mae_g - an_avg_mae_g[1])/an_avg_mae_g[1] * 100
-best_an_param_g <- sort(svals[an_pct_mae_g <= 15], decreasing=TRUE)[1]
+if (any(an_pbar_g <= 0.09)){
+  best_an_param_g <- sort(svals[an_pbar_g <= 0.09], decreasing=FALSE)[1]
+} else {
+  best_an_param_g <- svals[length(svals)]
+}
 
-an_avg_mae_b <- rowMeans(cbind(an_mae_ses_b, an_mae_des_b))
-an_pct_mae_b <- (an_avg_mae_b - an_avg_mae_b[1])/an_avg_mae_b[1] * 100
-best_an_param_b <- sort(svals[an_pct_mae_b <= 15], decreasing=TRUE)[1]
+if (any(an_pbar_b <= 0.09)){
+  best_an_param_b <- sort(svals[an_pbar_b <= 0.09], decreasing=FALSE)[1]
+} else {
+  best_an_param_b <- svals[length(svals)]
+}
 
-dp_avg_mae_g <- rowMeans(cbind(dp_mae_ses_g, dp_mae_des_g))
-dp_pct_mae_g <- (dp_avg_mae_g - dp_avg_mae_g[1])/dp_avg_mae_g[1] * 100
-best_dp_param_g <- sort(c(20.5, epsvals)[dp_pct_mae_g <= 15])[1]
+if (any(dp_pbar_g <= 0.09)){
+  best_dp_param_g <- sort(c(20.5, epsvals)[dp_pbar_g <= 0.09], decreasing=TRUE)[1]
+} else {
+  best_dp_param_g <- c(20.5, epsvals)[length(c(20.5, epsvals))]
+}
 
-dp_avg_mae_b <- rowMeans(cbind(dp_mae_ses_b, dp_mae_des_b))
-dp_pct_mae_b <- (dp_avg_mae_b - dp_avg_mae_b[1])/dp_avg_mae_b[1] * 100
-best_dp_param_b <- sort(c(20.5, epsvals)[dp_pct_mae_b <= 15])[1]
+if (any(dp_pbar_b <= 0.09)){
+  best_dp_param_b <- sort(c(20.5, epsvals)[dp_pbar_b <= 0.09], decreasing=TRUE)[1]
+} else {
+  best_dp_param_b <- c(20.5, epsvals)[length(c(20.5, epsvals))]
+}
 
-knts_avg_mae_g <- rowMeans(cbind(knts_mae_ses_g, knts_mae_des_g))
-knts_pct_mae_g <- (knts_avg_mae_g - knts_avg_mae_g[1])/knts_avg_mae_g[1] * 100
-best_knts_param_g <- sort(c(1, kvals)[knts_pct_mae_g <= 15], decreasing=TRUE)[1]
+if (any(knts_pbar_g <= 0.09)){
+  best_knts_param_g <- sort(c(1, kvals)[knts_pbar_g <= 0.09], decreasing=FALSE)[1]
+} else {
+  best_knts_param_g <- c(1, kvals)[length(c(1, kvals))]
+}
 
-knts_avg_mae_b <- rowMeans(cbind(knts_mae_ses_b, knts_mae_des_b))
-knts_pct_mae_b <- (knts_avg_mae_b - knts_avg_mae_b[1])/knts_avg_mae_b[1] * 100
-best_knts_param_b <- sort(c(1, kvals)[knts_pct_mae_b <= 15], decreasing=TRUE)[1]
+if (any(knts_pbar_b <= 0.09)){
+  best_knts_param_b <- sort(c(1, kvals)[knts_pbar_b <= 0.09], decreasing=FALSE)[1]
+} else {
+  best_knts_param_b <- c(1, kvals)[length(c(1, kvals))]
+}
 
-# for each privacy method applied to the original data, if the only case
-# where forecast error was preserved within 15% is the original data,
-# we take the privacy parameter that had the next best accuracy
-best_an_param_g <- ifelse(best_an_param_g == 0, svals[2:length(svals)][which.min(an_avg_mae_g[2:length(an_avg_mae_g)])], best_an_param_g)
-best_dp_param_g <- ifelse(best_dp_param_g == 20.5, epsvals[which.min(dp_avg_mae_g[2:length(dp_avg_mae_g)])], best_dp_param_g)
-best_knts_param_g <- ifelse(best_knts_param_g == 1, kvals[which.min(knts_avg_mae_g[2:length(knts_avg_mae_g)])], best_knts_param_g)
-best_an_param_b <- ifelse(best_an_param_b == 0, svals[2:length(svals)][which.min(an_avg_mae_b[2:length(an_avg_mae_b)])], best_an_param_b)
-best_dp_param_b <- ifelse(best_dp_param_b == 20.5, epsvals[which.min(dp_avg_mae_b[2:length(dp_avg_mae_b)])], best_dp_param_b)
-best_knts_param_b <- ifelse(best_knts_param_b == 1, kvals[which.min(knts_avg_mae_b[2:length(knts_avg_mae_b)])], best_knts_param_b)
+# # for each privacy method applied to the original data, if the only case
+# # where forecast error was preserved within 15% is the original data,
+# # we take the privacy parameter that had the next best accuracy
+# best_an_param_g <- ifelse(best_an_param_g == 0, svals[2:length(svals)][which.min(an_avg_mae_g[2:length(an_avg_mae_g)])], best_an_param_g)
+# best_dp_param_g <- ifelse(best_dp_param_g == 20.5, epsvals[which.min(dp_avg_mae_g[2:length(dp_avg_mae_g)])], best_dp_param_g)
+# best_knts_param_g <- ifelse(best_knts_param_g == 1, kvals[which.min(knts_avg_mae_g[2:length(knts_avg_mae_g)])], best_knts_param_g)
+# best_an_param_b <- ifelse(best_an_param_b == 0, svals[2:length(svals)][which.min(an_avg_mae_b[2:length(an_avg_mae_b)])], best_an_param_b)
+# best_dp_param_b <- ifelse(best_dp_param_b == 20.5, epsvals[which.min(dp_avg_mae_b[2:length(dp_avg_mae_b)])], best_dp_param_b)
+# best_knts_param_b <- ifelse(best_knts_param_b == 1, kvals[which.min(knts_avg_mae_b[2:length(knts_avg_mae_b)])], best_knts_param_b)
 
 # strongest privacy parameters that still maintain forecast error within 15%
 # OR the privacy parameter with the best accuracy
@@ -900,14 +931,29 @@ dp_pbar_b[c(20.5, epsvals) == best_dp_param_b]
 knts_pbar_g[c(1, kvals) == best_knts_param_g]
 knts_pbar_b[c(1, kvals) == best_knts_param_b]
 
-# percent increases in MAE corresponding to parameters above
+# percent increases in average MAE corresponding to parameters above
+an_avg_mae_g <- rowMeans(cbind(an_mae_ses_g, an_mae_des_g))
+an_pct_mae_g <- (an_avg_mae_g - an_avg_mae_g[1])/an_avg_mae_g[1] * 100
 an_pct_mae_g[svals == best_an_param_g]
+
+an_avg_mae_b <- rowMeans(cbind(an_mae_ses_b, an_mae_des_b))
+an_pct_mae_b <- (an_avg_mae_b - an_avg_mae_b[1])/an_avg_mae_b[1] * 100
 an_pct_mae_b[svals == best_an_param_b]
 
+dp_avg_mae_g <- rowMeans(cbind(dp_mae_ses_g, dp_mae_des_g))
+dp_pct_mae_g <- (dp_avg_mae_g - dp_avg_mae_g[1])/dp_avg_mae_g[1] * 100
 dp_pct_mae_g[c(20.5, epsvals) == best_dp_param_g]
+
+dp_avg_mae_b <- rowMeans(cbind(dp_mae_ses_b, dp_mae_des_b))
+dp_pct_mae_b <- (dp_avg_mae_b - dp_avg_mae_b[1])/dp_avg_mae_b[1] * 100
 dp_pct_mae_b[c(20.5, epsvals) == best_dp_param_b]
 
+knts_avg_mae_g <- rowMeans(cbind(knts_mae_ses_g, knts_mae_des_g))
+knts_pct_mae_g <- (knts_avg_mae_g - knts_avg_mae_g[1])/knts_avg_mae_g[1] * 100
 knts_pct_mae_g[c(1, kvals) == best_knts_param_g]
+
+knts_avg_mae_b <- rowMeans(cbind(knts_mae_ses_b, knts_mae_des_b))
+knts_pct_mae_b <- (knts_avg_mae_b - knts_avg_mae_b[1])/knts_avg_mae_b[1] * 100
 knts_pct_mae_b[c(1, kvals) == best_knts_param_b]
 
 ################################################################################
@@ -971,9 +1017,7 @@ full_simulated_rates_df %>%
   ggplot(aes(x = Time, y = Value, color = as.factor(Series))) +
   geom_line() +
   facet_wrap(~Set) +
-  theme(legend.position='none') +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
+  theme(legend.position='none')
 
 ######## Forecast using SES, DES
 
@@ -1304,36 +1348,59 @@ r_knts_avg_results <- r_knts_results %>%
 # what is the best privacy parameter we can have that still preserves
 # forecast accuracy within 15%?
 
-r_an_avg_mae_g <- rowMeans(cbind(r_an_mae_ses_g, r_an_mae_des_g))
-r_an_pct_mae_g <- (r_an_avg_mae_g - r_an_avg_mae_g[1])/r_an_avg_mae_g[1] * 100
-r_best_an_param_g <- sort(svals[r_an_pct_mae_g <= 15], decreasing=TRUE)[1]
+if (any(r_an_pbar_g <= 0.09)){
+  r_best_an_param_g <- sort(svals[r_an_pbar_g <= 0.09], decreasing=FALSE)[1]
+} else {
+  r_best_an_param_g <- svals[length(svals)]
+}
 
-r_an_avg_mae_b <- rowMeans(cbind(r_an_mae_ses_b, r_an_mae_des_b))
-r_an_pct_mae_b <- (r_an_avg_mae_b - r_an_avg_mae_b[1])/r_an_avg_mae_b[1] * 100
-r_best_an_param_b <- sort(svals[r_an_pct_mae_b <= 15], decreasing=TRUE)[1]
+if (any(r_an_pbar_b <= 0.09)){
+  r_best_an_param_b <- sort(svals[r_an_pbar_b <= 0.09], decreasing=FALSE)[1]
+} else {
+  r_best_an_param_b <- svals[length(svals)]
+}
 
-r_dp_avg_mae_g <- rowMeans(cbind(r_dp_mae_ses_g, r_dp_mae_des_g))
-r_dp_pct_mae_g <- (r_dp_avg_mae_g - r_dp_avg_mae_g[1])/r_dp_avg_mae_g[1] * 100
-r_best_dp_param_g <- sort(c(20.5, epsvals)[r_dp_pct_mae_g <= 15])[1]
+if (any(r_dp_pbar_g <= 0.09)){
+  r_best_dp_param_g <- sort(c(20.5, epsvals)[r_dp_pbar_g <= 0.09], decreasing=TRUE)[1]
+} else {
+  r_best_dp_param_g <- c(20.5, epsvals)[length(c(20.5, epsvals))]
+}
 
-r_dp_avg_mae_b <- rowMeans(cbind(r_dp_mae_ses_b, r_dp_mae_des_b))
-r_dp_pct_mae_b <- (r_dp_avg_mae_b - r_dp_avg_mae_b[1])/r_dp_avg_mae_b[1] * 100
-r_best_dp_param_b <- sort(c(20.5, epsvals)[r_dp_pct_mae_b <= 15])[1]
+if (any(r_dp_pbar_b <= 0.09)){
+  r_best_dp_param_b <- sort(c(20.5, epsvals)[r_dp_pbar_b <= 0.09], decreasing=TRUE)[1]
+} else {
+  r_best_dp_param_b <- c(20.5, epsvals)[length(c(20.5, epsvals))]
+}
 
-r_knts_avg_mae_g <- rowMeans(cbind(r_knts_mae_ses_g, r_knts_mae_des_g))
-r_knts_pct_mae_g <- (r_knts_avg_mae_g - r_knts_avg_mae_g[1])/r_knts_avg_mae_g[1] * 100
-r_best_knts_param_g <- sort(c(1, kvals)[r_knts_pct_mae_g <= 15], decreasing=TRUE)[1]
+if (any(r_knts_pbar_g <= 0.09)){
+  r_best_knts_param_g <- sort(c(1, kvals)[r_knts_pbar_g <= 0.09], decreasing=FALSE)[1]
+} else {
+  r_best_knts_param_g <- c(1, kvals)[length(c(1, kvals))]
+}
 
-r_knts_avg_mae_b <- rowMeans(cbind(r_knts_mae_ses_b, r_knts_mae_des_b))
-r_knts_pct_mae_b <- (r_knts_avg_mae_b - r_knts_avg_mae_b[1])/r_knts_avg_mae_b[1] * 100
-r_best_knts_param_b <- sort(c(1, kvals)[r_knts_pct_mae_b <= 15], decreasing=TRUE)[1]
+if (any(r_knts_pbar_b <= 0.09)){
+  r_best_knts_param_b <- sort(c(1, kvals)[r_knts_pbar_b <= 0.09], decreasing=FALSE)[1]
+} else {
+  r_best_knts_param_b <- c(1, kvals)[length(c(1, kvals))]
+}
 
-r_best_an_param_g <- ifelse(r_best_an_param_g == 0, svals[2:length(svals)][which.min(r_an_avg_mae_g[2:length(r_an_avg_mae_g)])], r_best_an_param_g)
-r_best_dp_param_g <- ifelse(r_best_dp_param_g == 20.5, epsvals[which.min(r_dp_avg_mae_g[2:length(r_dp_avg_mae_g)])], r_best_dp_param_g)
-r_best_knts_param_g <- ifelse(r_best_knts_param_g == 1, kvals[which.min(r_knts_avg_mae_g[2:length(r_knts_avg_mae_g)])], r_best_knts_param_g)
-r_best_an_param_b <- ifelse(r_best_an_param_b == 0, svals[2:length(svals)][which.min(r_an_avg_mae_b[2:length(r_an_avg_mae_b)])], r_best_an_param_b)
-r_best_dp_param_b <- ifelse(r_best_dp_param_b == 20.5, epsvals[which.min(r_dp_avg_mae_b[2:length(r_dp_avg_mae_b)])], r_best_dp_param_b)
-r_best_knts_param_b <- ifelse(r_best_knts_param_b == 1, kvals[which.min(r_knts_avg_mae_b[2:length(r_knts_avg_mae_b)])], r_best_knts_param_b)
+# # for each privacy method applied to the original data, if the only case
+# # where forecast error was preserved within 15% is the original data,
+# # we take the privacy parameter that had the next best accuracy
+# best_an_param_g <- ifelse(best_an_param_g == 0, svals[2:length(svals)][which.min(an_avg_mae_g[2:length(an_avg_mae_g)])], best_an_param_g)
+# best_dp_param_g <- ifelse(best_dp_param_g == 20.5, epsvals[which.min(dp_avg_mae_g[2:length(dp_avg_mae_g)])], best_dp_param_g)
+# best_knts_param_g <- ifelse(best_knts_param_g == 1, kvals[which.min(knts_avg_mae_g[2:length(knts_avg_mae_g)])], best_knts_param_g)
+# best_an_param_b <- ifelse(best_an_param_b == 0, svals[2:length(svals)][which.min(an_avg_mae_b[2:length(an_avg_mae_b)])], best_an_param_b)
+# best_dp_param_b <- ifelse(best_dp_param_b == 20.5, epsvals[which.min(dp_avg_mae_b[2:length(dp_avg_mae_b)])], best_dp_param_b)
+# best_knts_param_b <- ifelse(best_knts_param_b == 1, kvals[which.min(knts_avg_mae_b[2:length(knts_avg_mae_b)])], best_knts_param_b)
+
+# strongest privacy parameters that still maintain forecast error within 15%
+# OR the privacy parameter with the best accuracy
+
+### double check the p-bars manually. additive noise (differential privacy)
+# p-bars may converge to random guessing, in which case you can pick the
+# smallest (largest) value of s (epsilon) that results in a probability
+# equivalent to random guessing
 
 r_best_an_param_g
 r_best_an_param_b
@@ -1344,6 +1411,7 @@ r_best_dp_param_b
 r_best_knts_param_g
 r_best_knts_param_b
 
+# identification disclosure risks corresponding to parameters above
 r_an_pbar_g[svals == r_best_an_param_g]
 r_an_pbar_b[svals == r_best_an_param_b]
 
@@ -1353,14 +1421,29 @@ r_dp_pbar_b[c(20.5, epsvals) == r_best_dp_param_b]
 r_knts_pbar_g[c(1, kvals) == r_best_knts_param_g]
 r_knts_pbar_b[c(1, kvals) == r_best_knts_param_b]
 
-# percent increases in MAE corresponding to parameters above
+# percent increases in average MAE corresponding to parameters above
+r_an_avg_mae_g <- rowMeans(cbind(r_an_mae_ses_g, r_an_mae_des_g))
+r_an_pct_mae_g <- (r_an_avg_mae_g - r_an_avg_mae_g[1])/r_an_avg_mae_g[1] * 100
 r_an_pct_mae_g[svals == r_best_an_param_g]
+
+r_an_avg_mae_b <- rowMeans(cbind(r_an_mae_ses_b, r_an_mae_des_b))
+r_an_pct_mae_b <- (r_an_avg_mae_b - r_an_avg_mae_b[1])/r_an_avg_mae_b[1] * 100
 r_an_pct_mae_b[svals == r_best_an_param_b]
 
+r_dp_avg_mae_g <- rowMeans(cbind(r_dp_mae_ses_g, r_dp_mae_des_g))
+r_dp_pct_mae_g <- (r_dp_avg_mae_g - r_dp_avg_mae_g[1])/r_dp_avg_mae_g[1] * 100
 r_dp_pct_mae_g[c(20.5, epsvals) == r_best_dp_param_g]
+
+r_dp_avg_mae_b <- rowMeans(cbind(r_dp_mae_ses_b, r_dp_mae_des_b))
+r_dp_pct_mae_b <- (r_dp_avg_mae_b - r_dp_avg_mae_b[1])/r_dp_avg_mae_b[1] * 100
 r_dp_pct_mae_b[c(20.5, epsvals) == r_best_dp_param_b]
 
+r_knts_avg_mae_g <- rowMeans(cbind(r_knts_mae_ses_g, r_knts_mae_des_g))
+r_knts_pct_mae_g <- (r_knts_avg_mae_g - r_knts_avg_mae_g[1])/r_knts_avg_mae_g[1] * 100
 r_knts_pct_mae_g[c(1, kvals) == r_best_knts_param_g]
+
+r_knts_avg_mae_b <- rowMeans(cbind(r_knts_mae_ses_b, r_knts_mae_des_b))
+r_knts_pct_mae_b <- (r_knts_avg_mae_b - r_knts_avg_mae_b[1])/r_knts_avg_mae_b[1] * 100
 r_knts_pct_mae_b[c(1, kvals) == r_best_knts_param_b]
 
 # Assess whether a data owner could backtransform the forecasts and have
@@ -1487,6 +1570,39 @@ back_avg_knts_results <- back_knts_results %>%
   group_by(Set, Method, Parameter, Type) %>%
   summarize(Average_Value = mean(Value), .groups='drop')
 
+# an, dp, knts forecast error on original time series space
+scales <- list(
+  scale_x_continuous(),
+  scale_x_reverse(),
+  scale_x_continuous(breaks = c(1, kvals))
+)
+
+back_avg_mae_plot <- back_avg_results %>%
+  bind_rows(back_avg_knts_results) %>%
+  filter(Type == "MAE") %>%
+  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
+  geom_line() +
+  ylim(0, 1300) +
+  facet_wrap(~Method, scales='free_x') +
+  facetted_pos_scales(x = scales) + 
+  labs(x = "Privacy Parameter",
+       y = "Average MAE",
+       title = "Average MAE Across Forecasting Models and Protected Data Sets")
+
+# an, dp, knts identification disclosure on original time series space
+back_avg_pbar_plot <- back_avg_results %>%
+  bind_rows(back_avg_knts_results) %>%
+  filter(Type == "Pbar") %>%
+  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
+  geom_line() +
+  facet_wrap(~Method, scales='free_x') +
+  facetted_pos_scales(x = scales) +
+  labs(x = "Privacy Parameter",
+       y = "Average Proportion Identified",
+       title = "Average Identification Disclosure Across Protected Data Sets")
+
+ggarrange(back_avg_pbar_plot, back_avg_mae_plot, nrow=2, ncol=1)
+
 # assess change in MAE of back-transformed forecasts
 back_an_avg_mae_g <- rowMeans(cbind(back_an_mae_ses_g, back_an_mae_des_g))
 back_an_pct_mae_g <- (back_an_avg_mae_g - an_avg_mae_g[1])/an_avg_mae_g[1] * 100
@@ -1536,27 +1652,17 @@ back_knts_pct_mae_b[c(1, kvals) == r_best_knts_param_b]
 ################################################################################
 ################################################################################
 
-# an, dp, knts forecast error on original time series space
-scales <- list(
-  scale_x_continuous(),
-  scale_x_reverse(),
-  scale_x_continuous(breaks = c(1, kvals))
-)
-
 avg_mae_plot <- avg_results %>%
   bind_rows(avg_knts_results) %>%
   filter(Type == "MAE") %>%
   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
   geom_line() +
-  ylim(0, 1000) +
+  ylim(0, 7000) +
   facet_wrap(~Method, scales='free_x') +
   facetted_pos_scales(x = scales) + 
   labs(x = "Privacy Parameter",
        y = "Average MAE",
-       title = "Average MAE Across Forecasting Models and Protected Data Sets (Original Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
+       title = "Average MAE Across Forecasting Models and Protected Data Sets (Original Scale)")
 
 # an, dp, knts identification disclosure on original time series space
 avg_pbar_plot <- avg_results %>%
@@ -1567,12 +1673,9 @@ avg_pbar_plot <- avg_results %>%
   ylim(-0.01, 1.00) +
   facet_wrap(~Method, scales='free_x') +
   facetted_pos_scales(x = scales) +
-  labs(x = "",
+  labs(x = "Privacy Parameter",
        y = "Average Proportion Identified",
-       title = "Average Identification Disclosure Across Protected Data Sets (Original Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
+       title = "Average Identification Disclosure Across Protected Data Sets (Original Scale)")
 
 ggarrange(avg_pbar_plot, avg_mae_plot, nrow=2, ncol=1)
 
@@ -1588,10 +1691,7 @@ r_avg_mae_plot <- r_avg_results %>%
   facetted_pos_scales(x = scales) + 
   labs(x = "Privacy Parameter",
        y = "Average MAE",
-       title = "Average MAE Across Forecasting Models and Protected Data Sets (Rate Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
+       title = "Average MAE Across Forecasting Models and Protected Data Sets (Rate Scale)")
 
 # an, dp, knts identification disclosure on original time series space
 r_avg_pbar_plot <- r_avg_results %>%
@@ -1602,46 +1702,11 @@ r_avg_pbar_plot <- r_avg_results %>%
   ylim(-0.01, 1.00) +
   facet_wrap(~Method, scales='free_x') +
   facetted_pos_scales(x = scales) +
-  labs(x = "",
+  labs(x = "Privacy Parameter",
        y = "Average Proportion Identified",
-       title = "Average Identification Disclosure Across Protected Data Sets (Rate Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
+       title = "Average Identification Disclosure Across Protected Data Sets (Rate Scale)")
 
 ggarrange(r_avg_pbar_plot, r_avg_mae_plot, nrow=2, ncol=1)
-
-back_avg_mae_plot <- back_avg_results %>%
-  bind_rows(back_avg_knts_results) %>%
-  filter(Type == "MAE") %>%
-  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-  geom_line() +
-  ylim(0, 1300) +
-  facet_wrap(~Method, scales='free_x') +
-  facetted_pos_scales(x = scales) + 
-  labs(x = "Privacy Parameter",
-       y = "Average MAE",
-       title = "Average MAE Across Forecasting Models and Protected Data Sets (Reversed Rate Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
-
-# an, dp, knts identification disclosure on original time series space
-back_avg_pbar_plot <- back_avg_results %>%
-  bind_rows(back_avg_knts_results) %>%
-  filter(Type == "Pbar") %>%
-  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-  geom_line() +
-  facet_wrap(~Method, scales='free_x') +
-  facetted_pos_scales(x = scales) +
-  labs(x = "",
-       y = "Average Proportion Identified",
-       title = "Average Identification Disclosure Across Protected Data Sets (Reversed Rate Scale)",
-       color = "Time Series") +
-  theme(axis.text=element_text(size=10),
-        axis.title=element_text(size=12,face="bold"))
-
-ggarrange(back_avg_pbar_plot, back_avg_mae_plot, nrow=2, ncol=1)
 
 ################################################################################
 ################################################################################
@@ -1664,140 +1729,6 @@ pct_change_undesirable <- avg_results %>%
   filter(Type == "MAE", Set == "Undesirable") %>%
   mutate(Undesirable_Original_Avg_MAE = original_avg_mae[2],
          Pct_Change = (Average_Value - Undesirable_Original_Avg_MAE)/Undesirable_Original_Avg_MAE * 100)
-
-## perform PCA to examine feature similarity of sets of series with 10 time series features.
-
-# compare the feature distributions of k-nTS+, differential privacy, and additive noise
-# that had the best accuracy
-
-## look at boxplots of feature distributions in the original and rate data sets
-
-orig_features_g <- tsfeatures(tslist=g_simulated_series_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-orig_features_b <- tsfeatures(tslist=b_simulated_series_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-
-r_orig_features_g <- tsfeatures(tslist=g_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-r_orig_features_b <- tsfeatures(tslist=b_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-
-# combine feature dataframes and plot
-features_df <- orig_features_b %>%
-  bind_rows(orig_features_g, r_orig_features_b, r_orig_features_g) %>%
-  mutate(Form = rep(c("Original", "Rate"), each=nrow(orig_features_g)*2),
-         Set = rep(rep(c("Undesirable", "Desirable"), each=nrow(orig_features_b)), 2)) %>%
-  gather(key="Feature", value="Value", -Form, -Set) %>%
-  mutate(Feature = factor(Feature, levels = c("series_mean",
-                                                 "series_variance",
-                                                 "skewness",
-                                                 "kurtosis",
-                                                 "linearity",
-                                                 "curvature",
-                                                 "nonlinearity",
-                                                 "spike",
-                                                 "stability",
-                                                 "max_level_shift",
-                                                 "time_level_shift",
-                                                 "max_var_shift",
-                                                 "time_var_shift",
-                                                 "max_kl_shift",
-                                                 "time_kl_shift",
-                                                 "entropy",
-                                                 "hurst",
-                                                 "trend",
-                                                 "lumpiness",
-                                                 "crossing_points", 
-                                                 "flat_spots",
-                                                 "unitroot_kpss", 
-                                                 "unitroot_pp",
-                                                 "e_acf1",
-                                                 "e_acf10",
-                                                 "x_acf1",
-                                                 "x_acf10",
-                                                 "diff1_acf1",
-                                                 "diff1_acf10",
-                                                 "diff2_acf1",
-                                                 "diff2_acf10",
-                                                 "x_pacf5",
-                                                 "diff1x_pacf5",
-                                                 "diff2x_pacf5"),
-                                    labels = c("Mean",
-                                               "Variance",
-                                               "Skewness",
-                                               "Kurtosis",
-                                               "Linearity",
-                                               "Curvature",
-                                               "Nonlinearity",
-                                               "Spike",
-                                               "Stability",
-                                               "Max Level Shift",
-                                               "Time Level Shift",
-                                               "Max Variance Shift",
-                                               "Time Variance Shift",
-                                               "Max KL Shift",
-                                               "Time KL Shift",
-                                               "Spectral Entropy",
-                                               "Hurst",
-                                               "Trend",
-                                               "Lumpiness",
-                                               "Crossing Points",
-                                               "Flat Spots",
-                                               "Unitroot KPSS",
-                                               "Unitroot PP",
-                                               "Error ACF",
-                                               "Error ACF10",
-                                               "X ACF",
-                                               "X ACF10",
-                                               "First Difference ACF",
-                                               "First Difference ACF10",
-                                               "Second Difference ACF",
-                                               "Second Difference ACF10",
-                                               "X PACF5",
-                                               "First Difference PACF5",
-                                               "Second Difference PACF5")))
-
-features_df %>%
-  filter(Feature %in% c("Spectral Entropy", "Mean", "Variance", "X ACF")) %>%
-  ggplot(aes(x=Form, y=Value, color=Set)) +
-  geom_boxplot() +
-  facet_wrap(~Feature, scales='free') +
-  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
-  labs(color="Time Series")
-
-features_df %>%
-  ggplot(aes(x=Form, y=Value, color=Set)) +
-  geom_boxplot() +
-  facet_wrap(~Feature, scales='free') +
-  labs(color="Time Series") +
-  theme(legend.position="bottom")
-
-# Assess whether time series features are preserved in the protected data
-
-# look at principal components of the time series features from the original
-# series and the protected series. See which maintains the feature distribution
-# better.
-
-# orig_pc_b <- prcomp(x=orig_features_b, center=TRUE, scale.=TRUE)
-# orig_pc_g <- prcomp(x=orig_features_g, center=TRUE, scale.=TRUE)
-# 
-# dp_pc_b <- as_tibble(predict(orig_pc_b, dp_features_b))
-# dp_pc_g <- as_tibble(predict(orig_pc_g, dp_features_g))
-# 
-# an_pc_b <- as_tibble(predict(orig_pc_b, an_features_b))
-# an_pc_g <- as_tibble(predict(orig_pc_g, an_features_g))
-# 
-# knts_pc_b <- as_tibble(predict(orig_pc_b, knts_features_b))
-# knts_pc_g <- as_tibble(predict(orig_pc_g, knts_features_g))
-# 
-# # plot on the PC axes
-# 
-# full_pc <- as_tibble(orig_pc_b$x[,1:2]) %>%
-#   bind_rows(as_tibble(orig_pc_g$x[,1:2]), an_pc_b[,1:2], an_pc_g[,1:2], dp_pc_b[,1:2], dp_pc_g[,1:2], knts_pc_b[,1:2], knts_pc_g[,1:2]) %>%
-#   mutate(Method = rep(c("Original", "Additive Noise", "Differential Privacy", "k-nTS+"), each=nrow(knts_pc_b)*2),
-#          Set = rep(rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)), 4))
-# 
-# full_pc %>%
-#   filter(Method %in% c("Original", "k-nTS+")) %>%
-#   ggplot(aes(x=PC1, y=PC2, color=Method)) +
-#   geom_point() +
-#   facet_wrap(~Set)
 
 ################################################################################
 ################################################################################

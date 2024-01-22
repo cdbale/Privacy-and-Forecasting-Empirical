@@ -14,7 +14,7 @@ library(CORElearn)
 library(forecast)
 library(tidyverse)
 
-data_folder <- "M3/"
+data_folder <- "M3_rate/"
 
 # steps:
 
@@ -143,10 +143,9 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters, models){
   
   ns <- combined_oob %>%
     group_by(model) %>%
-    mutate(min_error = min(value),
-           within_5p = ifelse((value-min_error)/min_error <= 0.05, 1, 0)) %>%
+    mutate(min_error = min(value)) %>%
     ungroup() %>%
-    filter(within_5p == 1) %>%
+    filter(value == min_error) %>%
     group_by(model) %>%
     summarize(num_selected = min(num_features), .groups='drop') %>%
     mutate(avg_selected = floor(mean(num_selected))) %>%
@@ -176,8 +175,8 @@ feature_selection <- function(scaled_feature_data, num_rfe_iters, models){
               "evals_combined" = evals_combined,
               "selected_features" = sf,
               "importance_weights" = importance_weights,
-              "relief_time" = difftime(relief_stop, relief_start, units="mins"),
-              "rfe_time" = difftime(rfe_stop, rfe_start, units="mins"),
+              "relief_time" = difftime(relief_stop, relief_start, units="secs"),
+              "rfe_time" = difftime(rfe_stop, rfe_start, units="secs"),
               "rf" = rf_res))
 }
 
@@ -203,21 +202,18 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
   
-  if (corr_based){
-    X_cor <- cor(do.call(cbind, X_window))
-  }
-  
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   
-  # normalize features
-  C <- as.data.frame(scale(C))
+  ## allow to remove a constant column if it exists
+  to_keep <- apply(C, 2, var) != 0
+  C <- C[, to_keep]
   
-  # convert C to a c x J matrix (num features by num series)
-  C <- t(C)
+  # normalize features and convert C to a c x J matrix (num features by num series)
+  C <- t(as.data.frame(scale(C)))
   
   # create weights matrix
-  W <- diag(x=importance_weights)
+  W <- diag(x=importance_weights[to_keep])
   
   ## Calculate the feature distance matrix D
   ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
@@ -226,28 +222,15 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
   # for each time period in the initial window
   for (j in 1:num_series){
     
-    # select the jth column
-    d <- D[,j]
-    
     # sort the distances in the jth column smallest to largest
-    sorted <- sort(d, index.return=TRUE)
-    
     # select from index 2 to k+1 since first index corresponds to the series itself
-    K <- sorted$ix[2:(k+1)]
+    K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
     
     # for each series
     for (t in 1:window_length){
       
-      if (corr_based){
-        # sample an index based on correlation
-        i <- sample(K, size=1, prob=swap_weights)
-      } else {
-        # sample an index
-        i <- sample(K, size=1)
-      }
-      
-      # replace the value
-      X_new[t,j] <- time_series[[i]][t]
+      # sample an index and replace the value
+      X_new[t,j] <- time_series[[sample(K, size=1)]][t]
       
     }
   }
@@ -264,37 +247,27 @@ knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, s
     ## calculate the features for the current window
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
     
-    # normalize features
-    C <- as.data.frame(scale(C))
+    ## allow to remove a constant column if it exists
+    to_keep <- apply(C, 2, var) != 0
+    C <- C[, to_keep]
     
-    # transpose C to a c x J matrix (num features by num series)
-    C <- t(C)
+    # normalize features and transpose to a c x J matrix (num features by num series)
+    C <- t(as.data.frame(scale(C)))
+    
+    # create weights matrix
+    W <- diag(x=importance_weights[to_keep])
     
     ## Calculate the feature distance matrix D
-    # ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
     D <- ones_column %*% diag(t(C)%*%W%*%C) - 2*t(C)%*%W%*%C + diag(t(C)%*%W%*%C) %*% t(ones_column)
     
     for (j in 1:num_series){
       
-      # select the jth column
-      d <- D[,j]
-      
       # sort the distances in the jth column smallest to largest
-      sorted <- sort(d, index.return=TRUE)
-      
       # select from index 2 to k+1 since first index corresponds to the series itself
-      K <- sorted$ix[2:(k+1)]
+      K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
       
-      if (corr_based){
-        # sample an index based on correlation
-        i <- sample(K, size=1, prob=swap_weights)
-      } else{
-        # sample an index
-        i <- sample(K, size=1)
-      }
-      
-      # replace the value
-      X_new[t,j] <- time_series[[i]][t]
+      # sample an index and replace the value
+      X_new[t,j] <- time_series[[sample(K, size=1)]][t]
       
     }
   }
@@ -356,8 +329,6 @@ ed_file_path <- paste0("../../Outputs/Results/", data_folder, "Error_Distributio
 # import names of original data files - this may include protected versions
 # so we have to remove those
 file_names <- grep("_h1_train", list.files(fp), value=TRUE)
-file_names <- grep("rate", file_names, value=TRUE)
-# make sure protected versions are excluded
 file_names <- grep("AN_", file_names, value=TRUE, invert=TRUE)
 file_names <- grep("DP_", file_names, value=TRUE, invert=TRUE)
 file_names <- grep("k-nts", file_names, value=TRUE, invert=TRUE)
@@ -379,7 +350,6 @@ fv <- c("entropy_c", "lumpiness", "stability",
 num_iter <- 25
 
 # track computation time for k-nTS+ swapping
-
 feature_file_names <- grep("h2_train", list.files(features_path), value=TRUE)
 feature_file_names <- grep("rate", feature_file_names, value=TRUE)
 
@@ -572,24 +542,15 @@ for (f in file_names){
   sf <- lapply(fsr, function(x) x[["selected_features"]])
   imp_weights <- lapply(fsr, function(x) x[["importance_weights"]])
   
-  # reassign selected features
-  # sft <- sf
-  
   ### use a window length = 2x + 1 the sp when sp > 1
   ### otherwise use 9, which is the same length as
   ### the shortest window with a seasonal period (quarterly)
   
-  # minimum window length of 11 so that x_acf10 can be calculated
-  window_length <- max(c(2*sp + 1, 11))
-
-  # if (sp == 1) {
-  #   sft <- sf[!sf %in% c("seasonal_strength", "peak", "trough", "seas_acf1", "seas_pacf")]
-  # }
+  window_length <- max(c(2*sp + 1, 12))
   
   swap_times <- c()
-  corr_swap_times <- c()
   
-  for (j in c(3)){
+  for (j in c(3, 5, 7, 10, 15)){
     
     print("Starting swapping.")
     
@@ -606,53 +567,27 @@ for (f in file_names){
     
     swap_stop <- Sys.time()
     
-    swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="mins"))
+    swap_times <- c(swap_times, difftime(swap_stop, swap_start, units="secs"))
     
-    write.csv(X_knts, file=paste0(fp, "k-nts-plus-rate_", j, "_", f), row.names=FALSE)
-    
-    ############################################################################
-    
-    # swap_start <- Sys.time()
-    # 
-    # X_knts_cor <- perform_knts(ts_file=f,
-    #                            ts_file_path=fp,
-    #                            seasonal_period=sp,
-    #                            window_length=window_length,
-    #                            k=j,
-    #                            features_to_calculate=fv,
-    #                            selected_features=sft,
-    #                            corr_based=TRUE)
-    # 
-    # swap_stop <- Sys.time()
-    # 
-    # print("Stopping swapping.")
-    # 
-    # corr_swap_times <- c(corr_swap_times, difftime(swap_stop, swap_start, units="mins"))
-    # 
-    # write.csv(X_knts_cor, file=paste0(fp, "k-nts-plus-corr_", j, "_", f), row.names=FALSE)
+    write.csv(X_knts, file=paste0(fp, "k-nts-plus_", j, "_", f), row.names=FALSE)
     
   }
   
-  # computation_row <- tibble(File = f,
-  #                           feature_prep = difftime(feature_stop, feature_start, units="mins"),
-  #                           RReliefF = fsr[["relief_time"]],
-  #                           RFE = fsr[["rfe_time"]],
-  #                           swap3 = swap_times[1],
-  #                           swap5 = swap_times[2],
-  #                           swap7 = swap_times[3],
-  #                           swap10 = swap_times[4],
-  #                           swap15 = swap_times[5],
-  #                           corswap3 = corr_swap_times[1],
-  #                           corswap5 = corr_swap_times[2],
-  #                           corswap7 = corr_swap_times[3],
-  #                           corswap10 = corr_swap_times[4],
-  #                           corswap15 = corr_swap_times[5],)
-  # 
-  # computation_time <- bind_rows(computation_time, computation_row)
+  computation_row <- tibble(File = f,
+                            feature_prep = as.double(difftime(feature_stop, feature_start, units="secs")),
+                            RReliefF = sum(sapply(1:length(fsr), function(x) fsr[[x]][["relief_time"]])),
+                            RFE = sum(sapply(1:length(fsr), function(x) fsr[[x]][["rfe_time"]])),
+                            swap3 = swap_times[1],
+                            swap5 = swap_times[2],
+                            swap7 = swap_times[3],
+                            swap10 = swap_times[4],
+                            swap15 = swap_times[5])
+
+  computation_time <- bind_rows(computation_time, computation_row)
   
 }
 
-# write.csv(computation_time, file="../../Data/Computation Results/k-nts-plus.csv", row.names=FALSE)
+write.csv(computation_time, file=paste0("../../Data/Computation_Time/", substr(data_folder, 1, nchar(data_folder)-1), "_k-nts-plus.csv"), row.names=FALSE)
 
 ################################################################################
 ################################################################################

@@ -1752,77 +1752,85 @@ pct_change_undesirable <- avg_results %>%
 # compare the feature distributions of k-nTS+, differential privacy, and additive noise
 # that had the best accuracy differential privacy and additive noise.
 
-## look at boxplots of feature distributions in the original and rate data sets
+orig_features_g <- tsfeatures(tslist=g_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+orig_features_b <- tsfeatures(tslist=b_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
 
-orig_features_g <- tsfeatures(tslist=g_simulated_series_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-orig_features_b <- tsfeatures(tslist=b_simulated_series_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+an_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+an_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+ 
+dp_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+dp_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
 
-r_orig_features_g <- tsfeatures(tslist=g_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-r_orig_features_b <- tsfeatures(tslist=b_simulated_rates_train, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+temp_knts_g <- as.list(as.data.frame(knts_alg(time_series=g_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_g$selected_features, importance_weights=r_fs_g$importance_weights)))
+temp_knts_b <- as.list(as.data.frame(knts_alg(time_series=b_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_b$selected_features, importance_weights=r_fs_b$importance_weights)))
 
-# an_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-# an_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) additive_noise(x, s=svals[length(svals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-#  
-# dp_features_g <- tsfeatures(tslist=lapply(g_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-# dp_features_b <- tsfeatures(tslist=lapply(b_simulated_rates_train, function(x) differential_privacy(x, epsilon=epsvals[length(epsvals)])), features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-# 
-# temp_knts_g <- as.list(as.data.frame(knts_alg(time_series=g_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_g$selected_features, importance_weights=r_fs_g$importance_weights)))
-# temp_knts_b <- as.list(as.data.frame(knts_alg(time_series=b_simulated_rates_train, sp=1, window_length=25, k=kvals[1], features_to_calculate=fv, selected_features=r_fs_b$selected_features, importance_weights=r_fs_b$importance_weights)))
-# 
-# temp_knts_g <- lapply(temp_knts_g, function(x) ts(x, frequency=sp))
-# temp_knts_b <- lapply(temp_knts_b, function(x) ts(x, frequency=sp))
-# 
-# knts_features_g <- tsfeatures(tslist=temp_knts_g, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
-# knts_features_b <- tsfeatures(tslist=temp_knts_b, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+temp_knts_g <- lapply(temp_knts_g, function(x) ts(x, frequency=sp))
+temp_knts_b <- lapply(temp_knts_b, function(x) ts(x, frequency=sp))
+
+knts_features_g <- tsfeatures(tslist=temp_knts_g, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
+knts_features_b <- tsfeatures(tslist=temp_knts_b, features=fv, scale=FALSE) %>% select(-nperiods, -seasonal_period)
 
 # combine feature dataframes and plot
 features_df <- orig_features_b %>%
-  bind_rows(orig_features_g, r_orig_features_b, r_orig_features_g) %>%
-  mutate(Form = rep(c("Original", "Rate"), each=nrow(orig_features_g)*2),
-         Set = rep(rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)), 2))
+  bind_rows(orig_features_g, an_features_b, an_features_g, dp_features_b, dp_features_g, knts_features_b, knts_features_g) %>%
+  mutate(Method = rep(c("Original", "Additive Noise", "Differential Privacy", "k-nTS+"), each=nrow(orig_features_g)*2),
+         Set = rep(rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)), 4))
 
 features_df %>%
-  select(Form, Set, entropy, series_mean, series_variance, x_acf1) %>%
-  gather(key="Feature", value="Value", -Form, -Set) %>%
-  ggplot(aes(x=Form, y=Value, color=Set)) +
+  select(Method, Set, entropy, series_mean, series_variance, x_acf1) %>%
+  gather(key="Feature", value="Value", -Method, -Set) %>%
+  ggplot(aes(x=Method, y=Value, color=Set)) +
   geom_boxplot() +
   facet_wrap(~Feature, scales='free') +
   theme(axis.text.x=element_text(angle = 45, hjust = 1))
 
 features_df %>%
-  gather(key="Feature", value="Value", -Form, -Set) %>%
-  ggplot(aes(x=Form, y=Value, color=Set)) +
+  gather(key="Feature", value="Value", -Method, -Set) %>%
+  ggplot(aes(x=Method, y=Value, color=Set)) +
   geom_boxplot() +
   facet_wrap(~Feature, scales='free') +
   theme(axis.text.x=element_text(angle = 45, hjust = 1))
 
-## perform PCA to examine feature similarity of sets of series with 10 time series features.
+# Assess whether time series features are preserved in the protected data
 
-# perform PCA on the feature vectors from the original and rate versions of both
-# data sets
+# look at principal components of the time series features from the original
+# series and the protected series. See which maintains the feature distribution
+# better.
 
-# combine features for undesirable series
-features_b <- orig_features_b %>%
-  bind_rows(r_orig_features_b)
+orig_pc_b <- prcomp(x=orig_features_b, center=TRUE, scale.=TRUE)
+orig_pc_g <- prcomp(x=orig_features_g, center=TRUE, scale.=TRUE)
 
-features_g <- orig_features_g %>%
-  bind_rows(r_orig_features_g)
+dp_pc_b <- as_tibble(predict(orig_pc_b, dp_features_b))
+dp_pc_g <- as_tibble(predict(orig_pc_g, dp_features_g))
 
-pc_b <- prcomp(x=features_b, center=TRUE, scale.=TRUE)
-pc_g <- prcomp(x=features_g, center=TRUE, scale.=TRUE)
+an_pc_b <- as_tibble(predict(orig_pc_b, an_features_b))
+an_pc_g <- as_tibble(predict(orig_pc_g, an_features_g))
 
-full_pc <- as_tibble(pc_b$x[,1:2]) %>%
-  bind_rows(as_tibble(pc_g$x[,1:2])) %>%
-  mutate(Form = rep(rep(c("Original", "Rate"), each=nrow(orig_features_g)), 2),
-         Set = rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)*2))
+knts_pc_b <- as_tibble(predict(orig_pc_b, knts_features_b))
+knts_pc_g <- as_tibble(predict(orig_pc_g, knts_features_g))
 
 # plot on the PC axes
 
+full_pc <- as_tibble(orig_pc_b$x[,1:2]) %>%
+  bind_rows(as_tibble(orig_pc_g$x[,1:2]), an_pc_b[,1:2], an_pc_g[,1:2], dp_pc_b[,1:2], dp_pc_g[,1:2], knts_pc_b[,1:2], knts_pc_g[,1:2]) %>%
+  mutate(Method = rep(c("Original", "Additive Noise", "Differential Privacy", "k-nTS+"), each=nrow(knts_pc_b)*2),
+         Set = rep(rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(orig_features_b)), 4))
+
 full_pc %>%
-  ggplot(aes(x=PC1, y=PC2, color=Form)) +
+  filter(Method %in% c("Original", "k-nTS+")) %>%
+  ggplot(aes(x=PC1, y=PC2, color=Method)) +
   geom_point() +
   facet_wrap(~Set)
 
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
 ################################################################################
 ################################################################################
 ################################################################################

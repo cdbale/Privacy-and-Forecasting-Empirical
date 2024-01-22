@@ -249,4 +249,4 @@ protection_data_avgs <- all_protected_results %>%
   mutate(pct_change_mae = (avg_protected_mae - original_avg_mae)/original_avg_mae * 100) %>%
   arrange(Data)
 
-write.csv(protection_data_avgs, "../../Outputs/Results/Tables/averages_by_frequency.csv", row.names=FALSE)
+swrite.csv(protection_data_avgs, "../../Outputs/Results/Tables/averages_by_frequency.csv", row.names=FALSE)

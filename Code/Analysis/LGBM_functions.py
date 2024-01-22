@@ -84,14 +84,14 @@ def optimize_LGBM(train_data,
             "num_boost_rounds_": (50, 1000.99),
             "num_leaves_": (2, 100.99),
             "bagging_freq_": (1, 5.99),
-            "bagging_frac_": (0.01, 1),
+            "bagging_frac_": (0.05, 1),
             "lambda_l2_": (0, 0.5),
-            "min_data_in_leaf_": (3, 100.99)
+            "min_data_in_leaf_": (3, 60.99)
         },
         random_state=1234,
         verbose=1)
 
-    optimizer.maximize(n_iter=15)
+    optimizer.maximize(n_iter=25)
 
     print("Final Result: ", optimizer.max)
 
