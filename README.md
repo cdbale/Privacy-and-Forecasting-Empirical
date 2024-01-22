@@ -1,37 +1,5 @@
-# Privacy and Forecasting Empirical Analysis
+# Can We Protect Time Series Data While Maintaining Accurate Forecasts?
 
-Paper examining the effects of various privacy protection methods on the forecast accuracy achieved by multivariate forecasting models.
+[Link](https://www.researchgate.net/publication/372621568_Can_We_Protect_Time_Series_Data_While_Maintaining_Accurate_Forecasts) to the paper.
 
-### *Forecasting Models to Implement:*
-
-* ~~Exponential smoothing~~
-   - ~~SES~~
-   - ~~DES~~
-   - ~~TES~~
-* ~~Autoregressive~~
-* ~~LGBM - univariate~~
-* Prophet
-* NeuralProphet
-* ~~VAR model~~
-* Lasso-Var?
-* GreyKite (LinkedIn)
-* RNN
-* LSTM (multivariate)
-
-Code for some of these methods (in R) can be found [here](https://github.com/Mcompetitions/M4-methods) from the M4 competition.
-
-### *Data Protection Methods to Implement:*
-
-(want 'simple' ones)
-
-* ~~Additive noise~~
-* ~~Top coding (.10, .20, .40)~~
-* ~~Bottom coding (.10, .20, .40)~~
-* Method from Schneider and Lee (2021) - *k*-mTS
-* ~~Differential privacy~~
-
-### *Model Accuracy Metrics*
-
-* MAE (mean absolute error)
-
-**Goal**: determine whether forecast accuracy is better or worse for each model for each protection method.
+Abstract: In the context of increasing data breaches and privacy concerns, we focus on the often-neglected goal of maintaining the usefulness of protected data by exploring the intersection of data privacy and time series forecasting. Using both simulated and real-world time series data sets, we test various privacy methods, including a proposed swapping-based method (*k*-nTS+) designed to maintain time series features, a differentially private method, and an approach based on sharing model weights trained on unprotected data. Based on forecasts from seven different forecasting models, none of the privacy methods based on swapping or random noise addition can consistently maintain forecast accuracy at an acceptable level of privacy. On the other hand, sharing model weights trained on unprotected data enables accurate forecasting, but accurate forecasts themselves can uncover the identities of the unprotected time series. We show that transforming time series into rates increases the similarity of time series features, values, and forecasts, and enables *k*-nTS+ to produce protected rate time series with a reduction in forecast accuracy of just 3.6% on average. Overall, this paper shows that except under certain conditions, creating protected time series with acceptable privacy is incompatible with obtaining accurate forecasts. 
