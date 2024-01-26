@@ -3,6 +3,10 @@ get them from the Mac code folder in google drive.
 
 Download repository with preset file structure.
 
+Need to download the M3 and M4 data sets.
+
+
+
 # Steps for M3 data
 
 1. Run `Data_Cleaning_M3.py`. This creates the train and test data for the original M3 data set. h1 indicates which time period is
