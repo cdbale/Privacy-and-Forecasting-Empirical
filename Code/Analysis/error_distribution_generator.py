@@ -1,4 +1,4 @@
-# File to generate distributions of forecast errors for each model and
+# File to compute the forecast errors for each model and
 # protection method.
 
 # Author: Cameron Bale
@@ -10,10 +10,8 @@ from sktime.performance_metrics.forecasting import mean_absolute_error
 
 ## function below is applied for each training data file
 ## want to make sure we end up with one file containing the
-## error distributions for the given training file from all
+## errors for the given training file from all
 ## forecasting models and baseline data sets
-
-### need the file string to just be the beginning e.g., "monthly-demographic"
 
 def error_distribution_generator(data_folder, file_string, forecasts_path, results_path, model_list, protection_method_dict, forecast_horizon, is_rate=False, track_comp_time=False, inverse_rate=False):
     
@@ -112,11 +110,6 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
 
         # use original data file and forecasts to convert to standard forecast
         for f in forecast_files:
-            if "DP_0.1_" in f or "DP_1_" in f:
-                continue
-            print(f)
-            # if "DP" in f or "AN_" in f:
-            #     continue
             split_f = f.split("_")[2:]
             combined_f = "_".join(split_f)[:-4]
             fcasts = pd.read_csv(forecasts_path + f).T
@@ -135,13 +128,3 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
         ddf = pd.DataFrame(inverse_rate_distribution_dict)
 
         ddf.to_csv(path + file_string + "_inverse_rate_all_distributions_" + forecast_horizon + ".csv", index=False)
-        
-        
-        
-        
-        
-        
-        
-        
-        
-    

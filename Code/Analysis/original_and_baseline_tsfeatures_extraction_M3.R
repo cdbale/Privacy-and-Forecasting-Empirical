@@ -25,43 +25,13 @@ if (file.exists(paste0("../../Data/Features/", data_folder))){
   NULL
 } else {
   # create a new sub directory for storing time series features
-  dir.create(file.path(paste0("../../Data/Features/", data_folder)))
+  dir.create(file.path(paste0("../../Data/Features/", data_folder)), recursive=TRUE)
 }
 
 # import names of original and baseline protected data files
 file_names <- grep("_h2_train", list.files(file_path), value=TRUE)
 
 file_names
-
-# feature extraction function
-extract_features <- function(time_series, sp, feature_vector){
-  
-  ###
-  # Takes the time_series dataframe, the seasonal period, and a vector
-  # of desired feature names as input. Outputs a dataframe containing the
-  # extracted features (columns) for each series (rows)
-  ###
-
-  # convert to a list of series
-  ts_data <- as.list(as.data.frame(t(time_series)))
-  
-  # remove NA values from the end of each series
-  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
-  # convert each series to a TS object with appropriate seasonal frequency
-  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
-  
-  # truncate data to strictly positive
-  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
-  
-  # take the log of the data
-  ts_data <- lapply(ts_data, log)
-  
-  # calculate time series features
-  features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
-  
-  return(features)
-}
 
 #### compengine includes features in:
 # autocorr_features
@@ -80,25 +50,6 @@ fv <- c("entropy_c", "lumpiness", "stability",
         "nonlinearity", "series_mean", "series_variance",
         "skewness", "kurtosis")
 
-################################################################################
-# file_names[1]
-# file_names[30]
-# 
-# temp_data1 <- read.csv(paste0(file_path, file_names[547]))
-# temp_data30 <- read.csv(paste0(file_path, file_names[30]))
-# 
-# temp_features1 <- extract_features(temp_data1, sp=4, feature_vector=fv)
-# temp_features30 <- extract_features(temp_data30, sp=1, feature_vector=fv)
-# 
-# columns1 <- colnames(temp_features1)
-# columns30 <- colnames(temp_features30)
-# 
-# columns1[!columns1 %in% columns30]
-
-## These features are unavailable when we don't have seasonal data.
-# "seasonal_strength" "peak"              "trough"            "seas_acf1"         "seas_pacf" 
-################################################################################
-
 ### Perform feature extraction for all original and baseline data sets.
 
 ################################################################################
@@ -114,7 +65,7 @@ for (f in file_names){
   sp_l <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
 
   start <- Sys.time()
-  features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
+  features <- extract_features(data_set, sp=sp_l, feature_vector=fv, truncate=TRUE, take_log=TRUE)
   stop <- Sys.time()
   features <- features %>% select(-nperiods, -seasonal_period)
   computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="secs")

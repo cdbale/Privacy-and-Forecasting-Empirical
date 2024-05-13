@@ -1,7 +1,7 @@
 ## Create protected data sets using additive noise and differential privacy.
 ## These privacy methods are applied to all training data sets (h1 and h2 versions).
-## The h2 versions are used in the k-nTS+ framework, and the forecasting results
-## on the h1 versions are compared to k-nTS+ in the paper.
+## The h2 versions are used in the k-nTS+ framework, and all forecasting results
+## are computed on the h1 versions based on all forecasting models and privacy methods.
 
 # Author: Cameron Bale
 

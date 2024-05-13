@@ -1,3 +1,11 @@
+# Functions for training an RNN model using the darts package
+
+# train_RNN() trains a RNN and generates forecasts for the provided train_data
+# optimize_RNN() uses Bayesian optimization to choose optimized values for
+#   many of the RNN hyperparameters
+
+# Author: Cameron Bale
+
 from bayes_opt import BayesianOptimization
 from torch import nn
 from darts.models.forecasting.rnn_model import RNNModel
@@ -20,7 +28,8 @@ def train_RNN(train_data,
               dropout_,
               L2_penalty_,
               save_models=False,
-              model_save_folder=None):
+              model_save_folder=None,
+              use_gpu=False):
 
     num_series = len(train_data)
 
@@ -33,17 +42,43 @@ def train_RNN(train_data,
                             'weight_decay': L2_penalty_}
 
         # instantiate the model
-        RNN = RNNModel(input_chunk_length=input_chunk_length,
-                       training_length=training_length,
-                       model="LSTM",
-                       loss_fn=nn.L1Loss(),
-                       optimizer_kwargs=optimizer_kwargs,
-                       n_rnn_layers=n_rnn_layers_,
-                       hidden_dim=hidden_dim_,
-                       batch_size=batch_size_,
-                       n_epochs=n_epochs_,
-                       dropout=dropout_,
-                       force_reset=True)
+        if use_gpu:
+            RNN = RNNModel(
+                input_chunk_length=input_chunk_length,
+                training_length=training_length,
+                model="LSTM",
+                loss_fn=nn.L1Loss(),
+                optimizer_kwargs=optimizer_kwargs,
+                n_rnn_layers=n_rnn_layers_,
+                hidden_dim=hidden_dim_,
+                batch_size=batch_size_,
+                n_epochs=n_epochs_,
+                dropout=dropout_,
+                force_reset=True,
+                pl_trainer_kwargs={
+                    "enable_progress_bar": False,
+                    "accelerator": "gpu",
+                    "precision": "32-true",
+                    "devices": [0]
+                })
+
+        else:
+            RNN = RNNModel(
+                input_chunk_length=input_chunk_length,
+                training_length=training_length,
+                model="LSTM",
+                loss_fn=nn.L1Loss(),
+                optimizer_kwargs=optimizer_kwargs,
+                n_rnn_layers=n_rnn_layers_,
+                hidden_dim=hidden_dim_,
+                batch_size=batch_size_,
+                n_epochs=n_epochs_,
+                dropout=dropout_,
+                force_reset=True,
+                pl_trainer_kwargs={
+                    "accelerator": "cpu",
+                    "enable_progress_bar": False
+                })
 
         # fit the model
         RNN.fit(series=train_data, max_samples_per_ts=max_samples_per_ts)
@@ -77,7 +112,8 @@ def optimize_RNN(train_data,
                  num_ensemble_models,
                  input_chunk_length,
                  training_length,
-                 max_samples_per_ts):
+                 max_samples_per_ts,
+                 use_gpu=False):
 
     def evaluate_RNN(learning_rate_, n_rnn_layers_, hidden_dim_, batch_size_, n_epochs_, dropout_, L2_penalty_):
 
@@ -93,7 +129,8 @@ def optimize_RNN(train_data,
                            batch_size_=int(batch_size_),
                            n_epochs_=int(n_epochs_),
                            dropout_=dropout_,
-                           L2_penalty_=L2_penalty_)
+                           L2_penalty_=L2_penalty_,
+                           use_gpu=use_gpu)
 
         # compute MAE
         return -mean_absolute_error(validation_data, fcasts)

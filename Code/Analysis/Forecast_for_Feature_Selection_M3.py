@@ -10,27 +10,37 @@ import os
 from forecasting_functions import *
 from error_distribution_generator import *
 
+# use the data from the M3/ folder
 data_folder = "M3/"
 
+# folder to track computation time
 computation_time = pd.read_csv("../../Data/Computation_Time/M3_computation_time.csv")
 
 # store the cleaned data file names including the baseline protected data sets
 cleaned_data_path = "../../Data/Cleaned/" + data_folder
 cleaned_files = os.listdir(cleaned_data_path)
 
+# store the h2 files specifically (forecasting the second to last time period)
 h2_train_files = [x for x in cleaned_files if "_h2_train" in x]
 h2_test_files = [x for x in cleaned_files if "_h2_test" in x]
 
+# make directories for storing forecasts and forecast errors (results)
 os.makedirs("../../Outputs/Forecasts/" + data_folder, exist_ok=True)
 os.makedirs("../../Outputs/Results/" + data_folder, exist_ok=True)
-
 forecasts_path = "../../Outputs/Forecasts/" + data_folder
 results_path = "../../Outputs/Results/" + data_folder
 
 # loop over forecasting models and training data files
-
 # for seasonal models, we have to account for some data not having a seasonal period.
 # for TES, we only apply it to monthly and quarterly data
+
+# sp = seasonal period, assigned in the loop below
+# truncate = whether to truncate the data, set to True since M-competition data is strictly positive
+# log = whether to apply the log transformation (preprocessing)
+# mean_normalize = whether to mean normalize the data (preprocessing) used only for LGBM and RNN
+# options = model specific options. Some are assigned in the loop below depending on the data
+#   for RNN you can set the maximum number of input-output windows per time series (max_samples_per_ts),
+#   the number of models in the ensemble, and whether to use a GPU for training (see code instructions for details).
 
 forecasting_models = {"SES": {"sp":None, "truncate":True, "log":True, "mean_normalize":False, "options":None},
                       "DES": {"sp":None, "truncate":True, "log":True, "mean_normalize":False, "options":None},
@@ -38,7 +48,7 @@ forecasting_models = {"SES": {"sp":None, "truncate":True, "log":True, "mean_norm
                       "ARIMA": {"sp":None, "truncate":True, "log":True, "mean_normalize":False, "options":None},
                       "VAR": {"sp":None, "truncate":True, "log":True, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
                       "LGBM": {"sp":None, "truncate":True, "log":True, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-                      "RNN": {"sp":None, "truncate":True, "log":True, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
+                      "RNN": {"sp":None, "truncate":True, "log":True, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 10, 'use_gpu': False}}}
 
 for m in forecasting_models.items():
     
@@ -75,10 +85,6 @@ for m in forecasting_models.items():
             
         test_file = [x for x in h2_test_files if x[:-9] in f]
         [test_file] = test_file
-
-        print(model)
-        print(model_args)
-        print(test_file)
 
         start = time.time()
         generate_and_save_forecasts(data_folder=data_folder,

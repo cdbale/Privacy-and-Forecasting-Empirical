@@ -1,39 +1,69 @@
+***** make a note in the paper that the times for swapping are technically for all k values,
+***** but the time for only 1 k-value would be marginally faster since the most computationally
+***** expensive parts are performed for all k-values at the same time. i.e., we do the feature
+***** and distance matrix calculation and then just sample the neighbor index and corresponding
+***** time series values for all values of k
+
 * Note for authors: When cleaning up repository, check in git repo for needed code files at each step. If not there,
 get them from the Mac code folder in google drive.
 
-Download repository with preset file structure.
+Download repository (put link here).
 
-Need to download the M3 and M4 data sets.
+Create a `Data` folder in the repository. This is ignored when pushing to the repo for storage limitation reasons.
 
+Download the M3 data set and place it in an `M3` folder created as a subdirectory of the `Data` folder. Link to data download: https://drive.google.com/drive/folders/1P1mtjdbU03Pbd-JrzbB-vX1als9rt6-h?usp=drive_link.
 
+All python code files are found in the Code/Analysis subdirectory and can be run using a command prompt (we used Anaconda Powershell Prompt).
 
-# Steps for M3 data
+## Steps for M3 data
 
-1. Run `Data_Cleaning_M3.py`. This creates the train and test data for the original M3 data set. h1 indicates which time period is
-	to be forecasted, e.g., h1 means the last period is to be forecasted (function as future value in T+1), h2 means the second to 
-	last period (functioning as value in T).
+1. Run `Data_Cleaning_M3.py`. (e.g., >>>python Data_Cleaning_M3.py). This creates the train and test data for the original M3 data set, and stores it in the `/Cleaned/M3/` subdirectory of the `Data` folder.
+	Note that there are four files for each data frequency/domain: two training files (one for forecasting the last and second to last points of each time series) and two test files containing those test
+	points for each time series.
 
-2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files using additive noise and differential privacy
-	for the parameter values in the paper.
+2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files for forecasting the last and second to last time period using additive noise and differential privacy
+	for the parameter values in the paper. Note that this file also creates the file `M3_computation_time.csv` which tracks the computation time of the various steps involved in the k-nTS+ protection process.
+	This file is found at `/Data/Computation_Time/M3_computation_time.csv`.
 
-3. Run `Forecast_for_Feature_Selection_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
-	baseline protected data sets. The forecast errors will be predicted using the corresponding time series features in the feature
-	selection methodology in k-nTS+.
-
+3. Run `Forecast_for_Feature_Selection_M3.py`. This generates forecasts and measures the series level absolute errors for the original and baseline protected data sets for the last time period assumed available to
+	the data owner. The forecast errors will be predicted using the corresponding time series features in the feature selection methodology in k-nTS+. The file has a dictionary `forecasting_models` where the
+	various forecasting models and some of their arguments/options are specified. The `use_gpu` option for the RNN model should be set to `True` only if you have an Nvidia gpu with the cuda (https://developer.nvidia.com/cuda-toolkit) and torch (https://pytorch.org/get-started/locally/) packages installed. The default for `use_gpu` is set to `False` so that the CPU is used to train the RNN model(s).
+	
+	Note that the following python libraries are required:
+	- sktime
+	- bayesian-optimization
+	- darts
+	- lightgbm
+	
 4. Run `k-nts_M3.R` which protects the M3 data using k-nTS based on manual feature selection. See the paper for discussion of the chosen features.
-	This protects the data through time T, which the last period being treated as the period to be forecasted (i.e., T+1). The accuracy of 
-	forecasts from the data from this method will be 
+	This protects the data through time T, with the last period being treated as the period to be forecasted (i.e., T+1).
 
 5. Run `original_and_baseline_tsfeatures_extraction_M3.R`. This R script calculates the time series features for the original and baseline
 	protected M3 data sets. These features will be combined with the forecast errors from step 3. to be used in the machine learning
 	feature selection method in k-nTS+.
 
-6. Run `k-nts-plus_M3.R` which protects the M3 data using the k-nTS+ methodology based on the machine-learning based feature selection method.
+6. Run `k-nts-plus_M3.R` which protects the M3 data using the k-nTS+ methodology based on the machine-learning based feature selection method. The file will print a statement notifying you when it completes
+	the protection for a given data set.
+
+
+
+
+
+
+
+
 
 7. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
 
 8. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final protected data sets.
+
+
+
+
+
+
+
 
 
 
@@ -54,6 +84,11 @@ Need to download the M3 and M4 data sets.
 7. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
 8. Run `updated_tsfeatures_extraction_M3_rate.R` Same as above but for the M3 rate data.
+
+
+
+
+Download the M4 data sets.
 
 
 

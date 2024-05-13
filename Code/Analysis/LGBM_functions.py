@@ -1,3 +1,11 @@
+# Functions for training an LGBM model using the darts package
+
+# train_LGBM() trains a LGBM and generates forecasts for the provided train_data
+# optimize_LGBM() uses Bayesian optimization to choose optimized values for
+#   many of the LGBM hyperparameters
+
+# Author: Cameron Bale
+
 from bayes_opt import BayesianOptimization
 from torch import nn
 from darts.models.forecasting.lgbm import LightGBMModel

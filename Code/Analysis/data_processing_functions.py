@@ -11,24 +11,15 @@ import pmdarima as pm
 from scipy import stats
 
 # splitting function used in VAR forecast
-# def split(a, n):
-#     k, m = divmod(len(a), n)
-#     print(k, m)
-#     return (a[i*n+min(i, m):(i+1)*n+min(i+1, m)] for i in range(k))
-
-# splitting function used in VAR forecast
 def split(a, n):
     # how many chunks of size n can we create
     num_chunks = np.floor(len(a) / n)
     return(np.array_split(a, num_chunks))
-    
 
 # function to conduct first differencing on time series
 def difference_to_stationarity(ts_data):
-
     # list to store differenced series
     differenced_series = [y.diff().dropna() for y in ts_data]
-
     return differenced_series
 
 # function to reverse first differencing
@@ -57,37 +48,26 @@ def reverse_difference_to_stationarity(h, forecasts, ts_data, is_simulated=False
     return reversed_forecasts
 
 # pre-process the data using various pre-processing steps
-def pre_process(ts_data, h, truncate, log, mean_normalize, sp, transform_dict={}):
+def pre_process(ts_data, truncate, mean_normalize, log):
     """
-    Performs various pre-processing steps. Data independent steps are implemented
-    using boolean values. Data-dependent steps are implemented using a transform_dict
-    containing keys with the name of the steps and specific parameters for each
-    step.
+    Performs various pre-processing steps. 
 
-    :param ts_data: pandas dataframe containing the series in the rows and time
-        periods in the columns.
+    :param ts_data: list containing the time series
     :param truncate: True or False, whether to truncate all values >=1 (this must
         be done before taking the log).
+    :param mean_normalize: whether to divide the values of each series by the mean of
+        all values.
     :param log: whether to log-transform the time series.
-    :param transform_dict: python dictionary, can contain a combination of the
-        following transformations. Must supply appropriate parameter values in a
-        dictionary for each transformation as follows:
-            - "deseasonalize":
-                - {"sp":integer for seasonal periodicity,
-                   "seasonality_type":"additive" or "multiplicative" seasonality}
-            - "windows":
-                - {"window_length":number of time periods as features in the window}
-    :return processed: pandas dataframe that has been pre-processed with the series
-        in the rows and time periods in the columns for statistical models, or a
-        reduced tabular dataframe for machine learning/deep learning models (with
-        the target as the last column in the dataframe.)
+    
+    :return processed: list containing the pre-processed series
     """
 
     processed = ts_data
 
     # Step 1: truncate any values less than 1 - this only comes into play for
-    # data protected using random noise - we do this because we know the M3
-    # monthly micro data is strictly positive
+    # data protected using random noise - we do this because we know the M-forecasting
+    # competition data is strictly positive
+
     if truncate:
         processed = [pd.Series([i if i >= 1 else 1 for i in x]) for x in processed]
 
@@ -99,25 +79,28 @@ def pre_process(ts_data, h, truncate, log, mean_normalize, sp, transform_dict={}
     if log:
         processed = [np.log(x) for x in processed]
 
-    # Step 4: make stationary series using differencing
-    # if make_stationary:
-    #     processed = difference_to_stationarity(processed)
-
     return processed
 
-# post-process the data to reverse the steps performed in pre_processing
-def post_process(full_ts_data, forecasts, h, truncate, log, mean_normalize, sp, var_sim=False):
+# post-process the data to reverse the steps performed in pre_processing (but applied to the forecasts)
+def post_process(full_ts_data, forecasts, log, mean_normalize, truncate, var_sim=False):
+
+    """
+    Performs various pre-processing steps. Designed to be the inverse of the pre-processing steps, allowing
+        forecasts to be analyzed on the scale of the original time series.
+
+    :param full_ts_data: list containing the unprotected time series
+    :param forecasts: list containing the forecast for each time series
+    :param log: whether to reverse the log-transform
+    :param mean_normalize: whether to reverse the mean_normalization step
+    :param truncate: True or False, whether to truncate all values >=1 since we
+        know the M-competition data is strictly positive.
+    
+    :return processed: list containing the post-processed forecasts
+    """
 
     # create processed copy of forecasts, store the number of series
     processed = [pd.Series(x) for x in forecasts]
     num_series = len(forecasts)
-
-    # reverse seasonal and first differencing
-    # if make_stationary:
-    #     temp_ts_data = pre_process(full_ts_data, h)
-    #     processed = reverse_difference_to_stationarity(h, processed, temp_ts_data)
-
-    # reverse the log
 
     ## Forecasting: Principles and Practice
     # bias adjusted forecasts are y = exp(w)[1 + sigma^2_h/2]
@@ -125,12 +108,10 @@ def post_process(full_ts_data, forecasts, h, truncate, log, mean_normalize, sp, 
     # bias adjusted forecasts
 
     # This bias-corrected back-adjustment is inappropriate for MAE - the
-    # median minimizes the expected MAE, so we use the median forecast
     # sigma2 = [np.var(x) for x in processed]
     # processed = [np.exp(processed[i])*(1 + sigma2[i]/2) for i in range(num_series)]
 
-    # use the below version if debugging - it allows you to return the original
-    # data values when testing the pre-process function
+    # median minimizes the expected MAE, so we use the median forecast
     if log:
         processed = [np.exp(processed[i]) for i in range(num_series)]
 

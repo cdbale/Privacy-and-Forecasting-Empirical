@@ -1,11 +1,10 @@
-##### This file contains various functions used to train and forecast using
+##### This file contains functions used to train and forecast using
 ##### various forecasting models.
 
 ##### Author: Cameron Bale
 
 ################################################################################
 
-from ast import Param
 from statistics import mean
 import subprocess
 import pickle
@@ -28,17 +27,6 @@ from darts import TimeSeries
 ################################################################################
 
 def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_path, results_path, model, model_args, h, file_suffix):
-
-    """
-
-    param train_path: path to training data file.
-    param test_path: path to test data file.
-    param forecasts_path: path to where forecasts will be saved
-    param results_path: path to where accuracy results will be saved
-    param model: string model name
-    param model_args: model specific arguments
-    param h: forecast horizon, default is 1.
-    """
 
     # import time series and test data
     # ignore header and skip the first row to use integers as column names
@@ -83,11 +71,9 @@ def generate_and_save_forecasts(data_folder, train_file, test_file, forecasts_pa
 def full_forecast_analysis(Y, h, forecasting_model, sp, log, truncate, mean_normalize, options=None, file_suffix=None, data_folder=None):
 
     Y_processed = pre_process(ts_data=Y,
-                              h=h,
                               truncate=truncate,
-                              log=log,
                               mean_normalize=mean_normalize,
-                              sp=sp)
+                              log=log)
 
     # train forecasting model and generate forecasts
     forecasts = train_and_forecast(ts_data=Y_processed,
@@ -104,11 +90,9 @@ def full_forecast_analysis(Y, h, forecasting_model, sp, log, truncate, mean_norm
     # post-process the forecasts
     forecasts = post_process(full_ts_data=Y,
                              forecasts=forecasts,
-                             h=h,
-                             truncate=truncate,
                              log=log,
                              mean_normalize=mean_normalize,
-                             sp=sp)
+                             truncate=truncate)
 
     return forecasts
 
@@ -116,26 +100,6 @@ def full_forecast_analysis(Y, h, forecasting_model, sp, log, truncate, mean_norm
 
 # general function for training a model and generating forecasts.
 def train_and_forecast(ts_data, h, forecasting_model, truncate=False, log=False, mean_normalize=False, sp=None, options=None, file_suffix=None, data_folder=None):
-    """
-    Performs model training and forecasting using the supplied model applied to
-    the supplied time series data. Model-specific arguments have a default of
-    None.
-
-    :param ts_data: pandas dataframe containing EITHER
-        - series in the rows and time periods in the columns - used with
-            traditional forecasting models.
-        - reduced tabular data with target feature in the last column.
-    :param forecasting_model: string name of the model to use to perform forecasts.
-    :param horizon_length: the number of steps ahead you with to forecast
-        relative to the last point in the series.
-    :protection_method: string name of the type of data protection applied.
-    :param last_window: specific to models that predict using reduced data (i.e.,
-        LGBM). last_window contains the final window of available data which is
-        used to generate forecasts.
-    :return fcasts: a pandas dataframe containing forecasts for all series,
-        dimensions are transposed relative to the input data - series are in the
-        columns, each row corresponds to a time period.
-    """
 
     # define sktime relative forecasting horizon
     fh = np.arange(1, h+1)
@@ -190,14 +154,15 @@ def train_and_forecast(ts_data, h, forecasting_model, truncate=False, log=False,
                               input_chunk_length=options['input_chunk_length'],
                               training_length=options['training_length'],
                               max_samples_per_ts=options['max_samples_per_ts'],
-                              num_ensemble_models=options['num_ensemble_models'])
+                              num_ensemble_models=options['num_ensemble_models'],
+                              use_gpu=options['use_gpu'])
 
     return fcasts
 
 ################################################################################
 
 # function for forecasting with LSTM-RNN
-def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models, model_save_folder=None):
+def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_per_ts, num_ensemble_models, model_save_folder=None, use_gpu=False):
 
     series_lengths = [len(x) for x in ts_data]
 
@@ -234,7 +199,8 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
                                    num_ensemble_models=num_ensemble_models,
                                    input_chunk_length=input_chunk_length,
                                    training_length=training_length,
-                                   max_samples_per_ts=max_samples_per_ts)
+                                   max_samples_per_ts=max_samples_per_ts,
+                                   use_gpu=use_gpu)
 
         fcasts = train_RNN(train_data=processed,
                            h=h,
@@ -248,7 +214,8 @@ def RNN_forecast(ts_data, h, input_chunk_length, training_length, max_samples_pe
                            batch_size_=int(best_params['params']['batch_size_']),
                            n_epochs_=int(best_params['params']['n_epochs_']),
                            dropout_=best_params['params']['dropout_'],
-                           L2_penalty_=best_params['params']['L2_penalty_'])
+                           L2_penalty_=best_params['params']['L2_penalty_'],
+                           use_gpu=use_gpu)
 
         fcasts = [pd.Series(fcasts.iloc[:,i]) for i in range(fcasts.shape[1])]
 
@@ -428,9 +395,6 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, truncate=False, log=F
     processed = reverse_difference_to_stationarity(h, full_forecasts, ts_data)
 
     if simulate_series:
-
-        # reverse the differencing to stationarity on the simulated time series - use the
-        # mean of the original series?
         
         simulated = reverse_difference_to_stationarity(h, simulated, ts_data, is_simulated=True, lag_orders=lag_orders)
         

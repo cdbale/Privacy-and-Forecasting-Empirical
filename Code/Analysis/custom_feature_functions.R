@@ -1,5 +1,31 @@
 ## Custom feature functions
 
+# Author: Cameron Bale
+
+# feature extraction function
+extract_features <- function(time_series, sp, feature_vector, truncate, take_log){
+  
+  # convert to a list of series
+  ts_data <- as.list(as.data.frame(t(time_series)))
+  
+  # remove NA values from the end of each series
+  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+  
+  # convert each series to a TS object with appropriate seasonal frequency
+  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
+  
+  # truncate data to strictly positive
+  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
+  
+  # take the log of the data
+  ts_data <- lapply(ts_data, log)
+  
+  # calculate time series features
+  features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
+  
+  return(features)
+}
+
 # functions to calculate the mean and variance of the series (window)
 series_mean <- function(x){
   return(mean(x))

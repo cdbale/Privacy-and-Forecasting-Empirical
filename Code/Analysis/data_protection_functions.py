@@ -1,9 +1,10 @@
 ##### This file contains various functions used to protect
 ##### time series data. Functions include:
+#####   - save_protected_dataset (creates and saves a protected version of a data set)
+#####   - apply_data_protection (function to apply any of the below methods)
 #####   - additive_noise_protection (additive noise)
 #####   - DP_protection (differential privacy)
-#####   - k-nTS(+) protection (imports pre-created protected files)
-#####   - apply_data_protection (function to apply any of the above methods)
+#####   - k_nts_protection (imports pre-created protected files)
 
 ##### Author: Cameron Bale
 
@@ -15,7 +16,8 @@ import numpy as np
 def save_protected_dataset(original_data_path, save_data_path, num_stdev=None, epsilon=None, k=None, plus=False):
 
     """
-    Function to create and save a protected version of a data set.
+    Function to create and save a protected version of a data set. The type of protection applied is determined
+    by which privacy parameter is provided.
 
     :param original_data_path: file path to the original data.
     :param save_data_path: file path to where protected data should be saved.
@@ -118,7 +120,7 @@ def k_nts_protection(k, plus):
 
 ################################################################################
 
-# protect time series using additive noise (not differentially private)
+# protect time series using additive noise
 def additive_noise_protection(sensitive_data, num_stdev):
 
     """

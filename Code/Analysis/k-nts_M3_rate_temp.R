@@ -85,6 +85,7 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
   # calculate the features for the current window
   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   
+  # replace NA values with 0
   for(i in 1:ncol(C)){
     C[,i][is.na(C[,i])] <- 0
   }
@@ -167,7 +168,7 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
   
 }
 
-perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, kvals, features_to_calculate, selected_features, corr_based=FALSE){
+perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, kvals, features_to_calculate, selected_features, is_rate){
   
   # read in time series
   X <- import_data_rate(file_name=ts_file, file_path=ts_file_path, sp=seasonal_period)
@@ -190,9 +191,19 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
     X_k[[i]] <- lapply(X_protected, function(x) x[[i]])
   }
   
-  X_k <- lapply(X_k, function(x) lapply(x, function(y) as.data.frame(t(y))))
+  if (is_rate){
+    X_k <- lapply(X_k, function(x) lapply(x, function(y) as.data.frame(t(y))))
+    
+    X_k <- lapply(X_k, function(x) do.call(rbind.fill, x))
+    
+  } else {
+    X_k <- lapply(X_k, function(x) lapply(x, function(y) as.data.frame(t(y))))
+    
+    X_k <- lapply(X_k, exp)
+    
+    X_k <- lapply(X_k, function(x) do.call(rbind.fill, x))
+  }
   
-  X_k <- lapply(X_k, function(x) do.call(rbind.fill, x))
   
   return(X_k)
   
