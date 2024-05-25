@@ -14,7 +14,7 @@ library(CORElearn)
 library(forecast)
 library(tidyverse)
 
-data_folder <- "M3_rate/"
+data_folder <- "M3/"
 
 # steps:
 
@@ -26,27 +26,7 @@ data_folder <- "M3_rate/"
 # - else A_i - P_i < 0 (meaning A_i < P_i) then set P_i = A_i + M
 
 source("custom_feature_functions.R")
-
-# function to import and process series
-import_data <- function(file_name, file_path, sp){
-  
-  ###
-  # Takes the name file_name of a time series data set and the seasonal period
-  # of that time series data. Imports the data, pre-processes and converts 
-  # to a timeseries object, and returns the data.
-  ###
-  
-  # import data and convert to a list of series
-  ts_data <- as.list(as.data.frame(t(read.csv(paste0(file_path, file_name)))))
-  
-  # remove NA values from the end of each series
-  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
-  # convert each series to a TS object with appropriate seasonal frequency
-  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
-  
-  return(ts_data)
-}
+source("k-nts_helper_functions.R")
 
 # test on a single k-nTS+ file
 data_path <- paste0("../../Data/Cleaned/", data_folder)
@@ -58,30 +38,13 @@ og_files <- grep("AN_", og_files, value=TRUE, invert=TRUE)
 og_files <- grep("DP_", og_files, value=TRUE, invert=TRUE)
 og_files <- grep("k-nts", og_files, value=TRUE, invert=TRUE)
 
-# build function to do the trimming for a given time series
-knts_bounded <- function(protected_time_series, original_time_series, threshold){
-  
-  # set threshold
-  M <- threshold*sd(original_time_series)
-  
-  # if the protected value is too small, replace it with A_i - M, otherwise, replace it with A_i + M
-  new_protected <- ifelse(original_time_series - protected_time_series > 0, original_time_series - M, original_time_series + M)
-  
-  # check whether within threshold
-  to_keep <- abs(original_time_series - protected_time_series) <= M
-  # replace the values we want to keep
-  new_protected[to_keep] <- protected_time_series[to_keep]
-  
-  return(new_protected)
-}
-
 # do the trimming for all data sets
 
 threshold_values <- c(0.5, 1, 1.5)
 
 for (f in knts_files){
   
-  file_id <- paste0(strsplit(f, "_")[[1]][3:6], collapse="_")
+  file_id <- paste0(strsplit(f, "_")[[1]][3:5], collapse="_")
   
   # original file
   og_f <- grep(file_id, og_files, value=TRUE)
@@ -98,7 +61,7 @@ for (f in knts_files){
     new_protected <- list()
     
     for (j in seq_along(og_data)){
-      new_protected[[j]] <- knts_bounded(knts_data[[j]], og_data[[j]], th)
+      new_protected[[j]] <- exp(knts_bounded(knts_data[[j]], og_data[[j]], th))
     }
     
     ml <- max(sapply(new_protected, length))

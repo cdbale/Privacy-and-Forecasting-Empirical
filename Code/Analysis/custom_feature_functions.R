@@ -3,7 +3,7 @@
 # Author: Cameron Bale
 
 # feature extraction function
-extract_features <- function(time_series, sp, feature_vector, truncate, take_log){
+extract_features <- function(time_series, sp, feature_vector, truncate, take_log, calculate_cross_correlations=FALSE){
   
   # convert to a list of series
   ts_data <- as.list(as.data.frame(t(time_series)))
@@ -14,16 +14,55 @@ extract_features <- function(time_series, sp, feature_vector, truncate, take_log
   # convert each series to a TS object with appropriate seasonal frequency
   ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
   
-  # truncate data to strictly positive
-  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
-  
-  # take the log of the data
-  ts_data <- lapply(ts_data, log)
-  
+  if (truncate){
+    # truncate data to strictly positive
+    ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
+  }
+
+  if (take_log){
+    # take the log of the data
+    ts_data <- lapply(ts_data, log)
+  }
+
   # calculate time series features
   features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
   
-  return(features)
+  if (calculate_cross_correlations){
+    cor_vars <- cross_correlations(ts_data)
+    return(bind_cols(features, cor_vars))
+  } else {
+    return(features)
+  }
+  
+}
+
+# function to calculate cross-series correlations and perform PCA
+cross_correlations <- function(X){
+  
+  # split X into separate datasets, one for each series length
+  Xs <- list()
+  lengths <- sapply(X, length)
+  unique_lengths <- unique(lengths)
+  for (l in seq_along(unique_lengths)){
+    ids <- lengths==unique_lengths[l]
+    Xs[[l]] <- X[ids]
+  }
+  
+  new_vars <- tibble()
+  
+  for (Y in Xs){
+    temp_ts_data <- lapply(Y, as.vector)
+    # combine into data frame with series in columns
+    temp_ts_data <- do.call(cbind, temp_ts_data)
+    # perform PCA
+    pc <- prcomp(temp_ts_data, center=TRUE, scale=TRUE)
+    # take first 5 components
+    cor_vars <- pc$rotation[,1:5]
+    # add identifying names
+    colnames(cor_vars) <- c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5")
+    new_vars <- bind_rows(new_vars, as_tibble(cor_vars))
+  }
+  return(new_vars)
 }
 
 # functions to calculate the mean and variance of the series (window)

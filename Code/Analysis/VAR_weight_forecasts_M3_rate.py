@@ -14,7 +14,7 @@ from data_processing_functions import *
 from error_distribution_generator import *
 
 # import original data file
-data_folder = "M3/"
+data_folder = "M3_rate/"
 
 # forecast horizon
 h = 1
@@ -29,12 +29,12 @@ h1_test_files = [x for x in cleaned_files if "_h1_test" in x]
 
 # an protected data files
 an_train_files = [x for x in cleaned_files if "_h1_train" in x and "AN_0.25" in x]
-knts_train_files = [x for x in cleaned_files if "_h1_train" in x and "k-nts-plus-bounded_3-1.5" in x]
+knts_train_files = [x for x in cleaned_files if "_h1_train" in x and "k-nts-plus_3" in x]
 
 # VAR simulated files
-var_file_path = "../../Outputs/VAR Simulated/M3/"
+var_file_path = "../../Outputs/VAR Simulated/M3_rate/"
 var_sim_files = os.listdir(var_file_path)
-var_sim_files = [x for x in var_sim_files if "h1_train" in x and not any(y in x for y in ['rate', 'k-nts', 'AN_', 'DP_', '.DS_Store'])]
+var_sim_files = [x for x in var_sim_files if "h1_train" in x and not any(y in x for y in ['k-nts', 'AN_', 'DP_', '.DS_Store']) and "rate" in x]
 
 forecasts_path = "../../Outputs/Forecasts/" + data_folder
 results_path = "../../Outputs/Results/" + data_folder
@@ -54,7 +54,7 @@ for train_file in h1_train_files:
     an_file = [x for x in an_train_files if x[9:-9] in train_file]
     [an_file] = an_file
     
-    knts_file = [x for x in knts_train_files if x[25:-9] in train_file]
+    knts_file = [x for x in knts_train_files if x[18:-9] in train_file]
     [knts_file] = knts_file
     
     sim_file = [x for x in var_sim_files if x[:-9] in train_file]
@@ -65,7 +65,7 @@ for train_file in h1_train_files:
     train = pd.read_csv("../../Data/Cleaned/" + data_folder + train_file, header=None, skiprows=1)
     an_train = pd.read_csv("../../Data/Cleaned/" + data_folder + an_file, header=None, skiprows=1)
     knts_train = pd.read_csv("../../Data/Cleaned/" + data_folder + knts_file, header=None, skiprows=1)
-    sim_train = pd.read_csv("../../Outputs/VAR Simulated/M3/" + sim_file, header=None, skiprows=1)
+    sim_train = pd.read_csv("../../Outputs/VAR Simulated/M3_rate/" + sim_file, header=None, skiprows=1)
     test = pd.read_csv("../../Data/Cleaned/" + data_folder + test_file, header=None, skiprows=1).T
 
     # convert to a list of series, and drop missing values
@@ -76,33 +76,25 @@ for train_file in h1_train_files:
 
     # preprocess data
     train_processed = pre_process(ts_data=train,
-                                  h=1,
-                                  truncate=True,
-                                  log=True,
-                                  mean_normalize=False,
-                                  sp=sp)
+                                  truncate=False,
+                                  log=False,
+                                  mean_normalize=False)
     
     an_train_processed = pre_process(ts_data=an_train,
-                                        h=1,
-                                        truncate=True,
-                                        log=True,
-                                        mean_normalize=False,
-                                        sp=sp)
+                                      truncate=False,
+                                      log=False,
+                                      mean_normalize=False)
     
     knts_train_processed = pre_process(ts_data=knts_train,
-                                        h=1,
-                                        truncate=True,
-                                        log=True,
-                                        mean_normalize=False,
-                                        sp=sp)
+                                       truncate=False,
+                                       log=False,
+                                       mean_normalize=False)
     
     sim_train_processed = pre_process(ts_data=sim_train,
-                                      h=1,
-                                      truncate=True,
-                                      log=True,
-                                      mean_normalize=False,
-                                      sp=sp)
-    
+                                      truncate=False,
+                                      log=False,
+                                      mean_normalize=False)
+
     train_differenced = difference_to_stationarity(train_processed)
     an_train_differenced = difference_to_stationarity(an_train_processed)
     knts_train_differenced = difference_to_stationarity(knts_train_processed)
@@ -117,9 +109,9 @@ for train_file in h1_train_files:
     unique_lengths = np.unique(lengths)
 
     # store the forecasts in an array of all forecasts using the stored series indices
+    full_sim_forecasts = np.zeros([num_series, h])
     full_an_forecasts = np.zeros([num_series, h])
     full_knts_forecasts = np.zeros([num_series, h])
-    full_sim_forecasts = np.zeros([num_series, h])
     
     for k, l in enumerate(unique_lengths):
         
@@ -147,7 +139,7 @@ for train_file in h1_train_files:
 
             # number of lags in VAR model
             lag_order = results.k_ar
-            
+
             # forecast simulated series and k-nTS+ series
             # generate forecasts
             if lag_order == 0:
@@ -180,28 +172,22 @@ for train_file in h1_train_files:
     # post-process the forecasts
     an_forecasts = post_process(full_ts_data=an_train,
                                 forecasts=an_processed,
-                                h=1,
-                                truncate=True,
-                                log=True,
-                                mean_normalize=False,
-                                sp=sp)
+                                truncate=False,
+                                log=False,
+                                mean_normalize=False)
     
     knts_forecasts = post_process(full_ts_data=knts_train,
-                                forecasts=knts_processed,
-                                h=1,
-                                truncate=True,
-                                log=True,
-                                mean_normalize=False,
-                                sp=sp)
-    
+                                  forecasts=knts_processed,
+                                  truncate=False,
+                                  log=False,
+                                  mean_normalize=False)
+
     # post-process the forecasts
     sim_forecasts = post_process(full_ts_data=sim_train,
                                  forecasts=sim_processed,
-                                 h=1,
-                                 truncate=True,
-                                 log=True,
-                                 mean_normalize=False,
-                                 sp=sp)
+                                 truncate=False,
+                                 log=False,
+                                 mean_normalize=False)
 
     # save the forecasts to .csv file
     horizon = train_file.split("_")[-2]
@@ -220,9 +206,9 @@ for train_file in h1_train_files:
     # calculate the average mean absolute error
     sim_mae_global = pd.Series(mean_absolute_error(test, sim_forecasts, multioutput="uniform_average"))
 
-    an_mae_global.to_csv(results_path + "VAR_h1_var-an-lag_1_" + finfo + ".csv", index=False)
-
     # save the average mean absolute error
+    an_mae_global.to_csv(results_path + "VAR_h1_var-an-lag_1_" + finfo + ".csv", index=False)
+    
     knts_mae_global.to_csv(results_path + "VAR_h1_var-knts-lag_1_" + finfo + ".csv", index=False)
     
     # save the average mean absolute error
@@ -256,5 +242,5 @@ for f in og_files:
                                   protection_method_dict=protection_methods, 
                                   forecast_horizon="h1",
                                   track_comp_time=False,
-                                  is_rate=False,
-                                  inverse_rate=False)
+                                  is_rate=True,
+                                  inverse_rate=True)

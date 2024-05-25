@@ -14,7 +14,7 @@ library(CORElearn)
 library(forecast)
 library(tidyverse)
 
-data_folder <- "M3/"
+data_folder <- "M3_rate/"
 
 source("custom_feature_functions.R")
 source("k-nts_helper_functions.R")
@@ -58,6 +58,7 @@ num_iter <- 25
 
 # track computation time for k-nTS+ swapping
 feature_file_names <- grep("h2_train", list.files(features_path), value=TRUE)
+feature_file_names <- grep("rate", feature_file_names, value=TRUE)
 
 # loop over file names
 for (f in file_names){
@@ -66,13 +67,15 @@ for (f in file_names){
   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
   
   # import data to determine where to split based on length
-  f_data <- import_data(file_name=f, file_path=fp, sp=sp)
+  f_data <- import_data(file_name=f, file_path=fp, sp=sp, truncate=FALSE, take_log=FALSE)
   
   # length grouping
   grouping_id <- as.numeric(as.factor(sapply(f_data, length)))
   
   # store file prefix
-  prefix <- strsplit(f, split="_")[[1]][1]
+  prefix <- strsplit(f, split="_")[[1]][1:2]
+  
+  prefix <- paste(prefix[1], prefix[2], sep='_')
   
   ## time for feature processing and preparation
   feature_start <- Sys.time()
@@ -83,10 +86,11 @@ for (f in file_names){
   # transform to tidy
   eds <- eds %>% gather(key="name", value="values") %>%
     mutate(name = substring(name, 1, nchar(name)-8)) %>%
-    separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data"), sep="_") %>%
-    mutate(Protection = if_else(is.na(Protection), "Original", ifelse(Protection == prefix, "Original", Protection)),
-           Parameter = if_else(is.na(Parameter), "Original", Parameter)) %>%
-    select(-Data)
+    separate(name, c("Model", "Horizon", "Protection", "Parameter", "Data_Type", "Data"), sep="_") %>%
+    mutate(Protection = if_else(Protection=="rate", "Original", Protection),
+           Parameter = if_else(Parameter==strsplit(prefix, split="_")[[1]][2], "Original", Parameter),
+           Data_Type = if_else(is.na(Data_Type), "rate", Data_Type),
+           Data = if_else(is.na(Data), strsplit(prefix, split="_")[[1]][2], Data))
   
   # now add series groupings
   eds <- eds %>%
@@ -159,6 +163,8 @@ for (f in file_names){
                                                                                 -Horizon, 
                                                                                 -Protection, 
                                                                                 -Parameter,
+                                                                                -Data_Type,
+                                                                                -Data,
                                                                                 -grouping_id)))
   
   full_data_scaled <- lapply(full_data, function(x) lapply(x, function(y) as.data.frame(scale(y))))
@@ -243,6 +249,10 @@ for (f in file_names){
   sf <- lapply(fsr, function(x) x[["selected_features"]])
   imp_weights <- lapply(fsr, function(x) x[["importance_weights"]])
   
+  ### use a window length = 2x + 1 the sp when sp > 1
+  ### otherwise use 9, which is the same length as
+  ### the shortest window with a seasonal period (quarterly)
+  
   window_length <- max(c(2*sp + 1, 12))
   
   ################################################
@@ -258,7 +268,7 @@ for (f in file_names){
                          features_to_calculate=fv,
                          selected_features=sf,
                          is_plus=TRUE,
-                         is_rate=FALSE)
+                         is_rate=TRUE)
   
   swap_stop <- Sys.time()
   
@@ -277,7 +287,7 @@ for (f in file_names){
                             swap7 = swap_time,
                             swap10 = swap_time,
                             swap15 = swap_time)
-
+  
   computation_time <- bind_rows(computation_time, computation_row)
   
   print(paste0("File ", f, " complete."))
@@ -286,6 +296,7 @@ for (f in file_names){
 
 write.csv(computation_time, file=paste0("../../Data/Computation_Time/", substr(data_folder, 1, nchar(data_folder)-1), "_k-nts-plus.csv"), row.names=FALSE)
 
+################################################################################
 ################################################################################
 ################################################################################
 ################################################################################

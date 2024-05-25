@@ -90,7 +90,7 @@ to_exclude <- all_protected_results %>%
   summarize(avg_AE = mean(values), .groups='drop') %>%
   arrange(desc(avg_AE)) %>%
   unite('file', Protection:Data) %>%
-  slice(1:10) %>%
+  slice(1:11) %>%
   pull(file)
 
 # remove the large outlying errors
@@ -143,37 +143,11 @@ protected_model_ranks_mae <- all_protected_results %>%
   summarize(MAE = mean(values)) %>%
   arrange(MAE)
 
-# calculate percent change in VAR acc
-
+# calculate model ranks based on standard deviation of MAE
 original_model_ranks_sd <- all_original_results %>%
   group_by(Model) %>%
   summarize(sd_MAE = sd(values)) %>%
   arrange(sd_MAE)
-
-# ### calculate the overall averages for each privacy method and model
-# original_avg_model <- all_original_results %>%
-#   group_by(Model) %>%
-#   summarize(original_avg_mae = mean(values), .groups="drop")
-# 
-# protection_model_avgs <- all_protected_results %>%
-#   group_by(Protection, Parameter, Model) %>%
-#   summarize(avg_mae = mean(values), .groups="drop") %>%
-#   left_join(original_avg_model, by="Model") %>%
-#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-# 
-# temp <- protection_model_avgs %>%
-#   filter(Protection == "k-nts-plus", Parameter == "3")
-# 
-# # ### calculate the overall averages for each privacy method, model, data set
-# original_avg_model_data <- all_original_results %>%
-#   group_by(Model, Data) %>%
-#   summarize(original_avg_mae = mean(values), .groups="drop")
-# 
-# protection_model_data_avgs <- all_protected_results %>%
-#   group_by(Protection, Parameter, Model, Data) %>%
-#   summarize(avg_mae = mean(values), .groups="drop") %>%
-#   left_join(original_avg_model_data, by=c("Model", "Data")) %>%
-#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
 ### calculate overall average for each privacy method and data set
 original_avg_data <- all_original_results %>%
@@ -222,32 +196,32 @@ data_avgs <- protected_data_avgs %>%
 
 write.csv(data_avgs, paste0("../../Outputs/Results/", data_folder, "Tables/k-nts-plus-3-1.5-averages_by_frequency.csv"), row.names=FALSE)
 
-# break down results by model x data set
-
-original_model_data_avgs <- all_original_results %>%
-  group_by(Model, Data) %>%
-  summarize(original_avg_mae = mean(values), .groups='drop')
-
-protected_model_data_avgs <- all_protected_results %>%
-  filter(Protection == "k-nts-plus-bounded", Parameter == "3-1.5") %>%
-  group_by(Model, Data) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-model_data_avgs <- protected_model_data_avgs %>%
-  left_join(original_model_data_avgs, by=c("Model", "Data")) %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-
-model_data_avgs %>%
-  ggplot(aes(x=Data, y=Model, fill=pct_change)) +
-  geom_tile(color = "white",
-            lwd = 1,
-            linetype = 1) +
-  geom_text(aes(label = round(pct_change)), color = "white", size = 3) +
-  # scale_fill_gradient(low = "darkgreen", high = "red") +
-  coord_fixed() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        text = element_text(size=19),
-        plot.title = element_text(face= "bold", colour= "black"),
-        axis.title.x = element_text(face="bold", colour = "black"),    
-        axis.title.y = element_text(face="bold", colour = "black"))
+# # break down results by model x data set
+# 
+# original_model_data_avgs <- all_original_results %>%
+#   group_by(Model, Data) %>%
+#   summarize(original_avg_mae = mean(values), .groups='drop')
+# 
+# protected_model_data_avgs <- all_protected_results %>%
+#   filter(Protection == "k-nts-plus-bounded", Parameter == "3-1.5") %>%
+#   group_by(Model, Data) %>%
+#   summarize(avg_mae = mean(values), .groups='drop')
+# 
+# model_data_avgs <- protected_model_data_avgs %>%
+#   left_join(original_model_data_avgs, by=c("Model", "Data")) %>%
+#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
+# 
+# model_data_avgs %>%
+#   ggplot(aes(x=Data, y=Model, fill=pct_change)) +
+#   geom_tile(color = "white",
+#             lwd = 1,
+#             linetype = 1) +
+#   geom_text(aes(label = round(pct_change)), color = "white", size = 3) +
+#   # scale_fill_gradient(low = "darkgreen", high = "red") +
+#   coord_fixed() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+#         text = element_text(size=19),
+#         plot.title = element_text(face= "bold", colour= "black"),
+#         axis.title.x = element_text(face="bold", colour = "black"),    
+#         axis.title.y = element_text(face="bold", colour = "black"))
 

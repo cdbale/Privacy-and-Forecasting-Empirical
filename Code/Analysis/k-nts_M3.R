@@ -11,7 +11,7 @@ library(e1071)
 library(forecast)
 
 source("custom_feature_functions.R")
-source("knts_helper_functions.R")
+source("k-nts_helper_functions.R")
 
 data_folder <- "M3/"
 
@@ -44,7 +44,7 @@ for (f in file_names){
   # determine sp
   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
   
-  # window length is the maximum of 2*sp + 1 and 11, so
+  # window length is the maximum of 2*sp + 1 and 12, so
   # 25 for monthly data and 11 for quarterly/yearly data
   window_length <- max(c(2*sp + 1, 12))
   

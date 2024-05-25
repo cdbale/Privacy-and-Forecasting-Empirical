@@ -1,5 +1,5 @@
 ##### Code to extract time series features for the original 
-##### and baseline protected data sets.
+##### and baseline protected data sets for the h2 horizon
 
 # Author: Cameron Bale
 
@@ -65,7 +65,7 @@ for (f in file_names){
   sp_l <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
 
   start <- Sys.time()
-  features <- extract_features(data_set, sp=sp_l, feature_vector=fv, truncate=TRUE, take_log=TRUE)
+  features <- extract_features(data_set, sp=sp_l, feature_vector=fv, truncate=TRUE, take_log=TRUE, calculate_cross_correlations=TRUE)
   stop <- Sys.time()
   features <- features %>% select(-nperiods, -seasonal_period)
   computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="secs")

@@ -3,6 +3,8 @@
 ## The h2 versions are used in the k-nTS+ framework, and the forecasting results
 ## on the h1 versions are compared to k-nTS+ in the paper.
 
+## This file is specifically for the M3_rate data.
+
 # Author: Cameron Bale
 
 import time

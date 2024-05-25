@@ -41,7 +41,7 @@ forecasting_models = {"SES": {"sp":None, "truncate":False, "log":False, "mean_no
                       "ARIMA": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options":None},
                       "VAR": {"sp":None, "truncate":False, "log":False, "mean_normalize":False, "options": {'save_params': False, 'simulate_series': False}},
                       "LGBM": {"sp":None, "truncate":False, "log":False, "mean_normalize":True, "options": {'max_samples_per_ts': None, 'window_length': None}},
-                      "RNN": {"sp":None, "truncate":False, "log":False, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 10}}}
+                      "RNN": {"sp":None, "truncate":False, "log":False, "mean_normalize":True, "options": {'input_chunk_length': None, 'training_length': None, 'max_samples_per_ts': 10, 'num_ensemble_models': 10, 'use_gpu': False}}}
 
 for m in forecasting_models.items():
     

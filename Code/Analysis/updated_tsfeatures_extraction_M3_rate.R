@@ -25,30 +25,6 @@ file_names <- grep("_h1_train", list.files(file_path), value=TRUE)
 
 file_names
 
-# feature extraction function
-extract_features <- function(time_series, sp, feature_vector){
-  
-  ###
-  # Takes the time_series dataframe, the seasonal period, and a vector
-  # of desired feature names as input. Outputs a dataframe containing the
-  # extracted features (columns) for each series (rows)
-  ###
-
-  # convert to a list of series
-  ts_data <- as.list(as.data.frame(t(time_series)))
-  
-  # remove NA values from the end of each series
-  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
-  # convert each series to a TS object with appropriate seasonal frequency
-  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
-  
-  # calculate time series features
-  features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
-  
-  return(features)
-}
-
 #### compengine includes features in:
 # autocorr_features
 # pred_features
@@ -76,7 +52,7 @@ fv <- c("entropy_c", "lumpiness", "stability",
 for (f in file_names){
   data_set <- read.csv(paste0(file_path, f))
   sp_l <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
-  features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
+  features <- extract_features(data_set, sp=sp_l, feature_vector=fv, truncate=FALSE, take_log=FALSE, calculate_cross_correlations=TRUE)
   features <- features %>% select(-nperiods, -seasonal_period)
   write.csv(features, file=paste0("../../Data/Features/", data_folder, "features_", f), row.names=FALSE)
 }

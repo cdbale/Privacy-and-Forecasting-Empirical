@@ -1,0 +1,7 @@
+Tasks per section
+
+- check section and subsection numbering
+- check section references
+- check figure and table references
+- check that figure and table captions make sense
+

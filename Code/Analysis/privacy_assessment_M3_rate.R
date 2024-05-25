@@ -311,16 +311,6 @@ library(tidyverse)
 
 length_counts <- unlist(length_counts)
 
-proportions <- lapply(weighted_ident, function(x) lapply(x, function(y) y * num_series/length_counts))
-
-max_proportions <- lapply(proportions, function(x) sapply(x, function(y) max(y)))
-
-max_proportions <- lapply(1:length(max_proportions), function(x) tibble("Method"=names(privacy_methods)[x],
-                                                                        "AvgIdentificationProb"=max_proportions[[x]],
-                                                                        "Parameter"=names(max_proportions[[x]])))
-
-max_proportions <- do.call(rbind, max_proportions)
-
 ###
 
 totals <- lapply(weighted_ident, function(x) sapply(x, function(y) sum(y)))
@@ -331,4 +321,11 @@ totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_met
 
 totals <- do.call(rbind, totals)
 
-write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/rate_overall_privacy_averages.csv"), row.names = FALSE)
+# check if sub directory exists 
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/rate_overall_privacy_averages.csv"), row.names = FALSE)
+} else {
+  # create a new sub directory for storing time series features
+  dir.create(file.path(paste0("../../Outputs/Results/", data_folder, "Tables/")), recursive=TRUE)
+  write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/rate_overall_privacy_averages.csv"), row.names = FALSE)
+}

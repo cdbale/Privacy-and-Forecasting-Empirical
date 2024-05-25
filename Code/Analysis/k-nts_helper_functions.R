@@ -185,8 +185,18 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
   # restrict the data to the beginning window
   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
   
-  # calculate the features for the current window
-  C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
+  if (sum(c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5") %in% selected_features) > 0){
+    C <- cross_correlations(X_window)
+    # calculate the features for the current window
+    
+    if (sum(!selected_features %in% c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5")) > 0){                                                                                         # reorder to match the weights order
+      C <- cbind(tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[, selected_features[!selected_features %in% c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5")]], C)[,selected_features]
+    }
+    
+  } else {
+    # calculate the features for the current window
+    C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
+  }
   
   # replace NA values with 0
   for(i in 1:ncol(C)){
@@ -234,8 +244,21 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
     # restrict the data to the current window
     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
     
-    ## calculate the features for the current window
-    C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
+    if (sum(c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5") %in% selected_features) > 0){
+      C <- cross_correlations(X_window)
+      # calculate the features for the current window
+      
+      if (sum(!selected_features %in% c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5")) > 0){                                                                                         
+        C <- cbind(tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[, selected_features[!selected_features %in% c("cross_cor_1", "cross_cor_2", "cross_cor_3", "cross_cor_4", "cross_cor_5")]], C)
+      }
+      
+      # reorder to match the order of the importance weights
+      C <- C[,selected_features]
+      
+    } else {
+      # calculate the features for the current window
+      C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
+    }
     
     for(i in 1:ncol(C)){
       C[,i][is.na(C[,i])] <- 0
@@ -300,8 +323,8 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
   
   # split X into separate datasets, one for each series length
   Xs <- list()
-  unique_lengths <- unique(sapply(X, length))
   lengths <- sapply(X, length)
+  unique_lengths <- unique(lengths)
   for (l in seq_along(unique_lengths)){
     ids <- lengths==unique_lengths[l]
     Xs[[l]] <- X[ids]
@@ -335,6 +358,23 @@ perform_knts <- function(ts_file, ts_file_path, seasonal_period, window_length, 
   
   return(X_k)
   
+}
+
+# build function to do the trimming for a given time series
+knts_bounded <- function(protected_time_series, original_time_series, threshold){
+  
+  # set threshold
+  M <- threshold*sd(original_time_series)
+  
+  # if the protected value is too small, replace it with A_i - M, otherwise, replace it with A_i + M
+  new_protected <- ifelse(original_time_series - protected_time_series > 0, original_time_series - M, original_time_series + M)
+  
+  # check whether within threshold
+  to_keep <- abs(original_time_series - protected_time_series) <= M
+  # replace the values we want to keep
+  new_protected[to_keep] <- protected_time_series[to_keep]
+  
+  return(new_protected)
 }
 
 # # function to perform k-nTS/k-nTS+

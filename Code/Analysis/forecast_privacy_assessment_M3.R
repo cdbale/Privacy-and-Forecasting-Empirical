@@ -22,7 +22,7 @@ pmf <- function(x){
 
 # Author: Cameron Bale
 
-data_folder = "M3_rate/"
+data_folder = "M3/"
 
 ## we will use the test data and the forecast files
 
@@ -108,9 +108,9 @@ for (i in seq_along(privacy_methods)){
       file_info <- strsplit(pm_files[f], split="_")[[1]]
       
       if (current_name == "original"){
-        file_id <- file_info[4]
+        file_id <- file_info[3]
       } else {
-        file_id <- file_info[6]
+        file_id <- file_info[5]
       }
       
       model <- file_info[1]
@@ -169,10 +169,6 @@ avg_prop_ident <- fcast_ident_data %>%
   group_by(method, parameter, file_id, num_series) %>%
   summarize(avg_proportion_identified = mean(proportion_identified), .groups='drop')
       
-max_prop_ident <- avg_prop_ident %>%
-  group_by(method, parameter) %>%
-  summarize(max_prop = max(avg_proportion_identified))
-      
 weight_avg_prop_ident <- avg_prop_ident %>%
   group_by(method, parameter) %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
@@ -187,12 +183,5 @@ var_weight_avg_prop_ident <- fcast_ident_data %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
             total_series = sum(num_series))
 
-write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
-write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)
-
-# 
-# 
-# 
-# 
-# 
-# 
+write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
+write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)

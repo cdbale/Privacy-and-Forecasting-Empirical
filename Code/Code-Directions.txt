@@ -7,6 +7,27 @@
 * Note for authors: When cleaning up repository, check in git repo for needed code files at each step. If not there,
 get them from the Mac code folder in google drive.
 
+CODE FOR SIMULATIONS
+
+R files `simulation-accuracy-privacy-weighted-euclidean.R` and `simulation-accuracy-privacy-weighted-euclidean-large-N.R`
+are used to obtain the simulation results from Section 4. Plots used in the paper will be saved to the 
+`Outputs/Figures/Simulation/` folder. The code in the simulation files was written to work with the functions defined in the simulation files. Some of these functions (particularly the
+knts_alg() function) were re-written in the `knts_helper_functions.R` file to reduce execution time when running on larger data sets, but the end result is the same.
+
+** What about the simulation results using the VAR model?
+
+
+
+
+
+
+
+
+
+----------------------------------------------------
+
+CODE FOR ANALYZING M3 and M4 DATA
+
 Download repository (put link here).
 
 Create a `Data` folder in the repository. This is ignored when pushing to the repo for storage limitation reasons.
@@ -40,24 +61,27 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 5. Run `original_and_baseline_tsfeatures_extraction_M3.R`. This R script calculates the time series features for the original and baseline
 	protected M3 data sets. These features will be combined with the forecast errors from step 3. to be used in the machine learning
-	feature selection method in k-nTS+.
+	feature selection method in k-nTS+. Note that all features are saved to the `Data/Features/` folder.
 
 6. Run `k-nts-plus_M3.R` which protects the M3 data using the k-nTS+ methodology based on the machine-learning based feature selection method. The file will print a statement notifying you when it completes
 	the protection for a given data set.
 
+7. Run `k-nts_plus_M3_bounded_M.R` which creates modified versions of the k-nTS+ (k = 3) protected data sets by bounding the differences between the protected and unprotected values.
 
-
-
-
-
-
-
-
-7. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
+8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
 
-8. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final protected data sets.
+9. Run `VAR_weight_forecasts.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values discussed in Section XXX.
 
+10. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final unprotected and protected data sets. Note that all features are saved to the `Data/Features/` folder.
+
+11. Run `privacy_assessment_M3.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M3/Tables/".
+
+12. Run `forecast_privacy_assessment_M3.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M3/Tables".
+
+13. Run `results_computation_M3.R` to compute the accuracy results. Results are saved to.......
+
+14. Run `computation_time_analysis.R` to analyze the computation time of the k-nTS+ process. Results are saved to......
 
 
 
@@ -81,16 +105,29 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 6. Run `k-nts-plus_M3_rate.R`. Same as above but for M3 rates.
 
-7. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
+7. Run `k-nts_plus_M3_rate_bounded_M.R`. Same as above but for M3 rates.
 
-8. Run `updated_tsfeatures_extraction_M3_rate.R` Same as above but for the M3 rate data.
+8. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
+
+9. Run `VAR_weight_forecasts.py`. Same as above but for M3 rates.
+
+10. Run `updated_tsfeatures_extraction_M3_rate.R` Same as above but for the M3 rate data.
+
+11. Run `privacy_assessment_M3_rate.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M3_rate/Tables/".
+
+12. Run `forecast_privacy_assessment_M3_rate.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M3/Tables".
+
+13. Run `results_computation_M3_rate.R` to compute the accuracy results. Results are saved to.......
+
+
+
+
+
 
 
 
 
 Download the M4 data sets.
-
-
 
 ***# Steps for M4 data
 

@@ -1,0 +1,34 @@
+Revision Tasks
+
+- check hyperparameter ranges in the appendix, make sure consistent across M3 and M4 files
+
+- note that we are skipping the VAR inverse forecasts for DP_0.1 on the original data due to infinite values
+
+- feels like an excessive number of subsections in the empirical section. What do coauthors think?
+
+
+- make sure all section references throughout the document are correct
+- make sure all figure and table references throughout the document are correct
+- Section 5: add a sentence to explain the organization of the content. Add a sentence to each section that does this.
+- Sections 5.2 and 5.7 are both about time series features - merge these sections
+- add description of cross-series correlation features
+
+
+
+- next steps: include correlation features in k-nTS+ on the M3 data, M3-rate data, and so on
+
+
+- redo plots
+	- make changes suggested by reviewers
+	- Figures 1, 6, and 8: put both figures into the same plot with different point types and colors
+- Address the fact that the s parameter in tables 8 and 9 is not the same - make it the same?
+
+- go through reviewer document and add responses to questions/comments
+- address reviewer comment about series with large magnitude dominating the change in MAE. Does our calculation account for this? 
+	What is the mean change in accuracy at the series level?
+	Can we calculate and compare the percentage change in a trimmed mean? (both of these points may be addressed by calculating the AvgRelMAE as done by Fildes)
+- focus on computation time of the k-nTS+ process only (omit computation time from forecasting models)
+- address incorporation/consideration of multivariate time series features
+	Talked about comparing the before/after cross-series correlation matrices - what is the average absolute difference in correlations
+- proof read entire paper
+

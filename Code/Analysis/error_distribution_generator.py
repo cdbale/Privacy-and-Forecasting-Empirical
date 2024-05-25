@@ -110,6 +110,9 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
 
         # use original data file and forecasts to convert to standard forecast
         for f in forecast_files:
+            print(f)
+            if "DP_0.1" in f or "DP_1" in f:
+                continue
             split_f = f.split("_")[2:]
             combined_f = "_".join(split_f)[:-4]
             fcasts = pd.read_csv(forecasts_path + f).T

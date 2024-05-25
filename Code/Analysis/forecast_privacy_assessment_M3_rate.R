@@ -22,7 +22,7 @@ pmf <- function(x){
 
 # Author: Cameron Bale
 
-data_folder = "M3/"
+data_folder = "M3_rate/"
 
 ## we will use the test data and the forecast files
 
@@ -108,9 +108,9 @@ for (i in seq_along(privacy_methods)){
       file_info <- strsplit(pm_files[f], split="_")[[1]]
       
       if (current_name == "original"){
-        file_id <- file_info[3]
+        file_id <- file_info[4]
       } else {
-        file_id <- file_info[5]
+        file_id <- file_info[6]
       }
       
       model <- file_info[1]
@@ -169,10 +169,6 @@ avg_prop_ident <- fcast_ident_data %>%
   group_by(method, parameter, file_id, num_series) %>%
   summarize(avg_proportion_identified = mean(proportion_identified), .groups='drop')
       
-max_prop_ident <- avg_prop_ident %>%
-  group_by(method, parameter) %>%
-  summarize(max_prop = max(avg_proportion_identified))
-      
 weight_avg_prop_ident <- avg_prop_ident %>%
   group_by(method, parameter) %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
@@ -187,155 +183,13 @@ var_weight_avg_prop_ident <- fcast_ident_data %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
             total_series = sum(num_series))
 
-write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
-write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)
-
-
-
-
-
-# 
-# ################################################################################
-# 
-# # obtain names of files for protected data for forecasting the last period
-# forecast_file_names <- list.files(paste0("../../Outputs/Forecasts/", data_folder))
-# 
-# forecast_file_names <- grep("h2", forecast_file_names, value=TRUE, invert=TRUE)
-# 
-# forecast_file_names <- grep("var-sim-lag", forecast_file_names, value=TRUE)
-# 
-# # loop over forecast files and assess the privacy of each one weighted by
-# # the number of series
-# 
-# total_num <- 2363
-# 
-# props_identified <- c()
-# 
-# num_series <- c()
-# 
-# for (ff in forecast_file_names){
-#   
-#   forecasts <- t(read.csv(paste0("../../Outputs/Forecasts/", data_folder, ff)))[,1]
-#   
-#   file_id <- strsplit(ff, split="_")[[1]][5]
-#   
-#   test <- read.csv(paste0("../../Data/Cleaned/", data_folder, grep(file_id, file_names, value=TRUE)))[,1]
-#   
-#   forecast_matrix <- matrix(rep(forecasts, length(forecasts)), ncol=length(forecasts), byrow=TRUE)
-#   
-#   diff_matrix <- apply(forecast_matrix, 2, function(x) pmf(1/(abs(x-test)+.Machine$double.eps)))
-#   
-#   props_identified <- c(props_identified, mean(apply(diff_matrix, 2, which.max) == (1:length(test))))
-#   
-#   num_series <- c(num_series, length(test))
-#   
-# }
-# 
-# matrix(c(num_series, props_identified), ncol=2)
-# 
-# sum(props_identified * (num_series/total_num))
-# 
-# ################################################################################
-# 
-# # obtain names of files for protected data for forecasting the last period
-# forecast_file_names <- list.files(paste0("../../Outputs/Forecasts/", data_folder))
-# 
-# forecast_file_names <- grep("h2", forecast_file_names, value=TRUE, invert=TRUE)
-# 
-# forecast_file_names <- grep("k-nts-plus-bounded_3-1.5", forecast_file_names, value=TRUE)
-# 
-# forecast_file_names <- grep("VAR_", forecast_file_names, value=TRUE)
-# 
-# # loop over forecast files and assess the privacy of each one weighted by
-# # the number of series
-# 
-# total_num <- 2363
-# 
-# props_identified <- c()
-# 
-# num_series <- c()
-# 
-# for (ff in forecast_file_names){
-#   
-#   forecasts <- t(read.csv(paste0("../../Outputs/Forecasts/", data_folder, ff)))[,1]
-#   
-#   file_id <- strsplit(ff, split="_")[[1]][5]
-#   
-#   test <- read.csv(paste0("../../Data/Cleaned/", data_folder, grep(file_id, file_names, value=TRUE)))[,1]
-#   
-#   forecast_matrix <- matrix(rep(forecasts, length(forecasts)), ncol=length(forecasts), byrow=TRUE)
-#   
-#   diff_matrix <- apply(forecast_matrix, 2, function(x) abs(x-test))
-#   
-#   props_identified <- c(props_identified, mean(apply(diff_matrix, 2, which.min) == (1:length(test))))
-#   
-#   num_series <- c(num_series, length(test))
-#   
-# }
-# 
-# sum(props_identified * (num_series/total_num))
-# 
-# ################################################################################
-# 
-# # repeat for rate data
-# 
-# data_folder <- "M3_rate/"
-# 
-# # paths to the data files and feature files
-# fp <- paste0("../../Data/Cleaned/", data_folder)
-# 
-# # import names of original data files - this may include protected versions
-# # so we have to remove those
-# file_names <- grep("_h1_test", list.files(fp), value=TRUE)
-# 
-# file_names
-# 
-# # obtain names of files for protected data for forecasting the last period
-# forecast_file_names <- list.files(paste0("../../Outputs/Forecasts/", data_folder))
-# 
-# forecast_file_names <- grep("h2", forecast_file_names, value=TRUE, invert=TRUE)
-# 
-# forecast_file_names <- grep("k-nts-plus_3", forecast_file_names, value=TRUE)
-# 
-# forecast_file_names <- grep("VAR_", forecast_file_names, value=TRUE)
-# 
-# # loop over forecast files and assess the privacy of each one weighted by
-# # the number of series
-# 
-# total_num <- 2363
-# 
-# props_identified <- c()
-# 
-# num_series <- c()
-# 
-# for (ff in forecast_file_names){
-#   
-#   forecasts <- t(read.csv(paste0("../../Outputs/Forecasts/", data_folder, ff)))[,1]
-#   
-#   file_id <- strsplit(ff, split="_")[[1]][6]
-#   
-#   test <- read.csv(paste0("../../Data/Cleaned/", data_folder, grep(file_id, file_names, value=TRUE)))[,1]
-#   
-#   forecast_matrix <- matrix(rep(forecasts, length(forecasts)), ncol=length(forecasts), byrow=TRUE)
-#   
-#   diff_matrix <- apply(forecast_matrix, 2, function(x) abs(x-test))
-#   
-#   props_identified <- c(props_identified, mean(apply(diff_matrix, 2, which.min) == (1:length(test))))
-#   
-#   num_series <- c(num_series, length(test))
-#   
-# }
-# 
-# sum(props_identified * (num_series/total_num))
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
+# check if sub directory exists 
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
+  write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)
+} else {
+  # create a new sub directory for storing time series features
+  dir.create(file.path(paste0("../../Outputs/Results/", data_folder, "Tables/")), recursive=TRUE)
+  write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
+  write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3_rate/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)
+}

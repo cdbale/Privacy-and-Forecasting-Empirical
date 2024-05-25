@@ -400,11 +400,9 @@ def VAR_forecast(ts_data, h, save_params, simulate_series, truncate=False, log=F
         
         simulated = post_process(full_ts_data=ts_data,
                                  forecasts=simulated,
-                                 h=h,
                                  truncate=truncate,
                                  log=log,
                                  mean_normalize=mean_normalize,
-                                 sp=sp,
                                  var_sim=True)
     
         sim_path = "../../Outputs/VAR Simulated/" + data_folder

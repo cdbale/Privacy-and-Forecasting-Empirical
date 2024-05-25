@@ -27,13 +27,8 @@ source('custom_feature_functions.R')
 # Function to return spectral entropy, and ACF at lags 1 and 2
 # given a numeric vector input
 my_features <- function(y) {
-  # calculate the:
-  # - first coefficient of ACF
-  # - slope of time series
-  # 
   c(entropy = entropy(y),
     acf = acf(y, plot = FALSE)$acf[2:3, 1, 1])
-    # slope = unname(lm(y~ seq(1, length(y)))[['coefficients']][2]))
 }
 
 # function to perform additive noise protection
@@ -389,6 +384,179 @@ outlier_removal <- function(ts){
   return(temp_ts)
 }
 
+################################################################################
+################################################################################
+
+# write a function that accepts a set of time series and returns VAR
+# forecasts for those series
+
+var_forecast <- function(time_series, horizon, take_log=TRUE, return_model=FALSE, model_to_use=NULL){
+  if (take_log){
+    starting_values <- sapply(time_series, function(x) log(x[2]))
+    diffed_series <- lapply(time_series, function(x) diff(log(x)))
+  } else {
+    starting_values <- sapply(time_series, function(x) x[2])
+    diffed_series <- lapply(time_series, function(x) diff(x))
+  }
+  
+  var_data <- do.call(cbind, diffed_series)
+  # if a pre-trained model is provided
+  if (!is.null(model_to_use)){
+    fcasts <- predict(model_to_use, n.ahead=horizon)
+    time_series_df <- do.call(cbind, time_series)
+    fcasts <- apply(rbind(log(time_series_df[nrow(time_series_df),]), fcasts), 2, cumsum)[2,]
+    return(fcasts)
+  }
+  # otherwise train the model
+  var_mod <- lineVar(data=var_data,
+                     lag=1,
+                     include="const",
+                     model="VAR",
+                     I="level"
+  )
+  # return a model if that is the desired object
+  if (return_model){
+    return(var_mod)
+  }
+  # otherwise return forecasts
+  fcasts <- predict(var_mod, n.ahead=horizon)
+  time_series_df <- do.call(cbind, time_series)
+  if (take_log){
+    fcasts <- apply(rbind(log(time_series_df[nrow(time_series_df),]), fcasts), 2, cumsum)[2,]
+  } else {
+    fcasts <- apply(rbind(time_series_df[nrow(time_series_df),], fcasts), 2, cumsum)[2,]
+  }
+  return(fcasts)
+}
+
+# write a function that simulates a set of time series 
+var_simulation <- function(time_series, take_log=TRUE){
+  if (take_log){
+    starting_values <- matrix(sapply(time_series, function(x) log(x[2])), nrow=1)
+    diff_series <- lapply(time_series, function(x) diff(log(x)))
+  } else {
+    starting_values <- matrix(sapply(time_series, function(x) x[2]), nrow=1)
+    diff_series <- lapply(time_series, function(x) diff(x))
+  }
+  var_data <- do.call(cbind, diff_series)
+  var_mod <- lineVar(data=var_data,
+                     lag=1,
+                     include="const",
+                     model="VAR",
+                     I="level"
+  )
+  coefs <- var_mod$coefficients
+  # we used one lag, so simulate one value using the true initial data
+  # point
+  
+  # make three dimensional array to average the simulated values
+  nsim <- 5000
+  sim1 <- array(data=NA, dim=c(3, ncol(var_data), nsim))
+  
+  for (i in 1:nsim){
+    sim1[,,i] <- VAR.sim(B=coefs,
+                         n=2,
+                         lag=1,
+                         include="const",
+                         starting=matrix(var_data[1,], nrow=1),
+                         varcov=cov(var_mod$residuals),
+                         returnStarting=TRUE)
+  }
+  
+  # average simulated values across simulations
+  # take the first simulated value (second one returned) to use
+  # in next step of simulation
+  sim2_start <- apply(sim1, c(1,2), mean)[2:3,]
+  
+  sim2 <- array(data=NA, dim=c(nrow(var_data)-2, ncol(var_data), nsim))
+  
+  for (i in 1:nsim){
+    sim2[,,i] <- VAR.sim(B=coefs,
+                         n=nrow(var_data)-3,
+                         lag=1,
+                         include="const",
+                         starting=matrix(sim2_start[2,], nrow=1),
+                         varcov=cov(var_mod$residuals),
+                         returnStarting=TRUE)
+  }
+  
+  sim2 <- apply(sim2, c(1,2), mean)
+  
+  # first simulated value owned by forecaster
+  starting_values <- apply(rbind(starting_values, sim2_start[1,]), 2, cumsum)[2,]
+  
+  simmed_series <- apply(rbind(starting_values, sim2), 2, cumsum)
+  
+  simmed_series <- lapply(1:ncol(simmed_series), function(x) unname(simmed_series[,x]))
+  
+  return(simmed_series)
+  
+}
+
+# write a function that accepts a set of time series, splits those series into
+# groups of 5 and returns VAR forecasts for those series
+
+split_and_var_forecast <- function(time_series, horizon, take_log=TRUE, return_model=FALSE){
+  n <- length(time_series)
+  k <- 5
+  split_series <- split(time_series, rep(1:ceiling(n/k), each=k)[1:n])
+  if (return_model){
+    return(lapply(split_series, function(x) var_forecast(x, take_log=take_log, horizon=horizon, return_model=return_model)))
+  } else {
+    return(unname(unlist(lapply(split_series, function(x) var_forecast(x, take_log=take_log, horizon=horizon, return_model=return_model)))))
+  }
+}
+
+split_and_var_simulate <- function(time_series, take_log=TRUE){
+  n <- length(time_series)
+  k <- 5
+  split_series <- split(time_series, rep(1:ceiling(n/k), each=k)[1:n])
+  simulated <- lapply(split_series, function(x) var_simulation(x, take_log=take_log))
+  return(unlist(simulated, recursive=FALSE))
+}
+
+forecast_for_simulated <- function(simulated_series, var_model, horizon, take_log=TRUE){
+  if (take_log){
+    diffed_series <- lapply(simulated_series, function(x) diff(log(x)))
+  } else {
+    diffed_series <- lapply(simulated_series, function(x) diff(x))
+  }
+  var_data <- do.call(cbind, diffed_series)
+  fcasts <- predict(var_model, newdata=matrix(var_data[nrow(var_data),], nrow=1), n.ahead=horizon)
+  time_series_df <- do.call(cbind, simulated_series)
+  if (take_log){
+    fcasts <- exp(apply(rbind(log(time_series_df[nrow(time_series_df),]), fcasts), 2, cumsum)[2,])
+  } else {
+    fcasts <- apply(rbind(time_series_df[nrow(time_series_df),], fcasts), 2, cumsum)[2,]
+  }
+  return(fcasts)
+}
+
+split_and_forecast_for_simulated <- function(simulated_series, var_models, horizon, take_log=TRUE){
+  n <- length(simulated_series)
+  k <- 5
+  split_series <- split(simulated_series, rep(1:ceiling(n/k), each=k)[1:n])
+  fcasts <- lapply(1:length(split_series), function(x) forecast_for_simulated(simulated_series=split_series[[x]],
+                                                                              var_model=var_models[[x]],
+                                                                              horizon=1,
+                                                                              take_log=take_log))
+  return(unname(unlist(fcasts, recursive=FALSE)))
+}
+
+# evaluate privacy of forecasts
+
+forecast_privacy <- function(true_data, forecasts){
+  forecast_matrix <- matrix(rep(forecasts, length(forecasts)), ncol=length(forecasts), byrow=TRUE)
+  
+  diff_matrix <- apply(forecast_matrix, 2, function(x) pmf(1/(abs(x-true_data)+.Machine$double.eps)))
+  
+  props_identified <- mean(apply(diff_matrix, 2, which.max) == (1:length(true_data)))
+  
+  return(props_identified)
+}
+
+################################################################################
+
 # vector of feature names to calculate in k-nTS+
 fv <- c("entropy_c", "lumpiness", "stability",
         "max_level_shift_c", "max_var_shift_c", "max_kl_shift_c",
@@ -474,20 +642,29 @@ full_simulated_series <- b_simulated_series %>%
   bind_rows(g_simulated_series) %>%
   mutate(Set = rep(c("Low Autocorrelation/High Spectral Entropy", "High Autocorrelation/Low Spectral Entropy"), each=nrow(b_simulated_series)))
 
-full_simulated_series %>%
+full_plot<- full_simulated_series %>%
   ggplot(aes(x = index, y = value, color = as.factor(Series))) +
   geom_line() +
   facet_wrap(~Set) +
   theme(legend.position='none') +
   labs(x = 'Time',
        y = 'Value') +
-  ylim(0, 13000) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        text = element_text(size=19),
-        plot.title = element_text(face= "bold", colour= "black"),
-        axis.title.x = element_text(face="bold", colour = "black"),    
-        axis.title.y = element_text(face="bold", colour = "black"))
-  
+  ylim(0, 13000)
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+  #       text = element_text(size=19),
+  #       plot.title = element_text(face= "bold", colour= "black"),
+  #       axis.title.x = element_text(face="bold", colour = "black"),    
+  #       axis.title.y = element_text(face="bold", colour = "black"))
+
+print(full_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/Simulation/"))){
+  ggsave(filename="10_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
+} else {
+  dir.create(paste0("../../Outputs/Figures/Simulation/"), recursive=TRUE)
+  ggsave(filename="10_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
+}
+
 ######## Forecast using SES, DES, TES
 
 # split into a list of series, convert to ts objects, create train and test data
@@ -693,6 +870,8 @@ knts_fcasts_ses_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 knts_fcasts_ses_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 knts_fcasts_des_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 knts_fcasts_des_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
+knts_fcasts_var_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
+knts_fcasts_var_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 
 knts_idr_b <- matrix(NA, nrow=nsims, ncol=length(kvals)+1)
 knts_idr_g <- matrix(NA, nrow=nsims, ncol=length(kvals)+1)
@@ -706,9 +885,11 @@ for (j in 1:nsims){
     if (i == 1){
       knts_fcasts_ses_b[,i,j] <- unname(sapply(lapply(b_simulated_series_train, log), function(x) as.vector(ses(x, h=1)$mean)))
       knts_fcasts_des_b[,i,j] <- unname(sapply(lapply(b_simulated_series_train, log), function(x) as.vector(holt(x, h=1)$mean)))
+      knts_fcasts_var_b[,i,j] <- split_and_var_forecast(b_simulated_series_train, 1)
       
       knts_fcasts_ses_g[,i,j] <- unname(sapply(lapply(g_simulated_series_train, log), function(x) as.vector(ses(x, h=1)$mean)))
       knts_fcasts_des_g[,i,j] <- unname(sapply(lapply(g_simulated_series_train, log), function(x) as.vector(holt(x, h=1)$mean)))
+      knts_fcasts_var_g[,i,j] <- split_and_var_forecast(g_simulated_series_train, 1)
       
       knts_idr_b[j,i] <-  simulation_results(confidential_data_list=b_simulated_series_train, protected_data_list=b_simulated_series_train, sample_size=sample_size, num_simulations=npsims)
       knts_idr_g[j,i] <-  simulation_results(confidential_data_list=g_simulated_series_train, protected_data_list=g_simulated_series_train, sample_size=sample_size, num_simulations=npsims)
@@ -719,11 +900,13 @@ for (j in 1:nsims){
       knts_b_simulated <- lapply(knts_b_simulated, function(x) ts(x, frequency=sp))
       knts_fcasts_ses_b[,i,j] <- unname(sapply(knts_b_simulated, function(x) as.vector(ses(x, h=1)$mean)))
       knts_fcasts_des_b[,i,j] <- unname(sapply(knts_b_simulated, function(x) as.vector(holt(x, h=1)$mean)))
+      knts_fcasts_var_b[,i,j] <- split_and_var_forecast(lapply(knts_b_simulated, exp), 1)
       
       knts_g_simulated <- as.list(as.data.frame(knts_alg(time_series=lapply(g_simulated_series_train, log), sp=1, window_length=25, k=kvals[i-1], features_to_calculate=fv, selected_features=fs_g$selected_features, importance_weights=fs_g$importance_weights)))
       knts_g_simulated <- lapply(knts_g_simulated, function(x) ts(x, frequency=sp))
       knts_fcasts_ses_g[,i,j] <- unname(sapply(knts_g_simulated, function(x) as.vector(ses(x, h=1)$mean)))
       knts_fcasts_des_g[,i,j] <- unname(sapply(knts_g_simulated, function(x) as.vector(holt(x, h=1)$mean)))
+      knts_fcasts_var_g[,i,j] <- split_and_var_forecast(lapply(knts_g_simulated, exp), 1)
       
       knts_idr_b[j,i] <-  simulation_results(confidential_data_list=b_simulated_series_train, protected_data_list=lapply(knts_b_simulated, exp), sample_size=sample_size, num_simulations=npsims)
       knts_idr_g[j,i] <-  simulation_results(confidential_data_list=g_simulated_series_train, protected_data_list=lapply(knts_g_simulated, exp), sample_size=sample_size, num_simulations=npsims)
@@ -767,6 +950,9 @@ knts_mae_ses_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol
 knts_mae_des_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(knts_fcasts_des_b[,,n]), function(x) mean(abs(knts_fcasts_des_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
 knts_mae_des_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(knts_fcasts_des_g[,,n]), function(x) mean(abs(knts_fcasts_des_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
 
+knts_mae_var_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(knts_fcasts_var_b[,,n]), function(x) mean(abs(knts_fcasts_var_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
+knts_mae_var_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(knts_fcasts_var_g[,,n]), function(x) mean(abs(knts_fcasts_var_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+
 # calculate P-bar
 dp_pbar_b <- apply(dp_idr_b, 2, mean)
 dp_pbar_g <- apply(dp_idr_g, 2, mean)
@@ -777,7 +963,7 @@ an_pbar_g <- apply(an_idr_g, 2, mean)
 knts_pbar_b <- apply(knts_idr_b, 2, mean)
 knts_pbar_g <- apply(knts_idr_g, 2, mean)
 
-# plot MAE curves
+# store results
 results <- tibble(
   MAE = c(unlist(dp_mae_ses_b),
           unlist(dp_mae_ses_g),
@@ -804,15 +990,19 @@ knts_results <- tibble(
   MAE = c(unlist(knts_mae_ses_b),
           unlist(knts_mae_ses_g),
           unlist(knts_mae_des_b),
-          unlist(knts_mae_des_g)),
+          unlist(knts_mae_des_g),
+          unlist(knts_mae_var_b),
+          unlist(knts_mae_var_g)),
   Pbar = c(knts_pbar_b,
            knts_pbar_g,
            knts_pbar_b,
+           knts_pbar_g,
+           knts_pbar_b,
            knts_pbar_g),
-  Model = rep(c("SES", "DES"), each=length(knts_mae_ses_b)*2),
+  Model = rep(c("SES", "DES", "VAR"), each=length(knts_mae_ses_b)*2),
   Method = "k-nTS+",
-  Parameter = rep(c(1, kvals), 4),
-  Set = rep(rep(c("Undesirable", "Desirable"), each=length(knts_mae_ses_b)), 2)
+  Parameter = rep(c(1, kvals), 6),
+  Set = rep(rep(c("Undesirable", "Desirable"), each=length(knts_mae_ses_b)), 3)
 )
 
 results <- results %>%
@@ -821,25 +1011,6 @@ results <- results %>%
 knts_results <- knts_results %>%
   gather(key="Type", value="Value", -Set, -Method, -Parameter, -Model)
 
-# results %>%
-#   filter(Method == "AN", Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   facet_wrap(~Set)
-# 
-# results %>%
-#   filter(Method == "DP", Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   scale_x_reverse() +
-#   facet_wrap(~Set)
-# 
-# knts_results %>%
-#   filter(Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   facet_wrap(~Set)
-
 avg_results <- results %>%
   group_by(Set, Method, Parameter, Type) %>%
   summarize(Average_Value = mean(Value), .groups='drop')
@@ -847,24 +1018,6 @@ avg_results <- results %>%
 avg_knts_results <- knts_results %>%
   group_by(Set, Method, Parameter, Type) %>%
   summarize(Average_Value = mean(Value), .groups='drop')
-
-# avg_results %>%
-#   filter(Method == "AN") %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   facet_wrap(~Type, scales='free')
-# 
-# avg_results %>%
-#   filter(Method == "DP") %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   scale_x_reverse() +
-#   facet_wrap(~Type, scales='free')
-# 
-# avg_knts_results %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   facet_wrap(~Type, scales='free')
 
 # what is the forecast accuracy under the privacy parameter that 
 # achieves acceptable privacy?
@@ -905,18 +1058,8 @@ if (any(knts_pbar_b <= 0.09)){
   best_knts_param_b <- c(1, kvals)[length(c(1, kvals))]
 }
 
-# # for each privacy method applied to the original data, if the only case
-# # where forecast error was preserved within 15% is the original data,
-# # we take the privacy parameter that had the next best accuracy
-# best_an_param_g <- ifelse(best_an_param_g == 0, svals[2:length(svals)][which.min(an_avg_mae_g[2:length(an_avg_mae_g)])], best_an_param_g)
-# best_dp_param_g <- ifelse(best_dp_param_g == 20.5, epsvals[which.min(dp_avg_mae_g[2:length(dp_avg_mae_g)])], best_dp_param_g)
-# best_knts_param_g <- ifelse(best_knts_param_g == 1, kvals[which.min(knts_avg_mae_g[2:length(knts_avg_mae_g)])], best_knts_param_g)
-# best_an_param_b <- ifelse(best_an_param_b == 0, svals[2:length(svals)][which.min(an_avg_mae_b[2:length(an_avg_mae_b)])], best_an_param_b)
-# best_dp_param_b <- ifelse(best_dp_param_b == 20.5, epsvals[which.min(dp_avg_mae_b[2:length(dp_avg_mae_b)])], best_dp_param_b)
-# best_knts_param_b <- ifelse(best_knts_param_b == 1, kvals[which.min(knts_avg_mae_b[2:length(knts_avg_mae_b)])], best_knts_param_b)
-
-# strongest privacy parameters that still maintain forecast error within 15%
-# OR the privacy parameter with the best accuracy
+# privacy parameters that offer the best accuracy with 9% identification
+# risk or less
 best_an_param_g
 best_an_param_b
 
@@ -964,6 +1107,84 @@ knts_pct_mae_b[c(1, kvals) == best_knts_param_b]
 ################################################################################
 ################################################################################
 ################################################################################
+
+# VAR simulated series
+
+# generate simulated time series for the good and bad series
+b_var_simulated <- unname(split_and_var_simulate(b_simulated_series_train))
+g_var_simulated <- unname(split_and_var_simulate(g_simulated_series_train))
+
+# how many periods to trim from beginning of confidential series
+length(b_simulated_series_train[[1]]) - length(b_var_simulated[[1]])
+
+# evaluate privacy for the simulated series.
+var_idr_b <-  simulation_results(confidential_data_list=lapply(b_simulated_series_train, function(x) x[3:length(x)]), protected_data_list=b_var_simulated, sample_size=sample_size, num_simulations=npsims)
+var_idr_g <-  simulation_results(confidential_data_list=lapply(g_simulated_series_train, function(x) x[3:length(x)]), protected_data_list=g_var_simulated, sample_size=sample_size, num_simulations=npsims)
+
+# forecasts for simulated series
+
+# require fitting a model to the unprotected data then estimating forecasts
+# based on the simulated time series
+b_var_models <- split_and_var_forecast(b_simulated_series_train, horizon=1, return_model=TRUE)
+g_var_models <- split_and_var_forecast(g_simulated_series_train, horizon=1, return_model=TRUE)
+
+b_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=b_var_simulated, var_models=b_var_models, horizon=1)
+g_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=g_var_simulated, var_models=g_var_models, horizon=1)
+
+b_sim_mae <- mean(abs(b_sim_fcasts - b_simulated_series_test))
+g_sim_mae <- mean(abs(g_sim_fcasts - g_simulated_series_test))
+
+# calculate the percentage change in forecast accuracy for the VAR model on
+# the simulated and k-nTS+ series
+
+# percent change under var sim
+(b_sim_mae - knts_mae_var_b[1])/knts_mae_var_b[1]
+(g_sim_mae - knts_mae_var_g[1])/knts_mae_var_g[1]
+
+# percent change under k-nTS+ for VAR
+(knts_mae_var_b[best_knts_param_b]-knts_mae_var_b[1])/knts_mae_var_b[1] * 100
+
+(knts_mae_var_g[best_knts_param_g]-knts_mae_var_g[1])/knts_mae_var_g[1] * 100
+
+# evaluate privacy of forecasts
+b_var_fcast_privacy <- forecast_privacy(b_simulated_series_test, b_sim_fcasts)
+
+g_var_fcast_privacy <- forecast_privacy(g_simulated_series_test, g_sim_fcasts)
+
+## evaluate forecast privacy from k-nTS+ method for the chosen parameter
+
+# proportion identified from k-nTS+ forecasts
+mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_var_b[,best_knts_param_b,x]), function(y) forecast_privacy(b_simulated_series_test, y))))
+
+mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_var_g[,best_knts_param_g,x]), function(y) forecast_privacy(g_simulated_series_test, y))))
+
+## evaluate average privacy of SES and DES forecasts
+## for best k-nTS+, AN, and DES parameters
+
+# additive noise undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) an_fcasts_ses_b[,which(svals == best_an_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) an_fcasts_des_b[,which(svals == best_an_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y))))))
+
+# additive noise desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) an_fcasts_ses_g[,which(svals == best_an_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) an_fcasts_des_g[,which(svals == best_an_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y))))))
+
+# differential privacy undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) dp_fcasts_ses_b[,which(c(20.5, epsvals) == best_dp_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) dp_fcasts_des_b[,which(c(20.5, epsvals) == best_dp_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y))))))
+
+# differential privacy desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) dp_fcasts_ses_g[,which(c(20.5, epsvals) == best_dp_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) dp_fcasts_des_g[,which(c(20.5, epsvals) == best_dp_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y))))))
+
+# k-nTS+ undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_ses_b[,which(c(1, kvals) == best_knts_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_des_b[,which(c(1, kvals) == best_knts_param_b),x]), function(y) forecast_privacy(b_simulated_series_test, y))))))
+
+# k-nTS+ desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_ses_g[,which(c(1, kvals) == best_knts_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_des_g[,which(c(1, kvals) == best_knts_param_g),x]), function(y) forecast_privacy(g_simulated_series_test, y))))))
+
 ################################################################################
 ################################################################################
 ################################################################################
@@ -981,7 +1202,7 @@ knts_pct_mae_b[c(1, kvals) == best_knts_param_b]
 ################################################################################
 ################################################################################
 
-# now scale the time series to rates (cite Census paper) and compare the 
+# now scale the time series to rates and compare the 
 # results in terms of forecast accuracy and privacy
 
 # using (end - beginning)/mean(end, beginning) to convert to a rate
@@ -1002,17 +1223,22 @@ rate_conversion <- function(time_series){
   return(rate_series)
 }
 
-b_simulated_rates <- lapply(lapply(b_simulated_series, log), rate_conversion)
-g_simulated_rates <- lapply(lapply(g_simulated_series, log), rate_conversion)
+b_simulated_rates <- bind_cols(lapply(lapply(b_simulated_series, log), rate_conversion))
+g_simulated_rates <- bind_cols(lapply(lapply(g_simulated_series, log), rate_conversion))
+
+colnames(b_simulated_rates) <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+colnames(g_simulated_rates) <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
 # combine rate series into a dataframe for plotting
-b_simulated_rates_df <- bind_cols(b_simulated_rates) %>%
+b_simulated_rates_df <- b_simulated_rates %>%
   mutate(Time = 1:n()) %>%
-  gather(key='Series', value="Value", -Time)
+  gather(key='Series', value="Value", -Time) %>%
+  mutate(Series = as.numeric(Series))
 
-g_simulated_rates_df <- bind_cols(g_simulated_rates) %>%
+g_simulated_rates_df <- g_simulated_rates %>%
   mutate(Time = 1:n()) %>%
-  gather(key='Series', value="Value", -Time)
+  gather(key='Series', value="Value", -Time) %>%
+  mutate(Series = as.numeric(Series))
 
 full_simulated_rates_df <- b_simulated_rates_df %>%
   bind_rows(g_simulated_rates_df) %>%
@@ -1194,6 +1420,8 @@ r_knts_fcasts_ses_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 r_knts_fcasts_ses_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 r_knts_fcasts_des_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 r_knts_fcasts_des_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
+r_knts_fcasts_var_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
+r_knts_fcasts_var_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
 
 r_knts_idr_b <- matrix(NA, nrow=nsims, ncol=length(kvals)+1)
 r_knts_idr_g <- matrix(NA, nrow=nsims, ncol=length(kvals)+1)
@@ -1207,9 +1435,11 @@ for (j in 1:nsims){
     if (i == 1){
       r_knts_fcasts_ses_b[,i,j] <- unname(sapply(b_simulated_rates_train, function(x) as.vector(ses(x, h=1)$mean)))
       r_knts_fcasts_des_b[,i,j] <- unname(sapply(b_simulated_rates_train, function(x) as.vector(holt(x, h=1)$mean)))
+      r_knts_fcasts_var_b[,i,j] <- split_and_var_forecast(b_simulated_rates_train, horizon=1, take_log=FALSE)
       
       r_knts_fcasts_ses_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(ses(x, h=1)$mean)))
-      r_knts_fcasts_des_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(holt(x, h=1)$mean)))
+      r_knts_fcasts_des_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(holt(x, h=1)$mean)))\
+      r_knts_fcasts_var_g[,i,j] <- split_and_var_forecast(g_simulated_rates_train, horizon=1, take_log=FALSE)
       
       r_knts_idr_b[j,i] <-  simulation_results(confidential_data_list=b_simulated_rates_train, protected_data_list=b_simulated_rates_train, sample_size=sample_size, num_simulations=npsims)
       r_knts_idr_g[j,i] <-  simulation_results(confidential_data_list=g_simulated_rates_train, protected_data_list=g_simulated_rates_train, sample_size=sample_size, num_simulations=npsims)
@@ -1220,11 +1450,13 @@ for (j in 1:nsims){
       r_knts_b_simulated <- lapply(r_knts_b_simulated, function(x) ts(x, frequency=sp))
       r_knts_fcasts_ses_b[,i,j] <- unname(sapply(r_knts_b_simulated, function(x) as.vector(ses(x, h=1)$mean)))
       r_knts_fcasts_des_b[,i,j] <- unname(sapply(r_knts_b_simulated, function(x) as.vector(holt(x, h=1)$mean)))
+      r_knts_fcasts_var_b[,i,j] <- split_and_var_forecast(r_knts_b_simulated, horizon=1, take_log=FALSE)
       
       r_knts_g_simulated <- as.list(as.data.frame(knts_alg(time_series=g_simulated_rates_train, sp=1, window_length=25, k=kvals[i-1], features_to_calculate=fv, selected_features=r_fs_g$selected_features, importance_weights=r_fs_g$importance_weights)))
       r_knts_g_simulated <- lapply(r_knts_g_simulated, function(x) ts(x, frequency=sp))
       r_knts_fcasts_ses_g[,i,j] <- unname(sapply(r_knts_g_simulated, function(x) as.vector(ses(x, h=1)$mean)))
       r_knts_fcasts_des_g[,i,j] <- unname(sapply(r_knts_g_simulated, function(x) as.vector(holt(x, h=1)$mean)))
+      r_knts_fcasts_var_g[,i,j] <- split_and_var_forecast(r_knts_g_simulated, horizon=1, take_log=FALSE)
       
       r_knts_idr_b[j,i] <-  simulation_results(confidential_data_list=b_simulated_rates_train, protected_data_list=r_knts_b_simulated, sample_size=sample_size, num_simulations=npsims)
       r_knts_idr_g[j,i] <-  simulation_results(confidential_data_list=g_simulated_rates_train, protected_data_list=r_knts_g_simulated, sample_size=sample_size, num_simulations=npsims)
@@ -1252,6 +1484,9 @@ r_knts_mae_ses_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:nc
 r_knts_mae_des_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(r_knts_fcasts_des_b[,,n]), function(x) mean(abs(r_knts_fcasts_des_b[,,n][,x] - b_simulated_rates_test))))), 2, mean)
 r_knts_mae_des_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(r_knts_fcasts_des_g[,,n]), function(x) mean(abs(r_knts_fcasts_des_g[,,n][,x] - g_simulated_rates_test))))), 2, mean)
 
+r_knts_mae_var_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(r_knts_fcasts_var_b[,,n]), function(x) mean(abs(r_knts_fcasts_var_b[,,n][,x] - b_simulated_rates_test))))), 2, mean)
+r_knts_mae_var_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(r_knts_fcasts_var_g[,,n]), function(x) mean(abs(r_knts_fcasts_var_g[,,n][,x] - g_simulated_rates_test))))), 2, mean)
+
 # calculate P-bar
 r_dp_pbar_b <- apply(r_dp_idr_b, 2, mean)
 r_dp_pbar_g <- apply(r_dp_idr_g, 2, mean)
@@ -1262,7 +1497,7 @@ r_an_pbar_g <- apply(r_an_idr_g, 2, mean)
 r_knts_pbar_b <- apply(r_knts_idr_b, 2, mean)
 r_knts_pbar_g <- apply(r_knts_idr_g, 2, mean)
 
-# plot MAE curves
+# store results
 r_results <- tibble(
   MAE = c(unlist(r_dp_mae_ses_b),
           unlist(r_dp_mae_ses_g),
@@ -1289,40 +1524,25 @@ r_knts_results <- tibble(
   MAE = c(unlist(r_knts_mae_ses_b),
           unlist(r_knts_mae_ses_g),
           unlist(r_knts_mae_des_b),
-          unlist(r_knts_mae_des_g)),
+          unlist(r_knts_mae_des_g),
+          unlist(r_knts_mae_var_b),
+          unlist(r_knts_mae_var_g)),
   Pbar = c(r_knts_pbar_b,
            r_knts_pbar_g,
            r_knts_pbar_b,
+           r_knts_pbar_g,
+           r_knts_pbar_b,
            r_knts_pbar_g),
-  Model = rep(c("SES", "DES"), each=length(r_knts_mae_ses_b)*2),
+  Model = rep(c("SES", "DES", "VAR"), each=length(r_knts_mae_ses_b)*2),
   Method = "k-nTS+",
-  Parameter = rep(c(1, kvals), 4),
-  Set = rep(rep(c("Undesirable", "Desirable"), each=length(r_knts_mae_ses_b)), 2))
+  Parameter = rep(c(1, kvals), 6),
+  Set = rep(rep(c("Undesirable", "Desirable"), each=length(r_knts_mae_ses_b)), 3))
 
 r_results <- r_results %>%
   gather(key="Type", value="Value", -Set, -Method, -Parameter, -Model)
 
 r_knts_results <- r_knts_results %>%
   gather(key="Type", value="Value", -Set, -Method, -Parameter, -Model)
-
-# r_results %>%
-#   filter(Method == "AN", Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   facet_wrap(~Set)
-# 
-# r_results %>%
-#   filter(Method == "DP", Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   scale_x_reverse() +
-#   facet_wrap(~Set)
-# 
-# r_knts_results %>%
-#   filter(Type=="MAE") %>%
-#   ggplot(aes(x=Parameter, y=Value, color=Model)) +
-#   geom_line() +
-#   facet_wrap(~Set)
 
 r_avg_results <- r_results %>%
   group_by(Set, Method, Parameter, Type) %>%
@@ -1332,26 +1552,8 @@ r_knts_avg_results <- r_knts_results %>%
   group_by(Set, Method, Parameter, Type) %>%
   summarize(Average_Value = mean(Value), .groups='drop')
 
-# r_avg_results %>%
-#   filter(Method == "AN") %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   facet_wrap(~Type, scales='free')
-# 
-# r_avg_results %>%
-#   filter(Method == "DP") %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   scale_x_reverse() +
-#   facet_wrap(~Type, scales='free')
-# 
-# r_knts_avg_results %>%
-#   ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-#   geom_line() +
-#   facet_wrap(~Type, scales='free')
-
-# what is the best privacy parameter we can have that still preserves
-# forecast accuracy within 15%?
+# what is the best privacy parameter that still maintains less than
+# or equal to 9% identification disclosure risk
 
 if (any(r_an_pbar_g <= 0.09)){
   r_best_an_param_g <- sort(svals[r_an_pbar_g <= 0.09], decreasing=FALSE)[1]
@@ -1388,19 +1590,6 @@ if (any(r_knts_pbar_b <= 0.09)){
 } else {
   r_best_knts_param_b <- c(1, kvals)[length(c(1, kvals))]
 }
-
-# # for each privacy method applied to the original data, if the only case
-# # where forecast error was preserved within 15% is the original data,
-# # we take the privacy parameter that had the next best accuracy
-# best_an_param_g <- ifelse(best_an_param_g == 0, svals[2:length(svals)][which.min(an_avg_mae_g[2:length(an_avg_mae_g)])], best_an_param_g)
-# best_dp_param_g <- ifelse(best_dp_param_g == 20.5, epsvals[which.min(dp_avg_mae_g[2:length(dp_avg_mae_g)])], best_dp_param_g)
-# best_knts_param_g <- ifelse(best_knts_param_g == 1, kvals[which.min(knts_avg_mae_g[2:length(knts_avg_mae_g)])], best_knts_param_g)
-# best_an_param_b <- ifelse(best_an_param_b == 0, svals[2:length(svals)][which.min(an_avg_mae_b[2:length(an_avg_mae_b)])], best_an_param_b)
-# best_dp_param_b <- ifelse(best_dp_param_b == 20.5, epsvals[which.min(dp_avg_mae_b[2:length(dp_avg_mae_b)])], best_dp_param_b)
-# best_knts_param_b <- ifelse(best_knts_param_b == 1, kvals[which.min(knts_avg_mae_b[2:length(knts_avg_mae_b)])], best_knts_param_b)
-
-# strongest privacy parameters that still maintain forecast error within 15%
-# OR the privacy parameter with the best accuracy
 
 ### double check the p-bars manually. additive noise (differential privacy)
 # p-bars may converge to random guessing, in which case you can pick the
@@ -1454,129 +1643,91 @@ r_knts_avg_mae_b <- rowMeans(cbind(r_knts_mae_ses_b, r_knts_mae_des_b))
 r_knts_pct_mae_b <- (r_knts_avg_mae_b - r_knts_avg_mae_b[1])/r_knts_avg_mae_b[1] * 100
 r_knts_pct_mae_b[c(1, kvals) == r_best_knts_param_b]
 
-# Assess whether a data owner could backtransform the forecasts and have
-# comparable accuracy
+################################################################################
+################################################################################
+################################################################################
 
-rate_backtransform <- function(train_time_series, rate_forecast){
-  return(train_time_series[length(train_time_series)] * (1 + 0.5 * rate_forecast) / (1 - 0.5 * rate_forecast))
-}
+# VAR simulated series
 
-back_r_an_fcasts_ses_b <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_an_fcasts_ses_g <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_an_fcasts_des_b <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_an_fcasts_des_g <- array(NA, dim=c(num_series, length(svals), nsims))
+# generate simulated time series for the good and bad series
+r_b_var_simulated <- unname(split_and_var_simulate(b_simulated_rates_train, take_log=FALSE))
+r_g_var_simulated <- unname(split_and_var_simulate(g_simulated_rates_train, take_log=FALSE))
 
-# lists for storing differential privacy forecasts
-back_r_dp_fcasts_ses_b <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_dp_fcasts_ses_g <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_dp_fcasts_des_b <- array(NA, dim=c(num_series, length(svals), nsims))
-back_r_dp_fcasts_des_g <- array(NA, dim=c(num_series, length(svals), nsims))
+# how many periods to trim from beginning of confidential series
+length(b_simulated_rates_train[[1]]) - length(r_b_var_simulated[[1]])
 
-# back transform the rate forecasts and evaluate accuracy
-for (i in 1:num_series){
-  for (j in 1:length(svals)){
-    for (l in 1:nsims){
-      back_r_an_fcasts_ses_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_an_fcasts_ses_b[i,j,l]))
-      back_r_an_fcasts_ses_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_an_fcasts_ses_g[i,j,l]))
-      back_r_an_fcasts_des_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_an_fcasts_des_b[i,j,l]))
-      back_r_an_fcasts_des_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_an_fcasts_des_g[i,j,l]))
-      
-      back_r_dp_fcasts_ses_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_dp_fcasts_ses_b[i,j,l]))
-      back_r_dp_fcasts_ses_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_dp_fcasts_ses_g[i,j,l]))
-      back_r_dp_fcasts_des_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_dp_fcasts_des_b[i,j,l]))
-      back_r_dp_fcasts_des_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_dp_fcasts_des_g[i,j,l]))
-    }
-  }
-}
+# evaluate privacy for the simulated series.
+r_var_idr_b <-  simulation_results(confidential_data_list=lapply(b_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_b_var_simulated, sample_size=sample_size, num_simulations=npsims)
+r_var_idr_g <-  simulation_results(confidential_data_list=lapply(g_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_g_var_simulated, sample_size=sample_size, num_simulations=npsims)
 
-# matrices for reversing knts+ rate forecasts
-back_r_knts_fcasts_ses_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
-back_r_knts_fcasts_ses_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
-back_r_knts_fcasts_des_b <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
-back_r_knts_fcasts_des_g <- array(NA, dim=c(num_series, length(kvals)+1, nsims))
+# calculate the percentage change in forecast accuracy for the VAR model on
+# the simulated and k-nTS+ series
 
-# back transform the rate forecasts and evaluate accuracy
-for (i in 1:num_series){
-  for (j in 1:(length(kvals)+1)){
-    for (l in 1:nsims){
-      back_r_knts_fcasts_ses_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_knts_fcasts_ses_b[i,j,l]))
-      back_r_knts_fcasts_ses_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_knts_fcasts_ses_g[i,j,l]))
-      back_r_knts_fcasts_des_b[i,j,l] <- exp(rate_backtransform(log(b_simulated_series_train[[i]]), r_knts_fcasts_des_b[i,j,l]))
-      back_r_knts_fcasts_des_g[i,j,l] <- exp(rate_backtransform(log(g_simulated_series_train[[i]]), r_knts_fcasts_des_g[i,j,l]))
-    }
-  }
-}
+# percent change under var sim
+(r_b_sim_mae - r_knts_mae_var_b[1])/r_knts_mae_var_b[1]
+(r_g_sim_mae - r_knts_mae_var_g[1])/r_knts_mae_var_g[1]
 
-# calculate MAE
-back_dp_mae_ses_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_dp_fcasts_ses_b[,,n]), function(x) mean(abs(back_r_dp_fcasts_ses_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_dp_mae_ses_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_dp_fcasts_ses_g[,,n]), function(x) mean(abs(back_r_dp_fcasts_ses_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+# percent change under k-nTS+ for VAR
+(r_knts_mae_var_b[r_best_knts_param_b]-r_knts_mae_var_b[1])/r_knts_mae_var_b[1] * 100
 
-back_dp_mae_des_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_dp_fcasts_des_b[,,n]), function(x) mean(abs(back_r_dp_fcasts_des_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_dp_mae_des_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_dp_fcasts_des_g[,,n]), function(x) mean(abs(back_r_dp_fcasts_des_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+(r_knts_mae_var_g[r_best_knts_param_g]-r_knts_mae_var_g[1])/r_knts_mae_var_g[1] * 100
 
-back_an_mae_ses_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_an_fcasts_ses_b[,,n]), function(x) mean(abs(back_r_an_fcasts_ses_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_an_mae_ses_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_an_fcasts_ses_g[,,n]), function(x) mean(abs(back_r_an_fcasts_ses_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+# evaluate privacy of forecasts
 
-back_an_mae_des_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_an_fcasts_des_b[,,n]), function(x) mean(abs(back_r_an_fcasts_des_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_an_mae_des_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_an_fcasts_des_g[,,n]), function(x) mean(abs(back_r_an_fcasts_des_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+r_b_var_fcast_privacy <- forecast_privacy(b_simulated_rates_test, r_b_sim_fcasts)
+r_g_var_fcast_privacy <- forecast_privacy(g_simulated_rates_test, r_g_sim_fcasts)
 
-back_knts_mae_ses_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_knts_fcasts_ses_b[,,n]), function(x) mean(abs(back_r_knts_fcasts_ses_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_knts_mae_ses_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_knts_fcasts_ses_g[,,n]), function(x) mean(abs(back_r_knts_fcasts_ses_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+## evaluate forecast privacy from k-nTS+ method for the chosen parameter
 
-back_knts_mae_des_b <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_knts_fcasts_des_b[,,n]), function(x) mean(abs(back_r_knts_fcasts_des_b[,,n][,x] - b_simulated_series_test))))), 2, mean)
-back_knts_mae_des_g <- apply(do.call(rbind, lapply(1:nsims, function(n) sapply(1:ncol(back_r_knts_fcasts_des_g[,,n]), function(x) mean(abs(back_r_knts_fcasts_des_g[,,n][,x] - g_simulated_series_test))))), 2, mean)
+# proportion identified from k-nTS+ forecasts
+mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_var_b[,r_best_knts_param_b,x]), function(y) forecast_privacy(b_simulated_rates_test, y))))
 
-# plot MAE curves
-back_results <- tibble(
-  MAE = c(unlist(back_dp_mae_ses_b),
-          unlist(back_dp_mae_ses_g),
-          unlist(back_an_mae_ses_b),
-          unlist(back_an_mae_ses_g),
-          unlist(back_dp_mae_des_b),
-          unlist(back_dp_mae_des_g),
-          unlist(back_an_mae_des_b),
-          unlist(back_an_mae_des_g)),
-  Pbar = c(r_dp_pbar_b,
-           r_dp_pbar_g,
-           r_an_pbar_b,
-           r_an_pbar_g,
-           r_dp_pbar_b,
-           r_dp_pbar_g,
-           r_an_pbar_b,
-           r_an_pbar_g),
-  Model = rep(c("SES", "DES"), each=length(dp_mae_ses_b)*4),
-  Method = rep(c("DP", "AN", "DP", "AN"), each=length(dp_mae_ses_b)*2),
-  Parameter = c(c(20.5, epsvals), c(20.5, epsvals), svals, svals, c(20.5, epsvals), c(20.5, epsvals), svals, svals),
-  Set = rep(rep(c("Undesirable", "Desirable"), each=length(dp_mae_ses_b)), 4))
+mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_var_g[,r_best_knts_param_g,x]), function(y) forecast_privacy(g_simulated_rates_test, y))))
 
-back_knts_results <- tibble(
-  MAE = c(unlist(back_knts_mae_ses_b),
-          unlist(back_knts_mae_ses_g),
-          unlist(back_knts_mae_des_b),
-          unlist(back_knts_mae_des_g)),
-  Pbar = c(r_knts_pbar_b,
-           r_knts_pbar_g,
-           r_knts_pbar_b,
-           r_knts_pbar_g),
-  Model = rep(c("SES", "DES"), each=length(knts_mae_ses_b)*2),
-  Method = "k-nTS+",
-  Parameter = rep(c(1, kvals), 4),
-  Set = rep(rep(c("Undesirable", "Desirable"), each=length(knts_mae_ses_b)), 2)
-)
+## evaluate average privacy of SES and DES forecasts
+## for best k-nTS+, AN, and DES parameters
 
-back_results <- back_results %>%
-  gather(key="Type", value="Value", -Set, -Method, -Parameter, -Model)
+# additive noise undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_an_fcasts_ses_b[,which(svals == r_best_an_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_an_fcasts_des_b[,which(svals == r_best_an_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y))))))
 
-back_knts_results <- back_knts_results %>%
-  gather(key="Type", value="Value", -Set, -Method, -Parameter, -Model)
+# additive noise desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_an_fcasts_ses_g[,which(svals == r_best_an_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_an_fcasts_des_g[,which(svals == r_best_an_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y))))))
 
-back_avg_results <- back_results %>%
-  group_by(Set, Method, Parameter, Type) %>%
-  summarize(Average_Value = mean(Value), .groups='drop')
+# differential privacy undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_dp_fcasts_ses_b[,which(c(20.5, epsvals) == r_best_dp_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_dp_fcasts_des_b[,which(c(20.5, epsvals) == r_best_dp_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y))))))
 
-back_avg_knts_results <- back_knts_results %>%
-  group_by(Set, Method, Parameter, Type) %>%
-  summarize(Average_Value = mean(Value), .groups='drop')
+# differential privacy desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_dp_fcasts_ses_g[,which(c(20.5, epsvals) == r_best_dp_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_dp_fcasts_des_g[,which(c(20.5, epsvals) == r_best_dp_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y))))))
+
+# k-nTS+ undesirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_ses_b[,which(c(1, kvals) == r_best_knts_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_des_b[,which(c(1, kvals) == r_best_knts_param_b),x]), function(y) forecast_privacy(b_simulated_rates_test, y))))))
+
+# k-nTS+ desirable series
+mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_ses_g[,which(c(1, kvals) == r_best_knts_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y)))),
+       mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_des_g[,which(c(1, kvals) == r_best_knts_param_g),x]), function(y) forecast_privacy(g_simulated_rates_test, y))))))
+
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
+################################################################################
 
 # an, dp, knts forecast error on original time series space
 scales <- list(
@@ -1584,81 +1735,6 @@ scales <- list(
   scale_x_reverse(),
   scale_x_continuous(breaks = c(1, kvals))
 )
-
-back_avg_mae_plot <- back_avg_results %>%
-  bind_rows(back_avg_knts_results) %>%
-  filter(Type == "MAE") %>%
-  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-  geom_line() +
-  ylim(0, 1300) +
-  facet_wrap(~Method, scales='free_x') +
-  facetted_pos_scales(x = scales) + 
-  labs(x = "Privacy Parameter",
-       y = "Average MAE",
-       title = "Average MAE Across Forecasting Models and Protected Data Sets")
-
-# an, dp, knts identification disclosure on original time series space
-back_avg_pbar_plot <- back_avg_results %>%
-  bind_rows(back_avg_knts_results) %>%
-  filter(Type == "Pbar") %>%
-  ggplot(aes(x=Parameter, y=Average_Value, color=Set)) +
-  geom_line() +
-  facet_wrap(~Method, scales='free_x') +
-  facetted_pos_scales(x = scales) +
-  labs(x = "Privacy Parameter",
-       y = "Average Proportion Identified",
-       title = "Average Identification Disclosure Across Protected Data Sets")
-
-ggarrange(back_avg_pbar_plot, back_avg_mae_plot, nrow=2, ncol=1)
-
-# assess change in MAE of back-transformed forecasts
-back_an_avg_mae_g <- rowMeans(cbind(back_an_mae_ses_g, back_an_mae_des_g))
-back_an_pct_mae_g <- (back_an_avg_mae_g - an_avg_mae_g[1])/an_avg_mae_g[1] * 100
-
-back_an_avg_mae_b <- rowMeans(cbind(back_an_mae_ses_b, back_an_mae_des_b))
-back_an_pct_mae_b <- (back_an_avg_mae_b - an_avg_mae_b[1])/an_avg_mae_b[1] * 100
-
-back_dp_avg_mae_g <- rowMeans(cbind(back_dp_mae_ses_g, back_dp_mae_des_g))
-back_dp_pct_mae_g <- (back_dp_avg_mae_g - dp_avg_mae_g[1])/dp_avg_mae_g[1] * 100
-
-back_dp_avg_mae_b <- rowMeans(cbind(back_dp_mae_ses_b, back_dp_mae_des_b))
-back_dp_pct_mae_b <- (back_dp_avg_mae_b - dp_avg_mae_b[1])/dp_avg_mae_b[1] * 100
-
-back_knts_avg_mae_g <- rowMeans(cbind(back_knts_mae_ses_g, back_knts_mae_des_g))
-back_knts_pct_mae_g <- (back_knts_avg_mae_g - knts_avg_mae_g[1])/knts_avg_mae_g[1] * 100
-
-back_knts_avg_mae_b <- rowMeans(cbind(back_knts_mae_ses_b, back_knts_mae_des_b))
-back_knts_pct_mae_b <- (back_knts_avg_mae_b - knts_avg_mae_b[1])/knts_avg_mae_b[1] * 100
-
-# percent increases in MAE corresponding to parameters above
-back_an_pct_mae_g[svals == r_best_an_param_g]
-back_an_pct_mae_b[svals == r_best_an_param_b]
-
-back_dp_pct_mae_g[c(20.5, epsvals) == r_best_dp_param_g]
-back_dp_pct_mae_b[c(20.5, epsvals) == r_best_dp_param_b]
-
-back_knts_pct_mae_g[c(1, kvals) == r_best_knts_param_g]
-back_knts_pct_mae_b[c(1, kvals) == r_best_knts_param_b]
-
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
 
 avg_mae_plot <- avg_results %>%
   bind_rows(avg_knts_results) %>%
@@ -1685,7 +1761,16 @@ avg_pbar_plot <- avg_results %>%
        y = "Average Proportion Identified",
        title = "Average Identification Disclosure Across Protected Data Sets (Original Scale)")
 
-ggarrange(avg_pbar_plot, avg_mae_plot, nrow=2, ncol=1)
+curve_plot <- ggarrange(avg_pbar_plot, avg_mae_plot, nrow=2, ncol=1)
+
+print(curve_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/Simulation/"))){
+  ggsave(filename="idr-mae-10-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
+} else {
+  dir.create(paste0("../../Outputs/Figures/Simulation/"), recursive=TRUE)
+  ggsave(filename="idr-mae-10-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
+}
 
 # an, dp, knts on rate time series space
 
