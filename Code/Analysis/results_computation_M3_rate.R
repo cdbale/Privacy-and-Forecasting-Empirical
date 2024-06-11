@@ -56,7 +56,6 @@ all_protected_results <- do.call(rbind, all_protected_results)
 var_protected_results <- do.call(rbind, var_protected_results)
 all_original_results <- do.call(rbind, all_original_results)
 
-
 all_protected_results <- all_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
@@ -79,31 +78,6 @@ if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
 ################################################################################
 ################################################################################
 ################################################################################
-
-# notice that there are some outlying errors (VAR tends to be the culprit)
-
-# to_exclude <- all_original_results %>%
-#   group_by(Model, Data) %>%
-#   summarize(avg_AE = mean(values), .groups='drop') %>%
-#   arrange(desc(avg_AE)) %>%
-#   unite('file', Protection:Data) %>%
-#   slice(1:2) %>%
-#   pull(file)
-# 
-# to_exclude <- var_protected_results %>%
-#   group_by(Protection, Parameter, Model, Data) %>%
-#   summarize(avg_AE = mean(values), .groups='drop') %>%
-#   arrange(desc(avg_AE)) %>%
-#   unite('file', Protection:Data) %>%
-#   slice(1) %>%
-#   pull(file)
-# 
-# # remove the large outlying errors
-# var_protected_results <- var_protected_results %>%
-#   select(Protection, Parameter, Model, Data, Horizon, values) %>%
-#   unite('file', Protection:Data) %>%
-#   filter(!file %in% to_exclude) %>%
-#   separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
 
 ### calculate the average accuracy across all models and data sets
 # for each privacy method
@@ -132,6 +106,10 @@ var_protection_avgs <- var_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
+write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_var_protection_avgs.csv"), row.names=FALSE)
+
+################################################################################
+
 # k-nTS+ (k = 3) model specific results
 original_model_avgs <- all_original_results %>%
   group_by(Model) %>%
@@ -145,49 +123,10 @@ protected_model_avgs <- all_protected_results %>%
 model_avgs <- protected_model_avgs %>%
   left_join(original_model_avgs, by="Model") %>%
   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
- 
-# # data specific results
-# original_data_avgs <- all_original_results %>%
-#   group_by(Data) %>%
-#   summarize(original_avg_mae = mean(values), .groups='drop')
-# 
-# protected_data_avgs <- all_protected_results %>%
-#   filter(Protection == "k-nts-plus", Parameter == "3") %>%
-#   group_by(Data) %>%
-#   summarize(avg_mae = mean(values), .groups='drop')
-# 
-# data_avgs <- protected_data_avgs %>%
-#   left_join(original_data_avgs, by="Data") %>%
-#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-# 
-# # data x model specific results
-# original_model_data_avgs <- all_original_results %>%
-#   group_by(Model, Data) %>%
-#   summarize(original_avg_mae = mean(values), .groups='drop')
-# 
-# protected_model_data_avgs <- all_protected_results %>%
-#   filter(Protection == "k-nts-plus", Parameter == "3") %>%
-#   group_by(Model, Data) %>%
-#   summarize(avg_mae = mean(values), .groups='drop')
-# 
-# model_data_avgs <- protected_model_data_avgs %>%
-#   left_join(original_model_data_avgs, by=c("Model", "Data")) %>%
-#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-# 
-# model_data_avgs %>%
-#   ggplot(aes(x=Data, y=Model, fill=pct_change)) +
-#   geom_tile(color = "white",
-#             lwd = 1,
-#             linetype = 1) +
-#   geom_text(aes(label = round(pct_change)), color = "white", size = 3) +
-#   # scale_fill_gradient(low = "darkgreen", high = "red") +
-#   coord_fixed() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-#         text = element_text(size=19),
-#         plot.title = element_text(face= "bold", colour= "black"),
-#         axis.title.x = element_text(face="bold", colour = "black"),    
-#         axis.title.y = element_text(face="bold", colour = "black"))
 
+write.csv(model_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_knts_model_results.csv"), row.names=FALSE)
+
+################################################################################
 ################################################################################
 ################################################################################
 
@@ -243,35 +182,6 @@ all_ir_original_results <- all_ir_original_results %>%
 var_ir_protected_results <- var_ir_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
-# to_exclude <- all_ir_protected_results %>%
-#   group_by(Protection, Parameter, Model, Data) %>%
-#   summarize(avg_AE = mean(values), .groups='drop') %>%
-#   arrange(desc(avg_AE)) %>%
-#   unite('file', Protection:Data) %>%
-#   slice(1:4) %>%
-#   pull(file)
-# 
-# to_exclude_var <- var_ir_protected_results %>%
-#   group_by(Protection, Parameter, Model, Data) %>%
-#   summarize(avg_AE = mean(values), .groups='drop') %>%
-#   arrange(desc(avg_AE)) %>%
-#   unite('file', Protection:Data) %>%
-#   slice(1:3) %>%
-#   pull(file)
-
-# # remove the large outlying errors
-# all_ir_protected_results <- all_ir_protected_results %>%
-#   select(Protection, Parameter, Model, Data, Horizon, values) %>%
-#   unite('file', Protection:Data) %>%
-#   filter(!file %in% to_exclude) %>%
-#   separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
-# 
-# var_ir_protected_results <- var_ir_protected_results %>%
-#   select(Protection, Parameter, Model, Data, Horizon, values) %>%
-#   unite('file', Protection:Data) %>%
-#   filter(!file %in% to_exclude_var) %>%
-#   separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
-
 if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
   write.csv(all_ir_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_ir_protected_results.csv"), row.names = FALSE)
 } else {
@@ -323,6 +233,8 @@ ir_var_protection_avgs <- var_ir_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
+write.csv(ir_var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_var_rate_protection_avgs.csv"), row.names=FALSE)
+
 # model specific results
 original_ir_model_avgs <- original_m3_results %>%
   group_by(Model) %>%
@@ -331,11 +243,11 @@ original_ir_model_avgs <- original_m3_results %>%
 protected_ir_model_avgs <- all_ir_protected_results %>%
   filter(Protection == "k-nts-plus", Parameter == "3") %>%
   group_by(Model) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-ir_model_avgs <- protected_ir_model_avgs %>%
+  summarize(avg_mae = mean(values), .groups='drop') %>%
   left_join(original_ir_model_avgs, by="Model") %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
+  mutate(pct_change = (avg_mae-original_avg_mae)/original_avg_mae * 100)
+
+write.csv(protected_ir_model_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_averages_by_model.csv"), row.names=FALSE)
 
 # data specific results
 original_ir_data_avgs <- original_m3_results %>%
@@ -351,38 +263,10 @@ ir_data_avgs <- protected_ir_data_avgs %>%
   left_join(original_ir_data_avgs, by="Data") %>%
   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
-# data x model specific results
-original_ir_model_data_avgs <- original_m3_results %>%
-  group_by(Model, Data) %>%
-  summarize(original_avg_mae = mean(values), .groups='drop')
-
-protected_ir_model_data_avgs <- all_ir_protected_results %>%
-  filter(Protection == "k-nts-plus", Parameter == "3") %>%
-  group_by(Model, Data) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-model_ir_data_avgs <- protected_ir_model_data_avgs %>%
-  left_join(original_ir_model_data_avgs, by=c("Model", "Data")) %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-
-model_ir_data_avgs %>%
-  ggplot(aes(x=Data, y=Model, fill=pct_change)) +
-  geom_tile(color = "white",
-            lwd = 1,
-            linetype = 1) +
-  geom_text(aes(label = round(pct_change)), color = "white", size = 3) +
-  # scale_fill_gradient(low = "darkgreen", high = "red") +
-  coord_fixed() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        text = element_text(size=19),
-        plot.title = element_text(face= "bold", colour= "black"),
-        axis.title.x = element_text(face="bold", colour = "black"),    
-        axis.title.y = element_text(face="bold", colour = "black"))
-
 ################################################################################
 ################################################################################
 
-# calculate the model ranks on the original and k-nTS+ (k = 3) data
+# calculate the mae under each model for the original and k-nTS+ (k = 3) data
 original_model_ranks_mae <- all_original_results %>%
   group_by(Model) %>%
   summarize(MAE = mean(values)) %>%
@@ -392,7 +276,11 @@ protected_model_ranks_mae <- all_protected_results %>%
   filter(Protection == "k-nts-plus", Parameter == "3") %>%
   group_by(Model) %>%
   summarize(MAE = mean(values)) %>%
-  arrange(MAE)
+  arrange(MAE) %>%
+  left_join(original_model_ranks_mae, by="Model") %>%
+  mutate(pct_change = (MAE.x - MAE.y)/MAE.y * 100)
+
+write.csv(protected_model_ranks_mae, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_averages_by_model.csv"), row.names=FALSE)
 
 original_ir_model_ranks_mae <- all_ir_original_results %>%
   group_by(Model) %>%
@@ -409,9 +297,22 @@ protected_ir_model_ranks_mae <- all_ir_protected_results %>%
   filter(Protection == "k-nts-plus", Parameter == "3") %>%
   group_by(Model) %>%
   summarize(MAE = mean(values)) %>%
+  left_join()
   arrange(MAE)
 
-original_model_ranks_sd <- all_original_results %>%
-  group_by(Model) %>%
-  summarize(sd_MAE = sd(values)) %>%
-  arrange(sd_MAE)
+################################################################################
+################################################################################
+
+# calculate the mae under each model for the original and k-nTS+ (k = 3) data
+original_data_ranks_mae <- all_original_results %>%
+  group_by(Data) %>%
+  summarize(MAE = mean(values))
+
+protected_data_ranks_mae <- all_protected_results %>%
+  filter(Protection == "k-nts-plus", Parameter == "3") %>%
+  group_by(Data) %>%
+  summarize(MAE = mean(values)) %>%
+  left_join(original_data_ranks_mae, by="Data") %>%
+  mutate(pct_change = (MAE.x - MAE.y)/MAE.y * 100)
+
+write.csv(protected_data_ranks_mae, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_averages_by_data.csv"), row.names=FALSE)

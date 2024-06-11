@@ -61,6 +61,7 @@ file_counts <- tibble(file_name = file_names,
                       avg_length = sapply(lengths, mean))
 
 knts_times <- knts_times %>%
+  select(-swap5, -swap7, -swap10, -swap15) %>%
   left_join(file_counts, by = c("File"="file_name"))
 
 fcast_times <- fcast_times %>%
@@ -80,136 +81,56 @@ all_times <- knts_times %>%
 ### create plots and tables of computation time
 
 total_times <- all_times %>%
+  # removing the time to generate forecasts per reviewer request
+  select(-Baseline.Protection.Time, -SES_baseline, -DES_baseline, -TES_baseline, -ARIMA_baseline, -VAR_baseline, -LGBM_baseline, -RNN_baseline, -feature_extraction, -feature_prep, -error_computation) %>%
   gather(key="task", value="time", -num_swapped, -num_series, -avg_length, -Data, -Seasonal) %>%
   group_by(Data, num_swapped, num_series, avg_length, Seasonal) %>%
   summarize(total_time = sum(time), .groups='drop')
-
-# what is the total time without the RNN model
-total_times_no_rnn <- all_times %>%
-  select(-RNN_baseline) %>%
-  gather(key="task", value="time", -num_swapped, -num_series, -avg_length, -Data, -Seasonal) %>%
-  group_by(Data, num_swapped, num_series, avg_length, Seasonal) %>%
-  summarize(total_time = sum(time), .groups='drop') %>%
-  arrange(desc(total_time))
   
-
 total_plot <- total_times %>%
   ggplot(aes(x=num_swapped, y=total_time)) +
   geom_point(size=2) +
   geom_smooth(method='lm') +
   labs(x = "Total Number Periods Swapped",
        y = "Total Time (Seconds)",
-       title = "Total Computation Time vs. Total Number of Protected Time Periods") +
-  theme(plot.title = element_text(size=14, face= "bold", colour= "black" ),
-        axis.title.x = element_text(size=13, face="bold", colour = "black"),    
-        axis.title.y = element_text(size=13, face="bold", colour = "black"))
+       title = "Computation Time vs. Total Number of Swapped Values") +
+  theme(plot.title = element_text(size=9))
 
 summary(lm(total_time ~ num_swapped, data=total_times))
 
 summary(lm(RReliefF ~ num_series, data=all_times))
 summary(lm(RFE ~ num_series, data=all_times))
 
-summary(lm(Swap ~ num_series + avg_length, data=all_times))
-
-## RReliefF as a function of number of series
-relief_plot <- all_times %>%
-  ggplot(aes(x=num_series, y=RReliefF)) +
-  geom_point(size=2) +
-  geom_smooth(method='lm') +
-  labs(x = "Number of Time Series",
-       y = "Time (Seconds)",
-       title = "Total RReliefF Time vs. Number of Time Series")
-
-## RReliefF as a function of number of time periods
-# all_times %>%
-#   ggplot(aes(x=avg_length, y=RReliefF)) +
-#   geom_point(size=3) +
-#   geom_smooth(method='lm')
-
-## RReliefF as a function of number of series
-rfe_plot <- all_times %>%
-  ggplot(aes(x=num_series, y=RFE)) +
-  geom_point(size=2) +
-  geom_smooth(method='lm') +
-  labs(x = "Number of Time Series",
-       y = "Time (Seconds)",
-       title = "Total RFE Time vs. Number of Time Series")
-
-## RReliefF as a function of number of time periods
-# all_times %>%
-#   ggplot(aes(x=avg_length, y=RFE)) +
-#   geom_point(size=3) +
-#   geom_smooth(method='lm')
-
-## Swapping time plot as a function of the number of time periods
-swap_plot <- all_times %>%
-  ggplot(aes(x=avg_length, y=Swap)) +
-  geom_point(size=2) +
-  geom_smooth(method='lm') +
-  labs(x = "Number of Time Periods",
-       y = "Time (Seconds)",
-       title = "Total Swap Time vs. Average Series Length")
-
-all_times %>%
-  ggplot(aes(x=num_series, y=Swap)) +
-  geom_point(size=2) +
-  geom_smooth(method='lm') +
-  labs(x = "Number of Time Periods",
-       y = "Time (Seconds)",
-       title = "Total Swap Time vs. Number of Time Periods")
-
-## Times for forecasting with each model as a function of total number
-## of time periods
-# all_times %>%
-#   select(Data, contains("baseline", ignore.case=FALSE), num_swapped) %>%
-#   gather(key = "model", value="time", -Data, -num_swapped) %>%
-#   ggplot(aes(x=num_swapped, y=time, color=model)) +
-#   geom_line()
-
-ggarrange(total_plot, relief_plot, rfe_plot, swap_plot)
+summary(lm(swap3 ~ num_series + avg_length, data=all_times))
 
 ## data for k-nTS+ specific table
-all_times %>%
-  select(Data, num_swapped, feature_extraction, RFE, RReliefF, Swap) %>%
-  arrange(num_swapped)
+all_times 
 
 ## Bar plot showing the relative amount of time of each step
-## need to classify each step
 
 comp_breakdown <- all_times %>%
-  gather(key='task', value='time', -Data, -num_swapped, -num_series, -avg_length, -Seasonal) %>%
+  select(Data, num_swapped, RFE, RReliefF, swap3) %>%
+  gather(key='task', value='time', -Data, -num_swapped) %>%
   mutate(Step = ifelse(task == "RReliefF", "RReliefF",
-                ifelse(task == "RFE", "RFE",
-                ifelse(task == "Swap", "Swapping",
-                ifelse(task %in% c("SES_baseline", "DES_baseline", "TES_baseline", "VAR_baseline"), "Other Forecasting",
-                ifelse(task == "ARIMA_baseline", "Auto-ARIMA",
-                ifelse(task == "LGBM_baseline", "LGBM",
-                ifelse(task == "RNN_baseline", "RNN", "Other")))))))) %>%
+                ifelse(task == "RFE", "RFE", "Swapping"))) %>%
   filter(Data == "monthly-MICRO") %>%
-  group_by(Step) %>%
-  summarize(total_time = sum(time)) %>%
-  arrange(desc(total_time)) %>%
-  ggplot(aes(x=factor(Step, levels=c("RNN", "Auto-ARIMA", "RFE", "Other Forecasting", "LGBM", "Swapping", "Other", "RReliefF")), y=total_time)) +
+  arrange(desc(time)) %>%
+  # reviewer requested to focus only on computation time of K-nTS+ algorithms
+  ggplot(aes(x=factor(Step, levels=c("RFE", "Swapping", "RReliefF")), y=time)) +
   geom_col() +
+  ylim(c(0, 1500)) +
   labs(x = "Step",
        y = "Time (Seconds)",
-       title = "Computation Time Breakdown for Protecting Monthly Micro Data") +
-  ylim(0, 25000) +
-  theme(plot.title = element_text(size=14, face= "bold", colour= "black" ),
-        axis.title.x = element_text(size=13, face="bold", colour = "black"),    
-        axis.title.y = element_text(size=13, face="bold", colour = "black"))
+       title = "Computation Time for k-nTS+ Steps") +
+  theme(plot.title = element_text(size=9))
 
-# how does the total time for feature selection and swapping compare
-all_times %>%
-  gather(key='task', value='time', -Data, -num_swapped, -num_series, -avg_length, -Seasonal) %>%
-  mutate(Step = ifelse(task %in% c("RReliefF", "RFE", "Swap"), "k-nTS+",
-                                     ifelse(task %in% c("SES_baseline", "DES_baseline", "TES_baseline", "VAR_baseline"), "Other Forecasting",
-                                            ifelse(task == "ARIMA_baseline", "Auto-ARIMA",
-                                                   ifelse(task == "LGBM_baseline", "LGBM",
-                                                          ifelse(task == "RNN_baseline", "RNN", "Other")))))) %>%
-  filter(Data == "monthly-MICRO") %>%
-  group_by(Step) %>%
-  summarize(total_time = sum(time)) %>%
-  arrange(desc(total_time))
+combined_plot <- ggarrange(total_plot, comp_breakdown)
 
-ggarrange(total_plot, comp_breakdown)
+print(combined_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/M3/"))){
+  ggsave(filename="computation_cost_plot.pdf", plot=combined_plot, path="../../Outputs/Figures/M3/")
+} else {
+  dir.create(paste0("../../Outputs/Figures/M3/"), recursive=TRUE)
+  ggsave(filename="computation_cost_plot.pdf", plot=combined_plot, path="../../Outputs/Figures/M3/")
+}

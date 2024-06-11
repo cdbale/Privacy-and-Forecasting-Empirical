@@ -19,11 +19,6 @@ knts_alg() function) were re-written in the `knts_helper_functions.R` file to re
 
 
 
-
-
-
-
-
 ----------------------------------------------------
 
 CODE FOR ANALYZING M3 and M4 DATA
@@ -71,7 +66,7 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
 
-9. Run `VAR_weight_forecasts.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values discussed in Section XXX.
+9. Run `VAR_weight_forecasts_M3.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values discussed in Section XXX.
 
 10. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final unprotected and protected data sets. Note that all features are saved to the `Data/Features/` folder.
 

@@ -1,8 +1,6 @@
 ### File for computing forecast accuracy results across models, data sets,
 ### protection methods, etc.
 
-################### Check file counts after all forecasting is done ###################
-
 ## note that we exclude the VAR yearly-micro data ##
 
 # Author: Cameron Bale
@@ -31,7 +29,6 @@ var_protected_results <- lapply(all_results, function(x) x %>% select(contains("
                                                                       contains("var-knts", ignore.case=FALSE),
                                                                       contains("var-sim", ignore.case=FALSE)))
 
-
 # data frame for calculating protected results
 all_original_results <- lapply(all_results, function(x) x[,grep("_DP_", colnames(x[,grep("_AN_", colnames(x[,grep("k-nts", colnames(x[,grep("var-an", colnames(x[,grep("var-sim", colnames(x[,grep("var-knts", colnames(x), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)]), invert=TRUE, value=TRUE)])
 
@@ -58,6 +55,32 @@ all_protected_results <- do.call(rbind, all_protected_results)
 var_protected_results <- do.call(rbind, var_protected_results)
 all_original_results <- do.call(rbind, all_original_results)
 
+# import and combine magnitudes
+magnitude_path <- paste0("../../Data/Magnitudes/", data_folder)
+magnitude_files <- list.files(magnitude_path)
+
+# loop over magnitude files, import, and create variable identifying
+# the data set
+magnitudes <- tibble()
+
+for (f in magnitude_files){
+  df <- read_csv(paste0(magnitude_path, f)) %>%
+    select(-`0`) %>%
+    mutate(Data = strsplit(f, split="_")[[1]][1])
+  
+  magnitudes <- bind_rows(magnitudes, df)
+}
+
+all_original_results <- all_original_results %>%
+  left_join(magnitudes, by=c("Data", "Snum"="snum"))
+
+all_protected_results <- all_protected_results %>%
+  left_join(magnitudes, by=c("Data", "Snum"="snum"))
+
+var_protected_results <- var_protected_results %>%
+  left_join(magnitudes, by=c("Data", "Snum"="snum"))
+
+# remove yearly micro VAR results
 all_protected_results <- all_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
@@ -95,7 +118,7 @@ to_exclude <- all_protected_results %>%
 
 # remove the large outlying errors
 all_protected_results <- all_protected_results %>%
-  select(Protection, Parameter, Model, Data, Horizon, values) %>%
+  select(Protection, Parameter, Model, Data, Horizon, Snum, values, large_magnitude) %>%
   unite('file', Protection:Data) %>%
   filter(!file %in% to_exclude) %>%
   separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
@@ -127,10 +150,34 @@ var_protection_avgs <- var_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-################################################################################
-################################################################################
+write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_protection_avgs.csv"), row.names=FALSE)
 
-# calculate the model ranks on the original and k-nTS+ (k = 3) data
+## calculate again for large vs. small magnitude series
+
+magnitude_orig_mae <- all_original_results %>%
+  group_by(large_magnitude) %>%
+  summarize(global_avg_MAE = mean(values))
+  
+magnitude_protected_results <- all_protected_results %>%
+  group_by(Protection, Parameter, large_magnitude) %>%
+  summarize(global_avg_MAE = mean(values), .groups="drop") %>%
+  left_join(magnitude_orig_mae, by="large_magnitude") %>%
+  mutate(percent_change_mae = (global_avg_MAE.x - global_avg_MAE.y)/global_avg_MAE.y * 100) %>%
+  arrange(Protection, Parameter)
+
+var_original_magnitude_avg_mae <- all_original_results %>%
+  filter(Model == "VAR") %>%
+  group_by(large_magnitude) %>%
+  summarize(global_avg_MAE = mean(values))
+
+var_magnitude_protection_avgs <- var_protected_results %>%
+  group_by(Protection, Parameter, large_magnitude) %>%
+  summarize(global_avg_MAE = mean(values), .groups="drop") %>%
+  left_join(magnitude_orig_mae, by="large_magnitude") %>%
+  mutate(percent_change_mae = (global_avg_MAE.x - global_avg_MAE.y)/global_avg_MAE.y * 100) %>%
+  arrange(Protection, Parameter)
+
+# calculate the mae under each model for the original and k-nTS+ (k = 3) data
 
 original_model_ranks_mae <- all_original_results %>%
   group_by(Model) %>%
@@ -143,11 +190,11 @@ protected_model_ranks_mae <- all_protected_results %>%
   summarize(MAE = mean(values)) %>%
   arrange(MAE)
 
-# calculate model ranks based on standard deviation of MAE
-original_model_ranks_sd <- all_original_results %>%
-  group_by(Model) %>%
-  summarize(sd_MAE = sd(values)) %>%
-  arrange(sd_MAE)
+mae_by_model <- original_model_ranks_mae %>%
+  left_join(protected_model_ranks_mae, by=c("Model")) %>%
+  mutate(pct_change = (MAE.y - MAE.x)/MAE.x * 100)
+
+write.csv(mae_by_model, paste0("../../Outputs/Results/", data_folder, "Tables/averages_by_model.csv"), row.names=FALSE)
 
 ### calculate overall average for each privacy method and data set
 original_avg_data <- all_original_results %>%
@@ -195,33 +242,3 @@ data_avgs <- protected_data_avgs %>%
   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
 write.csv(data_avgs, paste0("../../Outputs/Results/", data_folder, "Tables/k-nts-plus-3-1.5-averages_by_frequency.csv"), row.names=FALSE)
-
-# # break down results by model x data set
-# 
-# original_model_data_avgs <- all_original_results %>%
-#   group_by(Model, Data) %>%
-#   summarize(original_avg_mae = mean(values), .groups='drop')
-# 
-# protected_model_data_avgs <- all_protected_results %>%
-#   filter(Protection == "k-nts-plus-bounded", Parameter == "3-1.5") %>%
-#   group_by(Model, Data) %>%
-#   summarize(avg_mae = mean(values), .groups='drop')
-# 
-# model_data_avgs <- protected_model_data_avgs %>%
-#   left_join(original_model_data_avgs, by=c("Model", "Data")) %>%
-#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-# 
-# model_data_avgs %>%
-#   ggplot(aes(x=Data, y=Model, fill=pct_change)) +
-#   geom_tile(color = "white",
-#             lwd = 1,
-#             linetype = 1) +
-#   geom_text(aes(label = round(pct_change)), color = "white", size = 3) +
-#   # scale_fill_gradient(low = "darkgreen", high = "red") +
-#   coord_fixed() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-#         text = element_text(size=19),
-#         plot.title = element_text(face= "bold", colour= "black"),
-#         axis.title.x = element_text(face="bold", colour = "black"),    
-#         axis.title.y = element_text(face="bold", colour = "black"))
-

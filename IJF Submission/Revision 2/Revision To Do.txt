@@ -1,0 +1,12 @@
+Revision To Do
+
+- go through draft doing the following:
+	- Section 5: add a sentence to explain the organization of the content. Add a sentence to each section that does this.
+	- Check all Latex errors/warnings
+	- One more read-through start to finish including appendix - BE COMFORTABLE SUBMITTING WITH THIS VERSION
+
+- ask Matt and Jin to make any necessary edits directly to the document in Overleaf. Tell them the date I would like to submit by.
+
+- Final proofread
+
+- Before submission, need to write the reviewer response document based on the final version of the draft

@@ -1,6 +1,6 @@
 Revision Tasks
 
-- check hyperparameter ranges in the appendix, make sure consistent across M3 and M4 files
+
 
 - note that we are skipping the VAR inverse forecasts for DP_0.1 on the original data due to infinite values
 
@@ -9,7 +9,7 @@ Revision Tasks
 
 - make sure all section references throughout the document are correct
 - make sure all figure and table references throughout the document are correct
-- Section 5: add a sentence to explain the organization of the content. Add a sentence to each section that does this.
+
 - Sections 5.2 and 5.7 are both about time series features - merge these sections
 - add description of cross-series correlation features
 

@@ -267,6 +267,7 @@ for (f in file_names){
                          kvals=kvals,
                          features_to_calculate=fv,
                          selected_features=sf,
+                         importance_weights=imp_weights,
                          is_plus=TRUE,
                          is_rate=TRUE)
   

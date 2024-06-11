@@ -123,10 +123,12 @@ def train_and_forecast(ts_data, h, forecasting_model, truncate=False, log=False,
     elif forecasting_model == "ARIMA":
         if sp > 1:
             forecaster = AutoARIMA(seasonal=True, maxiter=15, sp=sp, suppress_warnings=True)
-            fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+            fcasts = [forecaster.fit(x*0.1).predict(fh) for x in ts_data]
+            fcasts = [x/0.1 for x in fcasts]
         else:
             forecaster = AutoARIMA(seasonal=False, maxiter=15, suppress_warnings=True)
-            fcasts = [forecaster.fit(x).predict(fh) for x in ts_data]
+            fcasts = [forecaster.fit(x*0.1).predict(fh) for x in ts_data]
+            fcasts = [x/0.1 for x in fcasts]
 
         # if using VAR
     elif forecasting_model == "VAR":
