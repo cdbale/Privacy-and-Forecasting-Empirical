@@ -97,7 +97,7 @@ m3_relief_plot <- m3_avg_evals %>%
                             "First Difference ACF",
                             "X PACF5",
                             "X ACF10",
-                            "Entropy")) 
+                            "Spectral Entropy")) 
   # theme(plot.title = element_text(size=14, face= "bold", colour= "black" ),
   #       axis.title.x = element_text(size=13, face="bold", colour = "black"),    
   #       axis.title.y = element_text(size=13, face="bold", colour = "black"))
@@ -155,7 +155,7 @@ m3_rate_relief_plot <- m3_rate_avg_evals %>%
                             "First Difference ACF",
                             "X PACF5",
                             "X ACF10",
-                            "Entropy")) 
+                            "Spectral Entropy")) 
   # theme(plot.title = element_text(size=14, face= "bold", colour= "black" ),
   #       axis.title.x = element_text(size=13, face="bold", colour = "black"),    
   #       axis.title.y = element_text(size=13, face="bold", colour = "black"))
@@ -165,10 +165,12 @@ combined_rrelief_plot <- ggarrange(m3_relief_plot, m3_rate_relief_plot)
 print(combined_rrelief_plot)
 
 if (file.exists(paste0("../../Outputs/Figures/M3/"))){
-  ggsave(filename="M3_RReliefF_Weights.pdf", plot=combined_rrelief_plot, path="../../Outputs/Figures/M3/")
+  ggsave(filename="M3_RReliefF_Weights.pdf", plot=combined_rrelief_plot, path="../../Outputs/Figures/M3/",
+         width=8, height=7)
 } else {
   dir.create(paste0("../../Outputs/Figures/M3/"), recursive=TRUE)
-  ggsave(filename="M3_RReliefF_Weights.pdf", plot=combined_rrelief_plot, path="../../Outputs/Figures/M3/")
+  ggsave(filename="M3_RReliefF_Weights.pdf", plot=combined_rrelief_plot, path="../../Outputs/Figures/M3/",
+         width=8, height=7)
 }
 
 ################################################################################
@@ -408,7 +410,7 @@ m3_sf <- avg_m3_rfe_evals %>%
                                "First Difference ACF",
                                "X PACF5",
                                "X ACF10",
-                               "Entropy")))
+                               "Spectral Entropy")))
 
 m3_rate_sf <- avg_m3_rate_rfe_evals %>%
   left_join(m3_rate_ns, by=c("data_set", "data_subset")) %>%
@@ -492,7 +494,7 @@ m3_rate_sf <- avg_m3_rate_rfe_evals %>%
                                "First Difference ACF",
                                "X PACF5",
                                "X ACF10",
-                               "Entropy")))
+                               "Spectral Entropy")))
 
 ### now plot on heatmap
 
@@ -547,10 +549,12 @@ m3_feature_grid_plot <- ggarrange(m3_selected_grid, m3_rate_selected_grid)
 print(m3_feature_grid_plot)
 
 if (file.exists(paste0("../../Outputs/Figures/M3/"))){
-  ggsave(filename="M3_RFE_selection.pdf", plot=m3_feature_grid_plot, path="../../Outputs/Figures/M3/")
+  ggsave(filename="M3_RFE_selection.pdf", plot=m3_feature_grid_plot, path="../../Outputs/Figures/M3/",
+         width=11.1, height=10)
 } else {
   dir.create(paste0("../../Outputs/Figures/M3/"), recursive=TRUE)
-  ggsave(filename="M3_RFE_selection.pdf", plot=m3_feature_grid_plot, path="../../Outputs/Figures/M3/")
+  ggsave(filename="M3_RFE_selection.pdf", plot=m3_feature_grid_plot, path="../../Outputs/Figures/M3/",
+         width=11.1, height=10)
 }
 
 ################################################################################
@@ -697,8 +701,8 @@ unprotected_plot <- tibble(Desirable = orig_series[[gs_num]][-1],
   labs(title="Series with Desirable and Undesirable Features",
        x = 'Time',
        y = 'x',
-       color = "Feature Type",
-       shape = "Feature Type") +
+       color = "Series Type",
+       shape = "Series Type") +
   theme(text = element_text(size=16))
 
 print(unprotected_plot)
@@ -760,6 +764,22 @@ if (file.exists(paste0("../../Outputs/Figures/M3/"))){
 # 
 # annotate_figure(g2, top=text_grob("", face = "bold", size = 14))
 
+# remake unprotected plot without larger font size 
+unprotected_plot <- tibble(Desirable = orig_series[[gs_num]][-1],
+                           Undesirable = orig_series[[bs_num]],
+                           t = 1:(length(orig_series[[gs_num]])-1)) %>%
+  gather(key="Series", value="x", -t) %>%
+  ggplot(aes(x=t, y=x, color=Series)) +
+  geom_line() +
+  geom_point(aes(shape=Series), size=2.5) +
+  scale_colour_manual(values=color_group) +
+  ylim(0, 10) +
+  labs(title="Series with Desirable and Undesirable Features",
+       x = 'Time',
+       y = 'x',
+       color = "Series Type",
+       shape = "Series Type")
+
 # used to have example series in separate plots, now combined
 knts_plot <- tibble(Desirable = kntsp_series[[gs_num]][-1],
                     Undesirable = kntsp_series[[bs_num]],
@@ -775,8 +795,8 @@ knts_plot <- tibble(Desirable = kntsp_series[[gs_num]][-1],
   labs(title="(k-nTS+, k = 3, M = 1.5) Protected Series with Desirable and Undesirable Features",
        x = 'Time',
        y = 'x',
-       color = "Feature Type",
-       shape = "Feature Type")
+       color = "Series Type",
+       shape = "Series Type")
 
 print(knts_plot)
 
@@ -795,8 +815,8 @@ an_plot <- tibble(Desirable = an_series[[gs_num]][-1],
   labs(title="(AN, s = 1.5) Protected Series with Desirable and Undesirable Features",
        x = 'Time',
        y = 'x',
-       color = "Feature Type",
-       shape = "Feature Type")
+       color = "Series Type",
+       shape = "Series Type")
 
 print(an_plot)
 
