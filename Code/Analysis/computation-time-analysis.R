@@ -119,7 +119,7 @@ comp_breakdown <- all_times %>%
   ggplot(aes(x=factor(Step, levels=c("RFE", "Swapping", "RReliefF")), y=time)) +
   geom_col() +
   ylim(c(0, 1500)) +
-  labs(x = "Step",
+  labs(x = "k-nTS+ Protection Step",
        y = "Time (Seconds)",
        title = "Computation Time for k-nTS+ Steps") +
   theme(plot.title = element_text(size=9))
