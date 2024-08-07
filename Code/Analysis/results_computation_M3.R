@@ -15,7 +15,6 @@ error_dist_path <- paste0("../../Outputs/Results/", data_folder, "Error_Distribu
 
 # import results files
 res_files <- list.files(error_dist_path)
-
 res_files <- grep("_all_distributions_h1", res_files, value=TRUE)
 
 all_results <- lapply(res_files, function(x) read_csv(paste0(error_dist_path, x)))
@@ -90,14 +89,14 @@ all_original_results <- all_original_results %>%
 var_protected_results <- var_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
-if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
-  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-} else {
-  dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
-  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-}
+# if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+# } else {
+#   dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
+#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+# }
 
 ################################################################################
 ################################################################################
@@ -136,7 +135,7 @@ protection_avgs <- all_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/protection_avgs.csv"), row.names=FALSE)
+write.csv(protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_accuracy_by_protection.csv"), row.names=FALSE)
 
 var_original_global_avg_mae <- all_original_results %>%
   filter(Model == "VAR") %>%
@@ -150,7 +149,7 @@ var_protection_avgs <- var_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_protection_avgs.csv"), row.names=FALSE)
+write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_avg_accuracy_by_protection.csv"), row.names=FALSE)
 
 ## calculate again for large vs. small magnitude series
 
@@ -165,6 +164,8 @@ magnitude_protected_results <- all_protected_results %>%
   mutate(percent_change_mae = (global_avg_MAE.x - global_avg_MAE.y)/global_avg_MAE.y * 100) %>%
   arrange(Protection, Parameter)
 
+write.csv(magnitude_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_accuracy_by_magnitude_protection.csv"), row.names=FALSE)
+
 var_original_magnitude_avg_mae <- all_original_results %>%
   filter(Model == "VAR") %>%
   group_by(large_magnitude) %>%
@@ -176,6 +177,8 @@ var_magnitude_protection_avgs <- var_protected_results %>%
   left_join(magnitude_orig_mae, by="large_magnitude") %>%
   mutate(percent_change_mae = (global_avg_MAE.x - global_avg_MAE.y)/global_avg_MAE.y * 100) %>%
   arrange(Protection, Parameter)
+
+write.csv(var_magnitude_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_avg_accuracy_by_magnitude_protection.csv"), row.names=FALSE)
 
 # calculate the mae under each model for the original and k-nTS+ (k = 3) data
 
@@ -208,37 +211,6 @@ protection_data_avgs <- all_protected_results %>%
   mutate(pct_change_mae = (avg_protected_mae - original_avg_mae)/original_avg_mae * 100) %>%
   arrange(Data)
 
-write.csv(protection_data_avgs, paste0("../../Outputs/Results/", data_folder, "Tables/averages_by_frequency.csv"), row.names=FALSE)
+write.csv(protection_data_avgs, paste0("../../Outputs/Results/", data_folder, "Tables/averages_by_data.csv"), row.names=FALSE)
 
 #####################################################################################
-
-# model specific results
-original_model_avgs <- all_original_results %>%
-  group_by(Model) %>%
-  summarize(original_avg_mae = mean(values), .groups='drop')
-
-protected_model_avgs <- all_protected_results %>%
-  filter(Protection == "k-nts-plus-bounded", Parameter == "3-1.5") %>%
-  group_by(Model) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-model_avgs <- protected_model_avgs %>%
-  left_join(original_model_avgs, by="Model") %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-
-# data specific results
-# model specific results
-original_data_avgs <- all_original_results %>%
-  group_by(Data) %>%
-  summarize(original_avg_mae = mean(values), .groups='drop')
-
-protected_data_avgs <- all_protected_results %>%
-  filter(Protection == "k-nts-plus-bounded", Parameter == "3-1.5") %>%
-  group_by(Data) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-data_avgs <- protected_data_avgs %>%
-  left_join(original_data_avgs, by="Data") %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-
-write.csv(data_avgs, paste0("../../Outputs/Results/", data_folder, "Tables/k-nts-plus-3-1.5-averages_by_frequency.csv"), row.names=FALSE)

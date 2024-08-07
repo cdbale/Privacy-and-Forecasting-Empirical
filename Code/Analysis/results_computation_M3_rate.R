@@ -1,8 +1,6 @@
 ### File for computing forecast accuracy results across models, data sets,
 ### protection methods, etc.
 
-################### Check file counts after all forecasting is done ###################
-
 # Author: Cameron Bale
 
 library(tidyverse)
@@ -65,15 +63,14 @@ all_original_results <- all_original_results %>%
 var_protected_results <- var_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
-
-if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
-  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-} else {
-  dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
-  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-}
+# if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+# } else {
+#   dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
+#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+# }
 
 ################################################################################
 ################################################################################
@@ -85,11 +82,6 @@ original_global_avg_mae <- all_original_results %>%
   summarize(global_avg_MAE = mean(values)) %>%
   pull(global_avg_MAE)
 
-var_original_global_avg_mae <- all_original_results %>%
-  filter(Model == "VAR") %>%
-  summarize(global_avg_MAE = mean(values)) %>%
-  pull(global_avg_MAE)
-
 protection_avgs <- all_protected_results %>%
   group_by(Protection, Parameter) %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%
@@ -98,6 +90,11 @@ protection_avgs <- all_protected_results %>%
   arrange(Protection, Parameter)
 
 write.csv(protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_protection_avgs.csv"), row.names=FALSE)
+
+var_original_global_avg_mae <- all_original_results %>%
+  filter(Model == "VAR") %>%
+  summarize(global_avg_MAE = mean(values)) %>%
+  pull(global_avg_MAE)
 
 var_protection_avgs <- var_protected_results %>%
   group_by(Protection, Parameter) %>%
@@ -111,20 +108,20 @@ write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder
 ################################################################################
 
 # k-nTS+ (k = 3) model specific results
-original_model_avgs <- all_original_results %>%
+original_model_ranks_mae <- all_original_results %>%
   group_by(Model) %>%
   summarize(original_avg_mae = mean(values), .groups='drop')
 
-protected_model_avgs <- all_protected_results %>%
+protected_model_ranks_mae <- all_protected_results %>%
   filter(Protection == "k-nts-plus", Parameter == "3") %>%
   group_by(Model) %>%
   summarize(avg_mae = mean(values), .groups='drop')
 
-model_avgs <- protected_model_avgs %>%
-  left_join(original_model_avgs, by="Model") %>%
+mae_by_model <- protected_model_ranks_mae %>%
+  left_join(original_model_ranks_mae, by="Model") %>%
   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
-write.csv(model_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_knts_model_results.csv"), row.names=FALSE)
+write.csv(mae_by_model, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_knts_model_results.csv"), row.names=FALSE)
 
 ################################################################################
 ################################################################################

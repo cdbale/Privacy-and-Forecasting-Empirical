@@ -36,10 +36,14 @@ var_file_path = "../../Outputs/VAR Simulated/M3_rate/"
 var_sim_files = os.listdir(var_file_path)
 var_sim_files = [x for x in var_sim_files if "h1_train" in x and not any(y in x for y in ['k-nts', 'AN_', 'DP_', '.DS_Store']) and "rate" in x]
 
+print(var_sim_files)
+
 forecasts_path = "../../Outputs/Forecasts/" + data_folder
 results_path = "../../Outputs/Results/" + data_folder
 
 for train_file in h1_train_files:
+
+    print(train_file)
     
     if "monthly" in train_file:
         sp = 12
@@ -56,7 +60,9 @@ for train_file in h1_train_files:
     
     knts_file = [x for x in knts_train_files if x[18:-9] in train_file]
     [knts_file] = knts_file
-    
+
+    print(var_sim_files)
+
     sim_file = [x for x in var_sim_files if x[:-9] in train_file]
     [sim_file] = sim_file
     
