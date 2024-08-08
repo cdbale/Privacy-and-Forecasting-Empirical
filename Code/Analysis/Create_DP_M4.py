@@ -9,11 +9,10 @@ import time
 import os
 from data_protection_functions import *
 
-data_folder = "M4_rate/"
+data_folder = "M4/"
 
-# # create protected data sets using additive noise and differential privacy
-protection_methods = {# "AN": [0.25, 0.5, 1, 1.5, 2],
-                      "DP": [0.1, 1, 4.6, 10, 20]}
+# # create protected data sets using differential privacy
+protection_methods = {"DP": [1, 4.6, 10, 20]}
 
 # for the h1 and h2 horizon, apply the data protection methods and save the protected
 # data sets
@@ -76,4 +75,4 @@ for i, f in enumerate(h2_train_files):
 # save the computation time for baseline protected data sets
 computation_time = pd.DataFrame(computation_time.items(), columns=['File', 'Baseline Protection Time'])
 os.makedirs("../../Data/Computation_Time/", exist_ok=True)
-computation_time.to_csv("../../Data/Computation_Time/M4_rate_computation_time.csv", index=False)
+computation_time.to_csv("../../Data/Computation_Time/M4_computation_time.csv", index=False)

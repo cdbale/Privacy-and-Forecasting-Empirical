@@ -1770,6 +1770,15 @@ length(b_simulated_rates_train[[1]]) - length(r_b_var_simulated[[1]])
 r_var_idr_b <-  simulation_results(confidential_data_list=lapply(b_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_b_var_simulated, sample_size=sample_size, num_simulations=npsims)
 r_var_idr_g <-  simulation_results(confidential_data_list=lapply(g_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_g_var_simulated, sample_size=sample_size, num_simulations=npsims)
 
+r_b_var_models <- split_and_var_forecast(b_simulated_rates_train, horizon=1, return_model=TRUE, take_log=FALSE)
+r_g_var_models <- split_and_var_forecast(g_simulated_rates_train, horizon=1, return_model=TRUE, take_log=FALSE)
+
+r_b_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=r_b_var_simulated, var_models=r_b_var_models, horizon=1, take_log=FALSE)
+r_g_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=r_g_var_simulated, var_models=r_g_var_models, horizon=1, take_log=FALSE)
+
+r_b_sim_mae <- mean(abs(r_b_sim_fcasts-b_simulated_rates_test))
+r_g_sim_mae <- mean(abs(r_g_sim_fcasts-g_simulated_rates_test))
+
 # calculate the percentage change in forecast accuracy for the VAR model on
 # the simulated and k-nTS+ series
 

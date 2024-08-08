@@ -1,48 +1,48 @@
-***** make a note in the paper that the times for swapping are technically for all k values,
-***** but the time for only 1 k-value would be marginally faster since the most computationally
-***** expensive parts are performed for all k-values at the same time. i.e., we do the feature
-***** and distance matrix calculation and then just sample the neighbor index and corresponding
-***** time series values for all values of k
+CODE DIRECTIONS
 
-* Note for authors: When cleaning up repository, check in git repo for needed code files at each step. If not there,
-get them from the Mac code folder in google drive.
+Download repository (https://github.com/cdbale/Privacy-and-Forecasting-Empirical).
 
-CODE FOR SIMULATIONS
+-- Simulations --
 
 R files `simulation-accuracy-privacy-weighted-euclidean.R` and `simulation-accuracy-privacy-weighted-euclidean-large-N.R`
-are used to obtain the simulation results from Section 4. Plots used in the paper will be saved to the 
-`Outputs/Figures/Simulation/` folder. The code in the simulation files was written to work with the functions defined in the simulation files. Some of these functions (particularly the
+are used to obtain the simulation results. These files are found in the `Code/Analysis` subdirectory. 
+Plots used in the paper will be saved to the `Outputs/Figures/Simulation/` folder. 
+The code in the simulation files was written to work with the functions defined in the simulation files. Some of these functions (particularly the
 knts_alg() function) were re-written in the `knts_helper_functions.R` file to reduce execution time when running on larger data sets, but the end result is the same.
-
-** What about the simulation results using the VAR model?
-
-
-
 
 ----------------------------------------------------
 
 CODE FOR ANALYZING M3 and M4 DATA
 
-Download repository (put link here).
+Create a `Data` folder in the main repository directory. This is ignored when pushing to the repo for storage limitation reasons.
 
-Create a `Data` folder in the repository. This is ignored when pushing to the repo for storage limitation reasons.
+Create an `M3` folder in the `Data` directory.
 
-Download the M3 data set and place it in an `M3` folder created as a subdirectory of the `Data` folder. Link to data download: https://drive.google.com/drive/folders/1P1mtjdbU03Pbd-JrzbB-vX1als9rt6-h?usp=drive_link.
+Download the M3 data set and place it in the `M3` folder created as a subdirectory of the `Data` folder. Link to data download: https://drive.google.com/drive/folders/1VG_G2vethsJQLRFv1uNuPZFYe0K-Y_ku?usp=sharing.
 
-All python code files are found in the Code/Analysis subdirectory and can be run using a command prompt (we used Anaconda Powershell Prompt).
+All python and R code files are found in the Code/Analysis subdirectory. Python files can be run using a command prompt (we used Anaconda Powershell Prompt).
 
 ## Steps for M3 data
 
 1. Run `Data_Cleaning_M3.py`. (e.g., >>>python Data_Cleaning_M3.py). This creates the train and test data for the original M3 data set, and stores it in the `/Cleaned/M3/` subdirectory of the `Data` folder.
-	Note that there are four files for each data frequency/domain: two training files (one for forecasting the last and second to last points of each time series) and two test files containing those test
-	points for each time series.
+	Note that there are four files for each data frequency/domain: two training files (one for forecasting the last and second to last points of each time series) and two test files containing those test points for each time series.
 
 2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files for forecasting the last and second to last time period using additive noise and differential privacy
 	for the parameter values in the paper. Note that this file also creates the file `M3_computation_time.csv` which tracks the computation time of the various steps involved in the k-nTS+ protection process.
 	This file is found at `/Data/Computation_Time/M3_computation_time.csv`.
 
+
+
+
+
+
+
+
+
+
+
 3. Run `Forecast_for_Feature_Selection_M3.py`. This generates forecasts and measures the series level absolute errors for the original and baseline protected data sets for the last time period assumed available to
-	the data owner. The forecast errors will be predicted using the corresponding time series features in the feature selection methodology in k-nTS+. The file has a dictionary `forecasting_models` where the
+	the data owner (h2). The forecast errors will be predicted using the corresponding time series features in the feature selection methodology in k-nTS+. The file `Forecast_for_Feature_Selection_M3.py` has a dictionary `forecasting_models` where the
 	various forecasting models and some of their arguments/options are specified. The `use_gpu` option for the RNN model should be set to `True` only if you have an Nvidia gpu with the cuda (https://developer.nvidia.com/cuda-toolkit) and torch (https://pytorch.org/get-started/locally/) packages installed. The default for `use_gpu` is set to `False` so that the CPU is used to train the RNN model(s).
 	
 	Note that the following python libraries are required:
@@ -66,7 +66,7 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
 
-9. Run `VAR_weight_forecasts_M3.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values discussed in Section XXX.
+9. Run `VAR_weight_forecasts_M3.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values.
 
 10. Run `updated_tsfeatures_extraction_M3.R` to extract time series features for the final unprotected and protected data sets. Note that all features are saved to the `Data/Features/` folder.
 
@@ -74,11 +74,24 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 12. Run `forecast_privacy_assessment_M3.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M3/Tables".
 
-13. Run `results_computation_M3.R` to compute the accuracy results. Results are saved to.......
+13. Run `magnitude_computation_M3.R` to compute the magnitude of time series based on the test data (actual value from forecasted time period). 
+	Results are saved in the `Data/Magnitudes/` subdirectory.
 
-14. Run `computation_time_analysis.R` to analyze the computation time of the k-nTS+ process. Results are saved to......
+14. Run `results_computation_M3.R` to compute the accuracy results. Results are saved to several files in the `Outputs/Results/` subdirectory.
+	- `avg_accuracy_by_protection.csv`: gives the original and protected mean accuracy and the percent change in mean accuracy (across all models and data sets).
+	- `var_avg_accuracy_by_protection.csv`: same as above but for the VAR-simulated and VAR protected lag results.
+	- `avg_accuracy_by_magnitude_protection.csv`: mean accuracy results broken down by large vs. small magnitude time series for each model and data set.
+	- `var_avg_accuracy_by_magnitude_protection.csv`: same as above but for the VAR-simulated and VAR protected lag results.
+	- `averages_by_model.csv`: mean accuracy results under bounded k-nTS+ (k=3, M=1.5) across all data sets for each forecasting model
+	- `averages_by_data.csv`: mean accuracy results for each data subset and privacy method
 
+15. Run `computation_time_analysis.R` to analyze the computation time of the k-nTS+ process. Results are saved to......
 
+***** make a note in the paper that the times for swapping are technically for all k values,
+***** but the time for only 1 k-value would be marginally faster since the most computationally
+***** expensive parts are performed for all k-values at the same time. i.e., we do the feature
+***** and distance matrix calculation and then just sample the neighbor index and corresponding
+***** time series values for all values of k
 
 
 
@@ -92,6 +105,18 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 2. Run `Create_AN_DP_M3_rate.py`. Same as step 2. above but for the M3 rates.
 
+
+
+
+
+
+
+
+
+
+
+
+
 3. Run `Forecast_for_Feature_Selection_M3_rate.py`. Same as step 3. above but for the M3 rates.
 
 4. Run `k-nts_M3_rate.R`. Same as step 4. above but for the M3 rates.
@@ -104,7 +129,7 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 8. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
-9. Run `VAR_weight_forecasts.py`. Same as above but for M3 rates.
+9. Run `VAR_weight_forecasts_M3_rate.py`. Same as above but for M3 rates.
 
 10. Run `updated_tsfeatures_extraction_M3_rate.R` Same as above but for the M3 rate data.
 
@@ -122,17 +147,36 @@ All python code files are found in the Code/Analysis subdirectory and can be run
 
 
 
-Download the M4 data sets.
+########## Steps for M4 data ##########
 
-***# Steps for M4 data
+Download the M4 data sets. They can be found at the following link: https://drive.google.com/drive/folders/1m84cDf9IzF4sTtvPBvvDKi-GEAaPfw-7?usp=sharing. 
 
-1. Run `Data_Cleaning_M4.py`. Same as step 1. above but for the M4 data.
+Create an folder `M4` inside the `Data` directory of the repository. Place the `Train` and `Test` folders from the above link in the `M4` folder.
 
-2. Run `Create_AN_DP_M4.py`. Same as step 2. above but for the M4 data.
+1. Run `Data_Cleaning_M4.py`.
+
+2. Run `Create_DP_M4.py`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 3. Run `Forecast_for_Feature_Selection_M4.py`. Same as step 3. above but for the M4 data.
-
-4. Run `k-nts_M4.R`. Same as step 4. above but for the M4 data.
 
 5. Run `original_and_baseline_tsfeatures_extraction_M4.R`. Same as step 4. above but for the M4 data.
 
@@ -142,15 +186,22 @@ Download the M4 data sets.
 
 
 
+
+
+
+
 # Steps for M4 rate data
 
-1. Run `Data_Cleaning_M4_rate.py`. Same as step 1. above but for the M4 data.
+1. Run `Data_Cleaning_M4_rate.py`.
 
-2. Run `Create_AN_DP_M4_rate.py`. Same as step 2. above but for the M4 data.
+2. Run `Create_DP_M4_rate.py`. Same as step 2. above but for the M4 data.
+
+
+
+
+
 
 3. Run `Forecast_for_Feature_Selection_M4_rate.py`. Same as step 3. above but for the M4 data.
-
-4. Run `k-nts_M4_rate.R`. Same as step 4. above but for the M4 data.
 
 5. Run `original_and_baseline_tsfeatures_extraction_M4_rate.R`. Same as step 4. above but for the M4 data.
 

@@ -162,9 +162,6 @@ for (i in seq_along(privacy_methods)){
   }
 }
 
-## examine weighted average of proportion identified and
-## max proportion identified
-
 avg_prop_ident <- fcast_ident_data %>%
   group_by(method, parameter, file_id, num_series) %>%
   summarize(avg_proportion_identified = mean(proportion_identified), .groups='drop')

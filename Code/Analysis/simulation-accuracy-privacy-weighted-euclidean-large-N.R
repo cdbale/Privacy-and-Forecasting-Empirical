@@ -14,6 +14,7 @@ library(CORElearn)
 library(ggpubr)
 library(ggh4x)
 library(tidyverse)
+library(tsDyn)
 
 source('custom_feature_functions.R')
 
@@ -574,7 +575,7 @@ fv <- c("entropy_c", "lumpiness", "stability",
 ################################################################################
 
 # number of time series to simulate
-num_series <- 10
+num_series <- 100
 
 # target feature values
 target_spectral_entropy <- runif(n=num_series, min=0.3, max=0.4)
@@ -659,10 +660,10 @@ full_plot<- full_simulated_series %>%
 print(full_plot)
 
 if (file.exists(paste0("../../Outputs/Figures/Simulation/"))){
-  ggsave(filename="10_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
+  ggsave(filename="100_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
 } else {
   dir.create(paste0("../../Outputs/Figures/Simulation/"), recursive=TRUE)
-  ggsave(filename="10_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
+  ggsave(filename="100_simulated_series.pdf", plot=full_plot, path="../../Outputs/Figures/Simulation/")
 }
 
 ######## Forecast using SES, DES, TES
@@ -1193,14 +1194,6 @@ mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) knts_fcasts_ses_g[,which(c
 ################################################################################
 ################################################################################
 ################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
 
 # now scale the time series to rates and compare the 
 # results in terms of forecast accuracy and privacy
@@ -1226,8 +1219,8 @@ rate_conversion <- function(time_series){
 b_simulated_rates <- bind_cols(lapply(lapply(b_simulated_series, log), rate_conversion))
 g_simulated_rates <- bind_cols(lapply(lapply(g_simulated_series, log), rate_conversion))
 
-colnames(b_simulated_rates) <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-colnames(g_simulated_rates) <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+colnames(b_simulated_rates) <- 1:num_series
+colnames(g_simulated_rates) <- 1:num_series
 
 # combine rate series into a dataframe for plotting
 b_simulated_rates_df <- b_simulated_rates %>%
@@ -1249,6 +1242,123 @@ full_simulated_rates_df %>%
   geom_line() +
   facet_wrap(~Set) +
   theme(legend.position='none')
+
+################################################################################
+# plot time series features before and after the rate transformation
+# extract features from original good series, rate good series, original bad
+# series, and rate bad series
+g_features <- tsfeatures(g_simulated_series, features=fv, scale=FALSE) %>%
+  select(-nperiods, -seasonal_period) %>%
+  mutate(Type = "Original",
+         Series = "Desirable")
+
+b_features <- tsfeatures(b_simulated_series, features=fv, scale=FALSE) %>%
+  select(-nperiods, -seasonal_period) %>%
+  mutate(Type = "Original",
+         Series = "Undesirable")
+
+gr_features <- tsfeatures(as.list(g_simulated_rates), features=fv, scale=FALSE) %>%
+  select(-nperiods, -seasonal_period) %>%
+  mutate(Type = "Rate",
+         Series = "Desirable")
+
+br_features <- tsfeatures(as.list(b_simulated_rates), features=fv, scale=FALSE) %>%
+  select(-nperiods, -seasonal_period) %>%
+  mutate(Type = "Rate",
+         Series = "Undesirable")
+
+all_features <- g_features %>%
+  bind_rows(b_features, gr_features, br_features) %>%
+  gather(key="Feature", value="Value", -Type, -Series) %>%
+  mutate(Feature = factor(Feature, levels=c("series_mean", 
+                                            "series_variance",
+                                            "skewness",
+                                            "kurtosis",
+                                            "linearity",
+                                            "curvature",
+                                            "nonlinearity",
+                                            "spike",
+                                            "stability",
+                                            "max_level_shift",
+                                            "time_level_shift",
+                                            "max_var_shift",
+                                            "time_var_shift",
+                                            "max_kl_shift",
+                                            "time_kl_shift",
+                                            "entropy",
+                                            "hurst",
+                                            "trend",
+                                            "lumpiness",
+                                            "crossing_points",
+                                            "flat_spots",
+                                            "unitroot_kpss",
+                                            "unitroot_pp",
+                                            "e_acf1",
+                                            "e_acf10",
+                                            "x_acf1",
+                                            "x_acf10",
+                                            "diff1_acf1",
+                                            "diff1_acf10",
+                                            "diff2_acf1",
+                                            "diff2_acf10",
+                                            "x_pacf5",
+                                            "diff1x_pacf5",
+                                            "diff2x_pacf5"),
+                                    labels=c("Mean",
+                                             "Variance",
+                                             "Skewness",
+                                             "Kurtosis",
+                                             "Linearity",
+                                             "Curvature",
+                                             "Nonlinearity",
+                                             "Spike",
+                                             "Stability",
+                                             "Max Level Shift",
+                                             "Time Level Shift",
+                                             "Max Variance Shift",
+                                             "Time Variance Shift",
+                                             "Max KL Shift",
+                                             "Time KL Shift",
+                                             "Spectral Entropy",
+                                             "Hurst",
+                                             "Trend",
+                                             "Lumpiness",
+                                             "Crossing Points",
+                                             "Flat Spots",
+                                             "Unitroot KPSS",
+                                             "Unitroot PP",
+                                             "Error ACF",
+                                             "Error ACF10",
+                                             "X ACF",
+                                             "X ACF10",
+                                             "First Difference ACF",
+                                             "First Difference ACF10",
+                                             "Second Difference ACF",
+                                             "Second Difference ACF10",
+                                             "X PACF5",
+                                             "First Difference PACF5",
+                                             "Second Difference PACF5"))) 
+                                            
+feature_bp <- all_features %>%
+  ggplot(aes(x=Type, y=Value, color=Series)) +
+  geom_boxplot() +
+  facet_wrap(~Feature, scales='free', ncol=4) +
+  theme(legend.position="bottom",
+        text = element_text(size = 10)) +
+  labs(x = "Time Series Type",
+       y = "Feature Value")
+
+print(feature_bp)
+
+if (file.exists(paste0("../../Outputs/Figures/Simulation/"))){
+  ggsave(filename="100_feature_distributions_simulation.pdf", plot=feature_bp, path="../../Outputs/Figures/Simulation/",
+         width=8, height=10)
+} else {
+  dir.create(paste0("../../Outputs/Figures/Simulation/"), recursive=TRUE)
+  ggsave(filename="100_feature_distributions_simulation.pdf", plot=feature_bp, path="../../Outputs/Figures/Simulation/",
+         width=8, height=10)
+}
+################################################################################
 
 ######## Forecast using SES, DES
 
@@ -1438,7 +1548,7 @@ for (j in 1:nsims){
       r_knts_fcasts_var_b[,i,j] <- split_and_var_forecast(b_simulated_rates_train, horizon=1, take_log=FALSE)
       
       r_knts_fcasts_ses_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(ses(x, h=1)$mean)))
-      r_knts_fcasts_des_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(holt(x, h=1)$mean)))\
+      r_knts_fcasts_des_g[,i,j] <- unname(sapply(g_simulated_rates_train, function(x) as.vector(holt(x, h=1)$mean)))
       r_knts_fcasts_var_g[,i,j] <- split_and_var_forecast(g_simulated_rates_train, horizon=1, take_log=FALSE)
       
       r_knts_idr_b[j,i] <-  simulation_results(confidential_data_list=b_simulated_rates_train, protected_data_list=b_simulated_rates_train, sample_size=sample_size, num_simulations=npsims)
@@ -1660,6 +1770,15 @@ length(b_simulated_rates_train[[1]]) - length(r_b_var_simulated[[1]])
 r_var_idr_b <-  simulation_results(confidential_data_list=lapply(b_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_b_var_simulated, sample_size=sample_size, num_simulations=npsims)
 r_var_idr_g <-  simulation_results(confidential_data_list=lapply(g_simulated_rates_train, function(x) x[3:length(x)]), protected_data_list=r_g_var_simulated, sample_size=sample_size, num_simulations=npsims)
 
+r_b_var_models <- split_and_var_forecast(b_simulated_rates_train, horizon=1, return_model=TRUE, take_log=FALSE)
+r_g_var_models <- split_and_var_forecast(g_simulated_rates_train, horizon=1, return_model=TRUE, take_log=FALSE)
+
+r_b_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=r_b_var_simulated, var_models=r_b_var_models, horizon=1, take_log=FALSE)
+r_g_sim_fcasts <- split_and_forecast_for_simulated(simulated_series=r_g_var_simulated, var_models=r_g_var_models, horizon=1, take_log=FALSE)
+
+r_b_sim_mae <- mean(abs(r_b_sim_fcasts-b_simulated_rates_test))
+r_g_sim_mae <- mean(abs(r_g_sim_fcasts-g_simulated_rates_test))
+
 # calculate the percentage change in forecast accuracy for the VAR model on
 # the simulated and k-nTS+ series
 
@@ -1719,15 +1838,6 @@ mean(c(mean(unlist(lapply(lapply(1:nsims, function(x) r_knts_fcasts_ses_g[,which
 ################################################################################
 ################################################################################
 ################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
 
 # an, dp, knts forecast error on original time series space
 scales <- list(
@@ -1766,10 +1876,10 @@ curve_plot <- ggarrange(avg_pbar_plot, avg_mae_plot, nrow=2, ncol=1)
 print(curve_plot)
 
 if (file.exists(paste0("../../Outputs/Figures/Simulation/"))){
-  ggsave(filename="idr-mae-10-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
+  ggsave(filename="idr-mae-100-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
 } else {
   dir.create(paste0("../../Outputs/Figures/Simulation/"), recursive=TRUE)
-  ggsave(filename="idr-mae-10-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
+  ggsave(filename="idr-mae-100-orig.pdf", plot=curve_plot, path="../../Outputs/Figures/Simulation/")
 }
 
 # an, dp, knts on rate time series space
@@ -1823,16 +1933,6 @@ pct_change_undesirable <- avg_results %>%
   mutate(Undesirable_Original_Avg_MAE = original_avg_mae[2],
          Pct_Change = (Average_Value - Undesirable_Original_Avg_MAE)/Undesirable_Original_Avg_MAE * 100)
 
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
-################################################################################
 ################################################################################
 ################################################################################
 ################################################################################

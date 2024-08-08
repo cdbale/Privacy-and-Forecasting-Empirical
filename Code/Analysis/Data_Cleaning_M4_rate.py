@@ -37,8 +37,8 @@ def import_split_save(time_series_frequency, min_number_series):
     os.makedirs("../../Data/Cleaned/M4_rate/", exist_ok=True)
     
     # import train and test data
-    temp_train = pd.read_csv("../../Data/Train/" + time_series_frequency + "-train.csv").iloc[:,1:]
-    temp_test = pd.read_csv("../../Data/Test/" + time_series_frequency + "-test.csv").iloc[:,1:]
+    temp_train = pd.read_csv("../../Data/M4/Train/" + time_series_frequency + "-train.csv").iloc[:,1:]
+    temp_test = pd.read_csv("../../Data/M4/Test/" + time_series_frequency + "-test.csv").iloc[:,1:]
     
     # remove the missing values from the ends of series
     temp_train = [x.dropna() for i, x in temp_train.iterrows()]
