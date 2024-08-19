@@ -18,7 +18,7 @@ Create a `Data` folder in the main repository directory. This is ignored when pu
 
 Create an `M3` folder in the `Data` directory.
 
-Download the M3 data set and place it in the `M3` folder created as a subdirectory of the `Data` folder. Link to data download: https://drive.google.com/drive/folders/1VG_G2vethsJQLRFv1uNuPZFYe0K-Y_ku?usp=sharing.
+Download the M3 data sets (-monthly, -other, -quarterly, -yearly) and place them in the `M3` folder created as a subdirectory of the `Data` folder. Link to data download: https://drive.google.com/drive/folders/1VG_G2vethsJQLRFv1uNuPZFYe0K-Y_ku?usp=sharing.
 
 All python and R code files are found in the Code/Analysis subdirectory. Python files can be run using a command prompt (we used Anaconda Powershell Prompt).
 
@@ -30,16 +30,6 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files for forecasting the last and second to last time period using additive noise and differential privacy
 	for the parameter values in the paper. Note that this file also creates the file `M3_computation_time.csv` which tracks the computation time of the various steps involved in the k-nTS+ protection process.
 	This file is found at `/Data/Computation_Time/M3_computation_time.csv`.
-
-
-
-
-
-
-
-
-
-
 
 3. Run `Forecast_for_Feature_Selection_M3.py`. This generates forecasts and measures the series level absolute errors for the original and baseline protected data sets for the last time period assumed available to
 	the data owner (h2). The forecast errors will be predicted using the corresponding time series features in the feature selection methodology in k-nTS+. The file `Forecast_for_Feature_Selection_M3.py` has a dictionary `forecasting_models` where the
@@ -65,6 +55,21 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 9. Run `VAR_weight_forecasts_M3.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values.
 
@@ -105,18 +110,6 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 2. Run `Create_AN_DP_M3_rate.py`. Same as step 2. above but for the M3 rates.
 
-
-
-
-
-
-
-
-
-
-
-
-
 3. Run `Forecast_for_Feature_Selection_M3_rate.py`. Same as step 3. above but for the M3 rates.
 
 4. Run `k-nts_M3_rate.R`. Same as step 4. above but for the M3 rates.
@@ -126,6 +119,16 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 6. Run `k-nts-plus_M3_rate.R`. Same as above but for M3 rates.
 
 7. Run `k-nts_plus_M3_rate_bounded_M.R`. Same as above but for M3 rates.
+
+
+
+
+
+
+
+
+
+
 
 8. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
@@ -157,28 +160,22 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 2. Run `Create_DP_M4.py`.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 3. Run `Forecast_for_Feature_Selection_M4.py`. Same as step 3. above but for the M4 data.
 
-5. Run `original_and_baseline_tsfeatures_extraction_M4.R`. Same as step 4. above but for the M4 data.
+
+
+
+
+
+
+
+
+
+
+
+4. Run `original_and_baseline_tsfeatures_extraction_M4.R`. Same as step 4. above but for the M4 data.
+
+5. Run `k-nts_plus_M4.R`.
 
 6. ....
 
@@ -196,20 +193,26 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 2. Run `Create_DP_M4_rate.py`. Same as step 2. above but for the M4 data.
 
-
-
-
-
-
 3. Run `Forecast_for_Feature_Selection_M4_rate.py`. Same as step 3. above but for the M4 data.
 
-5. Run `original_and_baseline_tsfeatures_extraction_M4_rate.R`. Same as step 4. above but for the M4 data.
+4. Run `original_and_baseline_tsfeatures_extraction_M4_rate.R`. Same as step 4. above but for the M4 data.
+
+
+
+
+
+
+
+
+
+
+
+5. Run `k-nts_plus_M4_rate.R`.
 
 6. ....
 
 
 * get rid of DP 0.1 files
-* catch up on running M4-rate code. Run M4 and M4 rate code at the same steps until finished, putting results in appendix of revision.
 CHECK THAT EACH STEP USES THE CORRECT SEASONAL IDENTIFIERS
 *check that window length used is consistent from k-nTS files to k-nTS+ files
 * not running k-nTS, only k-nTS+ and differential privacy

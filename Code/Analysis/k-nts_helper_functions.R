@@ -198,6 +198,9 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
   }
   
+  # replace INF values
+  C[C == Inf] <- 0
+  
   # replace NA values with 0
   for(i in 1:ncol(C)){
     C[,i][is.na(C[,i])] <- 0
@@ -263,6 +266,9 @@ knts_alg <- function(time_series, sp, window_length, kvals, features_to_calculat
     for(i in 1:ncol(C)){
       C[,i][is.na(C[,i])] <- 0
     }
+    
+    # replace INF values
+    C[C == Inf] <- 0
     
     ## allow to remove a constant column if it exists
     to_keep <- apply(C, 2, var) != 0
@@ -376,189 +382,3 @@ knts_bounded <- function(protected_time_series, original_time_series, threshold)
   
   return(new_protected)
 }
-
-# # function to perform k-nTS/k-nTS+
-# knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features){
-#   
-#   # number of time series
-#   num_series <- length(time_series)
-#   
-#   # number of time periods
-#   num_periods <- length(time_series[[1]])
-#   
-#   # matrix to hold new series
-#   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
-#   
-#   # restrict the data to the beginning window
-#   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
-#   
-#   # calculate the features for the current window
-#   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-#   
-#   ## allow to remove a constant column if it exists
-#   C <- C[, apply(C, 2, var) != 0]
-#   
-#   # normalize features and convert C to a c x J matrix (num features by num series)
-#   C <- t(as.data.frame(scale(C)))
-#   
-#   ## Calculate the feature distance matrix D
-#   ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
-#   D <- ones_column %*% diag(t(C)%*%C) - 2*t(C)%*%C + diag(t(C)%*%C) %*% t(ones_column)
-#   
-#   # for each time period in the initial window
-#   for (j in 1:num_series){
-#     
-#     # sort the distances in the jth column smallest to largest
-#     # select from index 2 to k+1 since first index corresponds to the series itself
-#     K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
-#     
-#     # for each series
-#     for (t in 1:window_length){
-#       
-#       # sample an index and replace the value
-#       X_new[t,j] <- time_series[[sample(K, size=1)]][t]
-#       
-#     }
-#   }
-#   
-#   ########################################
-#   ### Continue swapping for the rest of the time periods using a rolling window approach
-#   ########################################
-#   
-#   for (t in (window_length+1):num_periods){
-#     
-#     # restrict the data to the current window
-#     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
-#     
-#     ## calculate the features for the current window
-#     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-#     
-#     ## allow to remove a constant column if it exists
-#     C <- C[, apply(C, 2, var) != 0]
-#     
-#     # normalize features and transpose to a c x J matrix (num features by num series)
-#     C <- t(as.data.frame(scale(C)))
-#     
-#     ## Calculate the feature distance matrix D
-#     D <- ones_column %*% diag(t(C)%*%C) - 2*t(C)%*%C + diag(t(C)%*%C) %*% t(ones_column)
-#     
-#     for (j in 1:num_series){
-#       
-#       # sort the distances in the jth column smallest to largest
-#       # select from index 2 to k+1 since first index corresponds to the series itself
-#       K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
-#       
-#       # sample an index and replace the value
-#       X_new[t,j] <- time_series[[sample(K, size=1)]][t]
-#       
-#     }
-#   }
-#   
-#   # attempt to remove outliers using tsoutliers
-#   X_new <- as.list(as.data.frame(X_new))
-#   
-#   # convert each series to a TS object with appropriate seasonal frequency
-#   X_new <- lapply(X_new, function(x) ts(x, frequency=sp))
-#   
-#   X_new <- lapply(X_new, outlier_removal)
-#   
-#   X_new <- as.matrix(do.call(cbind, X_new))
-#   
-#   return(X_new)
-#   
-# }
-
-# knts_alg <- function(time_series, sp, window_length, k, features_to_calculate, selected_features, importance_weights){
-#   
-#   # number of time series
-#   num_series <- length(time_series)
-#   
-#   # number of time periods
-#   num_periods <- length(time_series[[1]])
-#   
-#   # matrix to hold new series
-#   X_new <- matrix(0.0, nrow=num_periods, ncol=num_series)
-#   
-#   # restrict the data to the beginning window
-#   X_window <- lapply(time_series, function(x) ts(x[1:window_length], frequency=sp))
-#   
-#   # calculate the features for the current window
-#   C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-#   
-#   # normalize features and convert C to a c x J matrix (num features by num series)
-#   C <- t(as.data.frame(scale(C)))
-#   
-#   # create weights matrix
-#   W <- diag(x=importance_weights[to_keep])
-#   
-#   ## Calculate the feature distance matrix D
-#   ones_column <- as.matrix(rep(1, num_series), nrow=num_series)
-#   D <- ones_column %*% diag(t(C)%*%W%*%C) - 2*t(C)%*%W%*%C + diag(t(C)%*%W%*%C) %*% t(ones_column)
-#   
-#   # for each time period in the initial window
-#   for (j in 1:num_series){
-#     
-#     # sort the distances in the jth column smallest to largest
-#     # select from index 2 to k+1 since first index corresponds to the series itself
-#     K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
-#     
-#     # for each series
-#     for (t in 1:window_length){
-#       
-#       # sample an index and replace the value
-#       X_new[t,j] <- time_series[[sample(K, size=1)]][t]
-#       
-#     }
-#   }
-#   
-#   ########################################
-#   ### Continue swapping for the rest of the time periods using a rolling window approach
-#   ########################################
-#   
-#   for (t in (window_length+1):num_periods){
-#     
-#     # restrict the data to the current window
-#     X_window <- lapply(time_series, function(x) ts(x[(t-window_length+1):t], frequency=sp))
-#     
-#     ## calculate the features for the current window
-#     C <- tsfeatures(X_window, features=features_to_calculate, scale=FALSE)[,selected_features]
-#     
-#     ## allow to remove a constant column if it exists
-#     to_keep <- apply(C, 2, var) != 0
-#     C <- C[, to_keep]
-#     
-#     # normalize features and transpose to a c x J matrix (num features by num series)
-#     C <- t(as.data.frame(scale(C)))
-#     
-#     # create weights matrix
-#     W <- diag(x=importance_weights[to_keep])
-#     
-#     ## Calculate the feature distance matrix D
-#     D <- ones_column %*% diag(t(C)%*%W%*%C) - 2*t(C)%*%W%*%C + diag(t(C)%*%W%*%C) %*% t(ones_column)
-#     
-#     for (j in 1:num_series){
-#       
-#       # sort the distances in the jth column smallest to largest
-#       # select from index 2 to k+1 since first index corresponds to the series itself
-#       K <- sort(D[,j], index.return=TRUE)$ix[2:(k+1)]
-#       
-#       # sample an index and replace the value
-#       X_new[t,j] <- time_series[[sample(K, size=1)]][t]
-#       
-#     }
-#   }
-#   
-#   # attempt to remove outliers using tsoutliers
-#   X_new <- as.list(as.data.frame(X_new))
-#   
-#   # convert each series to a TS object with appropriate seasonal frequency
-#   X_new <- lapply(X_new, function(x) ts(x, frequency=sp))
-#   
-#   X_new <- lapply(X_new, outlier_removal)
-#   
-#   X_new <- as.matrix(do.call(cbind, X_new))
-#   
-#   return(X_new)
-#   
-# }
-

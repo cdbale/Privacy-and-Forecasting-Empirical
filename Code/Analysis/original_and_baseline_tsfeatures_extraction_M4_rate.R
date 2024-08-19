@@ -8,7 +8,7 @@
 
 ## Author: Cameron Bale
 
-data_folder <- "M4/"
+data_folder <- "M4_rate/"
 
 library(e1071)
 library(tidyverse)
@@ -32,40 +32,6 @@ file_names <- grep("_h2_train", list.files(file_path), value=TRUE)
 
 file_names
 
-# feature extraction function
-extract_features <- function(time_series, sp, feature_vector){
-  
-  ###
-  # Takes the time_series dataframe, the seasonal period, and a vector
-  # of desired feature names as input. Outputs a dataframe containing the
-  # extracted features (columns) for each series (rows)
-  ###
-  
-  start <- Sys.time()
-
-  # convert to a list of series
-  ts_data <- as.list(as.data.frame(t(time_series)))
-  
-  # remove NA values from the end of each series
-  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
-  # convert each series to a TS object with appropriate seasonal frequency
-  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
-  
-  # truncate data to strictly positive
-  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
-  
-  # take the log of the data
-  ts_data <- lapply(ts_data, log)
-  
-  # calculate time series features
-  features <- tsfeatures(ts_data, features=feature_vector, scale=FALSE)
-  
-  stop <- Sys.time()
-  
-  return(features)
-}
-
 #### compengine includes features in:
 # autocorr_features
 # pred_features
@@ -84,23 +50,21 @@ fv <- c("entropy_c", "lumpiness", "stability",
         "skewness", "kurtosis")
 
 # import file with computation times
-computation_time <- read.csv("../../Data/Computation_Time/M4_computation_time.csv")
+computation_time <- read.csv("../../Data/Computation_Time/M4_rate_computation_time.csv")
 
 for (f in file_names){
   data_set <- read.csv(paste0(file_path, f))
   sp_l <- ifelse(grepl("Daily", f), 7,
                  ifelse(grepl("Hourly", f), 24,
-                        ifelse(grepl("Monthly", f), 12,
+                        ifelse(grepl("Monthly", f), 12, 
                                ifelse(grepl("Quarterly", f), 4,
                                       ifelse(grepl("Weekly", f), 52, 1)))))
-  
   start <- Sys.time()
-  features <- extract_features(data_set, sp=sp_l, feature_vector=fv)
+  features <- extract_features(data_set, sp=sp_l, feature_vector=fv, truncate=FALSE, take_log=FALSE, calculate_cross_correlations=FALSE)
   stop <- Sys.time()
   features <- features %>% select(-nperiods, -seasonal_period)
   computation_time[computation_time$File==f, "feature_extraction"] <- difftime(stop, start, units="secs")
   write.csv(features, file=paste0("../../Data/Features/", data_folder, "features_", f), row.names=FALSE)
-  print(f)
 }
 
-write.csv(computation_time, file="../../Data/Computation_Time/M4_computation_time.csv", row.names=FALSE)
+write.csv(computation_time, file="../../Data/Computation_Time/M4_rate_computation_time.csv", row.names=FALSE)
