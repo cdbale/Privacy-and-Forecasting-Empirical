@@ -126,8 +126,8 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
 
             inverse_rate_distribution_dict[f] = mae_vals.squeeze()
             path = results_path + "Error_Distributions/" 
-            mae_vals.to_csv(path + "inverse_rate_error_distribution_" + f, index=False)
+            mae_vals.to_csv(path + "ir_error_distribution_" + f, index=False)
 
         ddf = pd.DataFrame(inverse_rate_distribution_dict)
 
-        ddf.to_csv(path + file_string + "_inverse_rate_all_distributions_" + forecast_horizon + ".csv", index=False)
+        ddf.to_csv(path + file_string + "_ir_all_distributions_" + forecast_horizon + ".csv", index=False)

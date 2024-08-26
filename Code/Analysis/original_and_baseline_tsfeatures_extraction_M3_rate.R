@@ -24,7 +24,7 @@ if (file.exists(paste0("../../Data/Features/", data_folder))){
   NULL
 } else {
   # create a new sub directory for storing time series features
-  dir.create(file.path(paste0("../../Data/Features/", data_folder)))
+  dir.create(file.path(paste0("../../Data/Features/", data_folder)), recursive=TRUE)
 }
 
 # import names of original and baseline protected data files

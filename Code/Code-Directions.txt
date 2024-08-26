@@ -24,10 +24,10 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 ## Steps for M3 data
 
-1. Run `Data_Cleaning_M3.py`. (e.g., >>>python Data_Cleaning_M3.py). This creates the train and test data for the original M3 data set, and stores it in the `/Cleaned/M3/` subdirectory of the `Data` folder.
-	Note that there are four files for each data frequency/domain: two training files (one for forecasting the last and second to last points of each time series) and two test files containing those test points for each time series.
+1. Run `Data_Cleaning_M3.py`. This creates the train and test data for the original M3 data set, and stores it in the `/Cleaned/M3/` subdirectory of the `Data` folder.
+	Note that there are four files for each data frequency/domain: two training files (one for forecasting the last and second to last points of each time series) and two test data files containing the actual data for the forecasted periods.
 
-2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files for forecasting the last and second to last time period using additive noise and differential privacy
+2. Run `Create_AN_DP_M3.py`. This creates protected versions of each of the M3 training data files using additive noise and differential privacy
 	for the parameter values in the paper. Note that this file also creates the file `M3_computation_time.csv` which tracks the computation time of the various steps involved in the k-nTS+ protection process.
 	This file is found at `/Data/Computation_Time/M3_computation_time.csv`.
 
@@ -53,23 +53,17 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 7. Run `k-nts_plus_M3_bounded_M.R` which creates modified versions of the k-nTS+ (k = 3) protected data sets by bounding the differences between the protected and unprotected values.
 
+
+
+
+
+
+
+
+
+
 8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 9. Run `VAR_weight_forecasts_M3.py` to generate VAR model forecasts based on the simulated VAR series and the protected lagged values.
 
@@ -129,7 +123,6 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 
 
-
 8. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
 9. Run `VAR_weight_forecasts_M3_rate.py`. Same as above but for M3 rates.
@@ -162,17 +155,6 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 3. Run `Forecast_for_Feature_Selection_M4.py`. Same as step 3. above but for the M4 data.
 
-
-
-
-
-
-
-
-
-
-
-
 4. Run `original_and_baseline_tsfeatures_extraction_M4.R`. Same as step 4. above but for the M4 data.
 
 5. Run `k-nts_plus_M4.R`.
@@ -196,16 +178,6 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 3. Run `Forecast_for_Feature_Selection_M4_rate.py`. Same as step 3. above but for the M4 data.
 
 4. Run `original_and_baseline_tsfeatures_extraction_M4_rate.R`. Same as step 4. above but for the M4 data.
-
-
-
-
-
-
-
-
-
-
 
 5. Run `k-nts_plus_M4_rate.R`.
 
