@@ -50,6 +50,8 @@ The code for this project has been run on high-end windows desktops with the fol
 * RAM: 64 GB
 * GPU: RTX 4090
 
+Some of the code files have been run on an M1 Macbook Pro with 32GB of RAM. However, the authors provide no guarantee that *all* code files will successfully execute on Mac based machines, or on machines with less than 64GB of memory. 
+
 A GPU is not required, but *drastically* speeds up training of neural network models. High core-count CPUs are recommended as well, as portions of the code are designed to take advantage of parallel computation resources.
 
 Running all code on a single machine could take upwards of one month. Computation time can be reduced by running the code for each data set (M3, M3_rate, M4, M4_rate) on separate machines. The code instructions are broken out accordingly.
