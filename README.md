@@ -58,7 +58,19 @@ Running all code on a single machine could take upwards of one month. Computatio
 
 ---
 
-## Instructions
+## Code to Output Mapping
+
+Please see the README.md file in the `Code` directory for detailed steps on running code files. Here, we provide a list of the code files that directly produce the results shown in the plots and tables in the paper.
+
+Figures:
+
+Figure 1, 5, 6, 7, 8, 11, 12, 13, 14 (results_computation.R)
+
+Figure 3, 4, 10 (simulation-accuracy-privacy-weighted-euclidean.R)
+
+Figure 9 (computation_time_analysis.R)
+
+Tables:
 
 
 
