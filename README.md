@@ -42,7 +42,7 @@ This repository includes code files written in both Python and R, so make sure y
     - tsDyn (11.0.4.1)
     - tsfeatures (1.1.1)
 
-All file paths are relative to the directory containing the corresponding code file. Please set your working directory accordingly.
+All file paths are relative to the `Code/Analysis/` directory. When running code, please set your working directory accordingly.
 
 ---
 
