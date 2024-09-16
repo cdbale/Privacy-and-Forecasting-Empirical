@@ -26,7 +26,7 @@ This repository includes code files written in both Python and R, so make sure y
     - statsmodels (0.14.0)
     - torch (2.3.1)
 
-* R: 
+* R (Ver. 4.1.1): 
     - CORElearn (1.57.3)
     - e1071 (1.7.14)
     - ExtDist (0.7.2)
@@ -41,6 +41,8 @@ This repository includes code files written in both Python and R, so make sure y
     - tidyverse (2.0.0)
     - tsDyn (11.0.4.1)
     - tsfeatures (1.1.1)
+
+All file paths are relative to the directory containing the corresponding code file. Please set your working directory accordingly.
 
 ---
 
