@@ -15,7 +15,7 @@ error_dist_path <- paste0("../../Outputs/Results/", data_folder, "Error_Distribu
 res_files <- list.files(error_dist_path)
 
 res_files <- grep("_all_distributions_h1", res_files, value=TRUE)
-res_files <- grep("inverse_rate", res_files, value=TRUE, invert=TRUE)
+res_files <- grep("_ir_", res_files, value=TRUE, invert=TRUE)
 
 all_results <- lapply(res_files, function(x) read_csv(paste0(error_dist_path, x)))
 
@@ -63,14 +63,14 @@ all_original_results <- all_original_results %>%
 var_protected_results <- var_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
-# if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
-#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-# } else {
-#   dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
-#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-# }
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+} else {
+  dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
+  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+}
 
 ################################################################################
 ################################################################################
@@ -131,7 +131,7 @@ write.csv(mae_by_model, file=paste0("../../Outputs/Results/", data_folder, "Tabl
 ir_res_files <- list.files(error_dist_path)
 
 ir_res_files <- grep("all_distributions_h1", ir_res_files, value=TRUE)
-ir_res_files <- grep("inverse_rate", ir_res_files, value=TRUE)
+ir_res_files <- grep("_ir_", ir_res_files, value=TRUE)
 
 all_ir_results <- lapply(ir_res_files, function(x) read_csv(paste0(error_dist_path, x)))
 
@@ -190,30 +190,36 @@ if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
 # for each privacy method
 original_m3_results <- read.csv("../../Outputs/Results/M3/Tables/all_original_results.csv")
 
+# MAE on the original data
 ir_original_global_avg_mae <- original_m3_results %>%
   summarize(global_avg_MAE = mean(values)) %>%
   pull(global_avg_MAE)
 
+# VAR MAE on the original data
 ir_original_var_global_avg_mae <- original_m3_results %>%
   filter(Model == "VAR") %>%
   summarize(global_avg_MAE = mean(values)) %>%
   pull(global_avg_MAE)
 
+# change in MAE for unprotected IR data
 ir_original_avgs <- all_ir_original_results %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%
   mutate(original_global_avg_MAE=ir_original_global_avg_mae,
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100)
 
+# original model-specific MAE
 original_model_avgs <- original_m3_results %>%
   group_by(Model) %>%
   summarize(original_global_avg_MAE = mean(values))
 
+# change in model-specific MAE for unprotected IR data
 ir_original_model_avgs <- all_ir_original_results %>%
   group_by(Model) %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%
   left_join(original_model_avgs, by = "Model") %>%
   mutate(percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100)
 
+# protection method-specific change in MAE
 ir_protection_avgs <- all_ir_protected_results %>%
   group_by(Protection, Parameter) %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%
@@ -223,6 +229,7 @@ ir_protection_avgs <- all_ir_protected_results %>%
 
 write.csv(ir_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_rate_protection_avgs.csv"), row.names=FALSE)
 
+# protection method-specific change in MAE for VAR methods
 ir_var_protection_avgs <- var_ir_protected_results %>%
   group_by(Protection, Parameter) %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%
@@ -260,10 +267,13 @@ ir_data_avgs <- protected_ir_data_avgs %>%
   left_join(original_ir_data_avgs, by="Data") %>%
   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
 
+write.csv(ir_data_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_averages_by_data.csv"), row.names=FALSE)
+
 ################################################################################
 ################################################################################
 
-# calculate the mae under each model for the original and k-nTS+ (k = 3) data
+# calculate the mae under each model for the RATE data (above code is for inverse
+# rate data)
 original_model_ranks_mae <- all_original_results %>%
   group_by(Model) %>%
   summarize(MAE = mean(values)) %>%
@@ -279,28 +289,10 @@ protected_model_ranks_mae <- all_protected_results %>%
 
 write.csv(protected_model_ranks_mae, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_averages_by_model.csv"), row.names=FALSE)
 
-original_ir_model_ranks_mae <- all_ir_original_results %>%
-  group_by(Model) %>%
-  summarize(MAE = mean(values)) %>%
-  arrange(MAE)
-
-# check percentage change in forecast accuracy from inverse rate conversion
-original_ir_model_ranks_mae %>%
-  ungroup() %>%
-  left_join(original_model_avgs, by="Model") %>%
-  mutate(pct_change_mae = (MAE - original_global_avg_MAE)/original_global_avg_MAE * 100)
-
-protected_ir_model_ranks_mae <- all_ir_protected_results %>%
-  filter(Protection == "k-nts-plus", Parameter == "3") %>%
-  group_by(Model) %>%
-  summarize(MAE = mean(values)) %>%
-  left_join()
-  arrange(MAE)
-
 ################################################################################
 ################################################################################
 
-# calculate the mae under each model for the original and k-nTS+ (k = 3) data
+# calculate the mae under each data set for the RATE data
 original_data_ranks_mae <- all_original_results %>%
   group_by(Data) %>%
   summarize(MAE = mean(values))

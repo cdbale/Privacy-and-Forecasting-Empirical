@@ -26,33 +26,7 @@ data_folder <- "M4/"
 # - else A_i - P_i < 0 (meaning A_i < P_i) then set P_i = A_i + M
 
 source("custom_feature_functions.R")
-
-# function to import and process series
-import_data <- function(file_name, file_path, sp){
-  
-  ###
-  # Takes the name file_name of a time series data set and the seasonal period
-  # of that time series data. Imports the data, pre-processes and converts 
-  # to a timeseries object, and returns the data.
-  ###
-  
-  # import data and convert to a list of series
-  ts_data <- as.list(as.data.frame(t(read.csv(paste0(file_path, file_name)))))
-  
-  # remove NA values from the end of each series
-  ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
-  
-  # convert each series to a TS object with appropriate seasonal frequency
-  ts_data <- lapply(ts_data, function(x) ts(x, frequency=sp))
-  
-  # truncate data to strictly positive
-  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
-
-  # take the log of the data
-  ts_data <- lapply(ts_data, log)
-  
-  return(ts_data)
-}
+source("k-nts_helper_functions.R")
 
 # test on a single k-nTS+ file
 data_path <- paste0("../../Data/Cleaned/", data_folder)
@@ -63,23 +37,6 @@ og_files <- grep("_h1_train", list.files(data_path), value=TRUE)
 og_files <- grep("AN_", og_files, value=TRUE, invert=TRUE)
 og_files <- grep("DP_", og_files, value=TRUE, invert=TRUE)
 og_files <- grep("k-nts", og_files, value=TRUE, invert=TRUE)
-
-# build function to do the trimming for a given time series
-knts_bounded <- function(protected_time_series, original_time_series, threshold){
-  
-  # set threshold
-  M <- threshold*sd(original_time_series)
-  
-  # if the protected value is too small, replace it with A_i - M, otherwise, replace it with A_i + M
-  new_protected <- ifelse(original_time_series - protected_time_series > 0, original_time_series - M, original_time_series + M)
-  
-  # check whether within threshold
-  to_keep <- abs(original_time_series - protected_time_series) <= M
-  # replace the values we want to keep
-  new_protected[to_keep] <- protected_time_series[to_keep]
-  
-  return(new_protected)
-}
 
 # do the trimming for all data sets
 
@@ -93,7 +50,12 @@ for (f in knts_files){
   og_f <- grep(file_id, og_files, value=TRUE)
   
   # set seasonal period
-  sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+  # determine sp
+  sp <- ifelse(grepl("Daily", f), 7,
+               ifelse(grepl("Hourly", f), 24,
+                      ifelse(grepl("Monthly", f), 12, 
+                             ifelse(grepl("Quarterly", f), 4,
+                                    ifelse(grepl("Weekly", f), 52, 1)))))
   
   # import data sets
   knts_data <- import_data(f, data_path, sp=sp)

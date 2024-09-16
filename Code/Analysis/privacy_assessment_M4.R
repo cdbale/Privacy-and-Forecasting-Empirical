@@ -3,7 +3,7 @@
 
 # Author: Cameron Bale
 
-data_folder = "M4_rate/"
+data_folder = "M4/"
 
 ######## start with calculating the identification risk from
 ######## random guessing
@@ -68,6 +68,9 @@ process_series <- function(time_series){
   
   # remove NA values from each series
   ts_data <- lapply(ts_data, function(x) x[!is.na(x)])
+  
+  # truncate data to strictly positive
+  ts_data <- lapply(ts_data, function(x) ifelse(x >= 1, x, 1))
   
   # split X into separate data sets, one for each series length
   Xs <- list()
@@ -187,7 +190,7 @@ simulation_results <- function(confidential_data_list, protected_data_list, samp
 E <- 10
 
 # number of simulations
-S <- 3
+S <- 20
 
 # obtain names of files for protected data for forecasting the last period
 protected_file_names <- list.files(paste0("../../Data/Cleaned/", data_folder))
@@ -201,16 +204,9 @@ protected_file_names <- protected_file_names[!protected_file_names %in% file_nam
 protected_file_names
 
 privacy_methods = list("original" = c(""),
-                       "VAR-simulated" = c("sim"),
-                       "DP_" = c(1, 4.6, 10), 
+                       "DP_" = c(1, 4.6, 10, 20), 
                        "k-nts-plus_" = c(3, 5, 7),
                        "k-nts-plus-bounded_" = c("3-0.5", "3-1", "3-1.5"))
-
-var_sim_files <- list.files("../../Outputs/VAR Simulated/M4_rate/")
-# make sure protected versions are excluded
-var_sim_files <- grep("AN_", var_sim_files, value=TRUE, invert=TRUE)
-var_sim_files <- grep("DP_", var_sim_files, value=TRUE, invert=TRUE)
-var_sim_files <- grep("k-nts", var_sim_files, value=TRUE, invert=TRUE)
 
 weighted_ident <- list()
 
@@ -253,7 +249,7 @@ for (i in seq_along(privacy_methods)){
         X <- process_series(read.csv(paste0(fp, grep(confidential_file_prefix, file_names, value=TRUE))))
         
         # import the protected series
-        Xp <- process_series(read.csv(paste0("../../Outputs/VAR Simulated/M4_rate/", pm_files[f])))
+        Xp <- process_series(read.csv(paste0("../../Outputs/VAR Simulated/M4/", pm_files[f])))
         
         # the VAR simulated series may not be as long as the unprotected series due to the lags needed 
         # in the simulation process.
@@ -312,18 +308,6 @@ library(tidyverse)
 
 length_counts <- unlist(length_counts)
 
-proportions <- lapply(weighted_ident, function(x) lapply(x, function(y) y * num_series/length_counts))
-
-max_proportions <- lapply(proportions, function(x) sapply(x, function(y) max(y)))
-
-max_proportions <- lapply(1:length(max_proportions), function(x) tibble("Method"=names(privacy_methods)[x],
-                                                                        "AvgIdentificationProb"=max_proportions[[x]],
-                                                                        "Parameter"=names(max_proportions[[x]])))
-
-max_proportions <- do.call(rbind, max_proportions)
-
-###
-
 totals <- lapply(weighted_ident, function(x) sapply(x, function(y) sum(y)))
 
 totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_methods)[x],
@@ -332,4 +316,11 @@ totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_met
 
 totals <- do.call(rbind, totals)
 
-write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/rate_overall_privacy_averages.csv"), row.names = FALSE)
+# check if sub directory exists 
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/overall_privacy_averages.csv"), row.names = FALSE)
+} else {
+  # create a new sub directory for storing time series features
+  dir.create(file.path(paste0("../../Outputs/Results/", data_folder, "Tables/")), recursive=TRUE)
+  write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/overall_privacy_averages.csv"), row.names = FALSE)
+}

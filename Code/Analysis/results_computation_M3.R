@@ -89,14 +89,14 @@ all_original_results <- all_original_results %>%
 var_protected_results <- var_protected_results %>%
   filter(Model != "VAR" | Data != "yearly-MICRO")
 
-# if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
-#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-# } else {
-#   dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
-#   write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
-#   write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
-# }
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+} else {
+  dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
+  write.csv(all_original_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_original_results.csv"), row.names = FALSE)
+  write.csv(all_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/all_protected_results.csv"), row.names = FALSE)
+}
 
 ################################################################################
 ################################################################################
@@ -178,7 +178,7 @@ var_magnitude_protection_avgs <- var_protected_results %>%
   mutate(percent_change_mae = (global_avg_MAE.x - global_avg_MAE.y)/global_avg_MAE.y * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(var_magnitude_protected_results, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_avg_accuracy_by_magnitude_protection.csv"), row.names=FALSE)
+write.csv(var_magnitude_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_avg_accuracy_by_magnitude_protection.csv"), row.names=FALSE)
 
 # calculate the mae under each model for the original and k-nTS+ (k = 3) data
 

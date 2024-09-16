@@ -40,7 +40,7 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 	- bayesian-optimization
 	- darts
 	- lightgbm
-	
+
 4. Run `k-nts_M3.R` which protects the M3 data using k-nTS based on manual feature selection. See the paper for discussion of the chosen features.
 	This protects the data through time T, with the last period being treated as the period to be forecasted (i.e., T+1).
 
@@ -52,15 +52,6 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 	the protection for a given data set.
 
 7. Run `k-nts_plus_M3_bounded_M.R` which creates modified versions of the k-nTS+ (k = 3) protected data sets by bounding the differences between the protected and unprotected values.
-
-
-
-
-
-
-
-
-
 
 8. Run `Final_Forecasts_M3.py`. This generates forecasts and measures the series level absolute errors for the original and
 	protected data sets. Privacy methods used are additive noise, differential privacy, k-nTS, and k-nTS+.
@@ -86,11 +77,19 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 
 15. Run `computation_time_analysis.R` to analyze the computation time of the k-nTS+ process. Results are saved to......
 
+
+
+
+
+
+
+
 ***** make a note in the paper that the times for swapping are technically for all k values,
 ***** but the time for only 1 k-value would be marginally faster since the most computationally
 ***** expensive parts are performed for all k-values at the same time. i.e., we do the feature
 ***** and distance matrix calculation and then just sample the neighbor index and corresponding
 ***** time series values for all values of k
+
 
 
 
@@ -113,15 +112,6 @@ All python and R code files are found in the Code/Analysis subdirectory. Python 
 6. Run `k-nts-plus_M3_rate.R`. Same as above but for M3 rates.
 
 7. Run `k-nts_plus_M3_rate_bounded_M.R`. Same as above but for M3 rates.
-
-
-
-
-
-
-
-
-
 
 8. Run `Final_Forecasts_M3_rate.py`. Same as above but for M3 rates.
 
@@ -159,7 +149,29 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 5. Run `k-nts_plus_M4.R`.
 
-6. ....
+6. Run `k-nts_plus_M4_bounded_M.R`.
+
+7. Run `Final_Forecasts_M4.py`. Same as above but for M4.
+
+8. Run `privacy_assessment_M4.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables/".
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+9. Run `forecast_privacy_assessment_M4.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables".
+
+8. ....
 
 
 
@@ -181,10 +193,27 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 5. Run `k-nts_plus_M4_rate.R`.
 
-6. ....
+6. Run `k-nts_plus_M4_rate_bounded_M.R`.
+
+7. Run `Final_Forecasts_M4_rate.py`. Same as above but for M4 rate data.
+
+8. Run `privacy_assessment_M4_rate.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables/".
 
 
-* get rid of DP 0.1 files
+
+
+
+
+
+
+
+
+
+
+9. Run `forecast_privacy_assessment_M4_rate.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables".
+
+10. ....
+
+
 CHECK THAT EACH STEP USES THE CORRECT SEASONAL IDENTIFIERS
 *check that window length used is consistent from k-nTS files to k-nTS+ files
-* not running k-nTS, only k-nTS+ and differential privacy

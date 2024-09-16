@@ -22,7 +22,7 @@ pmf <- function(x){
 
 # Author: Cameron Bale
 
-data_folder = "M4_rate/"
+data_folder = "M4/"
 
 ## we will use the test data and the forecast files
 
@@ -52,9 +52,7 @@ file_names <- grep("_h1_test", list.files(fp), value=TRUE)
 file_names
 
 privacy_methods = list("original" = c("1"),
-                       "var-sim-lag" = c("s"), 
-                       "var-knts-lag" = c("k"), 
-                       "DP_" = c(1, 4.6, 10), 
+                       "DP_" = c(1, 4.6, 10, 20), 
                        "k-nts-plus_" = c(3, 5, 7),
                        "k-nts-plus-bounded_" = c("3-0.5", "3-1", "3-1.5"))
 
@@ -166,24 +164,9 @@ avg_prop_ident <- fcast_ident_data %>%
   group_by(method, parameter, file_id, num_series) %>%
   summarize(avg_proportion_identified = mean(proportion_identified), .groups='drop')
       
-max_prop_ident <- avg_prop_ident %>%
-  group_by(method, parameter) %>%
-  summarize(max_prop = max(avg_proportion_identified))
-      
 weight_avg_prop_ident <- avg_prop_ident %>%
   group_by(method, parameter) %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
             total_series = sum(num_series))
-      
-var_fcast_prob_ident <- fcast_ident_data %>%
-  filter(model == "VAR") %>%
-  group_by(method, parameter, file_id, num_series) %>%
-  summarize(avg_proportion_identified = mean(proportion_identified), .groups='drop') %>%
-  filter(method %in% c("var-sim-lag", "k-nts-plus_", "k-nts-plus-bounded_")) %>%
-  group_by(method, parameter) %>%
-  summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
-            total_series = sum(num_series))
 
-write.csv(weight_avg_prop_ident, "../../Outputs/Results/M4_rate/Tables/M4_forecast_identification_probabilities.csv", row.names=FALSE)
-
-write.csv(var_fcast_prob_ident, "../../Outputs/Results/M4_rate/Tables/M4_VAR_forecast_identification_probabilities.csv", row.names=FALSE)
+write.csv(weight_avg_prop_ident, paste0("../../Outputs/Results/", data_folder, "Tables/forecast_identification_probabilities.csv"), row.names=FALSE)
