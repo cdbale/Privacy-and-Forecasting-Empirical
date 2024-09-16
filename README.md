@@ -11,7 +11,7 @@ This repository contains the code and (links to) the data used to produce the re
 
 ---
 
-## Instructions and Computational Requirements
+## Computational Requirements
 
 This repository includes code files written in both Python and R, so make sure you have both installed. We used the following packages and versions:
 
@@ -46,13 +46,17 @@ All file paths are relative to the `Code/Analysis/` directory. When running code
 
 The code for this project has been run on high-end windows desktops with the following specs:
 
-CPU: intel i9-14900k / AMD Ryzen 9 7900x
-RAM: 64 GB
-GPU: RTX 4090
+* CPU: Intel i9-14900k / AMD Ryzen 9 7900x
+* RAM: 64 GB
+* GPU: RTX 4090
 
 A GPU is not required, but *drastically* speeds up training of neural network models. High core-count CPUs are recommended as well, as portions of the code are designed to take advantage of parallel computation resources.
 
-Running all code on a single machine could take upwards of one month. Computation time can be reduced by running the code for each data set (M3, M3_rate, M4, M4_rate) on separate machines.
+Running all code on a single machine could take upwards of one month. Computation time can be reduced by running the code for each data set (M3, M3_rate, M4, M4_rate) on separate machines. The code instructions are broken out accordingly.
 
 ---
+
+## Instructions
+
+
 
