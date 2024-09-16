@@ -16,7 +16,6 @@ from sktime.forecasting.exp_smoothing import ExponentialSmoothing
 from sktime.forecasting.base import ForecastingHorizon
 from statsmodels.tsa.vector_ar.var_model import VAR
 from sktime.forecasting.arima import AutoARIMA
-import lightgbm as lgb
 from sktime.performance_metrics.forecasting import mean_absolute_error, median_absolute_error, mean_absolute_percentage_error, MeanAbsoluteError
 from data_protection_functions import *
 from data_processing_functions import *
