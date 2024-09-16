@@ -11,6 +11,11 @@ Data/
 # Outputs, e.g., figures, forecasts, data, etc.
 Outputs/
 
+Drafts/
+IJF_Submission/
+Sources/
+
+
 # Private Work, i.e., things we don't want showing up in the repo when we make it public
 Private/
 
