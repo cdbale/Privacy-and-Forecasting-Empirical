@@ -62,7 +62,7 @@ Running all code on a single machine could take upwards of one month. Computatio
 
 Please see the README.md file in the `Code` directory for detailed steps on running code files. Here, we provide a list of the code files that directly produce the results shown in the plots and tables in the paper.
 
-**Figures**:
+***Figures***:
 
 The `feature_analysis.R` file is used to produce the following figures (listed in order of production in the code, not appearance in the paper). The figures are saved to the `Outputs/Figures/M3/` directory:
 
@@ -84,7 +84,7 @@ The `simulation-accuracy-privacy-weighted-euclidean.R` file is used to produce t
 
 The `computation_time_analysis.R` file is used to produce Figure 9 (`computation_cost_plot.pdf`).
 
-**Tables**:
+***Tables***:
 
 Table 17 (feature_analysis.R), output from lines 836-860.
 
