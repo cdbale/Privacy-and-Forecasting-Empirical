@@ -1072,6 +1072,8 @@ mm_selected <- m3_sf %>%
   summarize(n=n()) %>%
   filter(n == 3)
 
+print(mm_selected)
+
 ## replicating how we chose the features for M3 monthly micro
 ## for display in the boxplot figure
 

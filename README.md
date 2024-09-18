@@ -62,15 +62,31 @@ Running all code on a single machine could take upwards of one month. Computatio
 
 Please see the README.md file in the `Code` directory for detailed steps on running code files. Here, we provide a list of the code files that directly produce the results shown in the plots and tables in the paper.
 
-Figures:
+**Figures**:
 
-Figure 1, 5, 6, 7, 8, 11, 12, 13, 14 (results_computation.R)
+The `feature_analysis.R` file is used to produce the following figures (listed in order of production in the code, not appearance in the paper). The figures are saved to the `Outputs/Figures/M3/` directory:
 
-Figure 3, 4, 10 (simulation-accuracy-privacy-weighted-euclidean.R)
+* Figure 11 (`M3_RReliefF_Weights.pdf`)
+* Figure 12 (`M3_OOB.pdf`)
+* Figure 5 (`M3_RFE_selection.pdf`)
+* Figure 1 (`side-by-side-series.pdf`)
+* Figure 6 (`side-by-side-protected-series.pdf`)
+* Figure 7 (`features-boxplot.pdf`)
+* Figure 8 (`features-pca.pdf`)
+* Figure 14 (`full-feature-pca.pdf`)
+* Figure 13 (`cross_correlation_distributions.pdf`)
 
-Figure 9 (computation_time_analysis.R)
+The `simulation-accuracy-privacy-weighted-euclidean.R` file is used to produce the following figures (listed in order of production in the code, not appearance in the paper). The figures are saved to the `Outputs/Figures/Simulation/` directory:
 
-Tables:
+* Figure 3 (`10_simulated_series.pdf`)
+* Figure 10 (`feature_distribution_simulation.pdf`)
+* Figure 4 (`idr-mae-10-orig.pdf`)
 
+The `computation_time_analysis.R` file is used to produce Figure 9 (`computation_cost_plot.pdf`).
 
+**Tables**:
+
+Table 17 (feature_analysis.R), output from lines 836-860.
+
+Table 18 (`mean_corr_diffs.csv` and `mean_var_corr_diffs.csv`).
 
