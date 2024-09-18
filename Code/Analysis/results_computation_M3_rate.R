@@ -89,7 +89,7 @@ protection_avgs <- all_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_protection_avgs.csv"), row.names=FALSE)
+write.csv(protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_accuracy_by_protection.csv"), row.names=FALSE)
 
 var_original_global_avg_mae <- all_original_results %>%
   filter(Model == "VAR") %>%
@@ -103,25 +103,25 @@ var_protection_avgs <- var_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/rate_var_protection_avgs.csv"), row.names=FALSE)
+write.csv(var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/var_avg_accuracy_by_protection.csv"), row.names=FALSE)
 
-################################################################################
-
-# k-nTS+ (k = 3) model specific results
-original_model_ranks_mae <- all_original_results %>%
-  group_by(Model) %>%
-  summarize(original_avg_mae = mean(values), .groups='drop')
-
-protected_model_ranks_mae <- all_protected_results %>%
-  filter(Protection == "k-nts-plus", Parameter == "3") %>%
-  group_by(Model) %>%
-  summarize(avg_mae = mean(values), .groups='drop')
-
-mae_by_model <- protected_model_ranks_mae %>%
-  left_join(original_model_ranks_mae, by="Model") %>%
-  mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
-
-write.csv(mae_by_model, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_knts_model_results.csv"), row.names=FALSE)
+# ################################################################################
+# 
+# # k-nTS+ (k = 3) model specific results
+# original_model_ranks_mae <- all_original_results %>%
+#   group_by(Model) %>%
+#   summarize(original_avg_mae = mean(values), .groups='drop')
+# 
+# protected_model_ranks_mae <- all_protected_results %>%
+#   filter(Protection == "k-nts-plus", Parameter == "3") %>%
+#   group_by(Model) %>%
+#   summarize(avg_mae = mean(values), .groups='drop')
+# 
+# mae_by_model <- protected_model_ranks_mae %>%
+#   left_join(original_model_ranks_mae, by="Model") %>%
+#   mutate(pct_change = (avg_mae - original_avg_mae)/original_avg_mae * 100)
+# 
+# write.csv(mae_by_model, file=paste0("../../Outputs/Results/", data_folder, "Tables/avg_knts_model_results.csv"), row.names=FALSE)
 
 ################################################################################
 ################################################################################
@@ -227,7 +227,7 @@ ir_protection_avgs <- all_ir_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(ir_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_rate_protection_avgs.csv"), row.names=FALSE)
+write.csv(ir_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_avg_accuracy_by_protection.csv"), row.names=FALSE)
 
 # protection method-specific change in MAE for VAR methods
 ir_var_protection_avgs <- var_ir_protected_results %>%
@@ -237,7 +237,7 @@ ir_var_protection_avgs <- var_ir_protected_results %>%
          percent_change_mae = (global_avg_MAE-original_global_avg_MAE)/original_global_avg_MAE * 100) %>%
   arrange(Protection, Parameter)
 
-write.csv(ir_var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_var_rate_protection_avgs.csv"), row.names=FALSE)
+write.csv(ir_var_protection_avgs, file=paste0("../../Outputs/Results/", data_folder, "Tables/ir_var_avg_accuracy_by_protection.csv"), row.names=FALSE)
 
 # model specific results
 original_ir_model_avgs <- original_m3_results %>%

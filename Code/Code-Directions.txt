@@ -169,22 +169,18 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 5. Run `k-nts_plus_M4_rate.R`.
 
+
+
+
+
+
+
+
 6. Run `k-nts_plus_M4_rate_bounded_M.R`.
 
 7. Run `Final_Forecasts_M4_rate.py`. Same as above but for M4 rate data.
 
 8. Run `privacy_assessment_M4_rate.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables/".
-
-
-
-
-
-
-
-
-
-
-
 
 9. Run `forecast_privacy_assessment_M4_rate.R` to perform the forecast identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables".
 

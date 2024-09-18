@@ -57,8 +57,8 @@ for (f in knts_files){
                                     ifelse(grepl("Weekly", f), 52, 1)))))
   
   # import data sets
-  knts_data <- import_data(f, data_path, sp=sp)
-  og_data <- import_data(og_f, data_path, sp=sp)
+  knts_data <- import_data(f, data_path, sp=sp, truncate=FALSE, take_log=FALSE)
+  og_data <- import_data(og_f, data_path, sp=sp, truncate=FALSE, take_log=FALSE)
   
   for (th in threshold_values){
     

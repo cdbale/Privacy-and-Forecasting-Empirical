@@ -86,7 +86,50 @@ The `computation_time_analysis.R` file is used to produce Figure 9 (`computation
 
 ***Tables***:
 
-Table 17 (feature_analysis.R), output from lines 836-860.
+Table 1 values output from lines 836-860 from `feature_analysis.R`.
 
-Table 18 (`mean_corr_diffs.csv` and `mean_var_corr_diffs.csv`).
+Table 2 values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean.R`.
 
+Table 4 contains values from several code and `.csv` files. The `.csv` files are saved to `Outputs/Results/M3/Tables/`: 
+
+* `results_computation_M3.R` produces the following:
+    - `avg_accuracy_by_protection.csv` gives the original and protected mean accuracy and the percent change in mean accuracy (across all models and data sets).
+* `privacy_assessment_M3.R` produces the following:
+    - `overall_privacy_averages.csv` contains the average identification disclosure risk across all data sets for each privacy method.
+* `forecast_privacy_assessment_M3.R` produces the following:
+    - `weighted_fcast_prop_ident.csv` contains the average forecast disclosure risk across all data sets for all non-VAR-based privacy methods.
+
+The files `results_computation_m3_rate.R`, `privacy_assessment_M3_rate.R`, and `forecast_privacy_assessment_M3_rate.R` produce analagous files for the M3-rate data and inverse rate data saved to `Outputs/Results/M3_rate/Tables/`.
+
+Table 5 contains values produced in a similar way to the values in Table 4:
+
+* `results_computation_M3.R` produces the following:
+    - `var_avg_accuracy_by_protection.csv`: same as above but for the VAR-simulated and VAR protected lag results.
+* `privacy_assessment_M3.R` produces the following:
+    - `overall_privacy_averages.csv` contains the average identification disclosure risk across all data sets for each privacy method.
+* `forecast_privacy_assessment_M3.R` produces the following:
+    - `weighted_var_fcast_prop_ident.csv` same as above but for VAR-based privacy methods.
+
+Table 6 contains values produced in a similar way to the values in Tables 4 and 5, but using the `results_computation_M3_rate.R`, `privacy_assessment_M3_rate.R`, and `forecast_privacy_assessment_M3_rate.R` files.
+
+Note that for the second rows in Tables 5 and 6, the accuracy results are obtained from the model-specific *k*-nTS+ results (`averages_by_model.csv` and `rate_averages_by_model.csv`)
+
+Tables 7, 8, and 9 (similar to Table 2) values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean.R`.
+
+Tables 10 and 11 contain values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean-large-N.R`.
+
+Table 12 contains results produced by `results_computation_M3.R` and saved to `average_accuracy_by_magnitude_protection.R`.
+
+Table 13 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_model.csv`, `rate_averages_by_model.csv` and `ir_averages_by_model.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
+
+Table 14 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_data.csv`, `rate_averages_by_data.csv` and `ir_averages_by_data.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
+
+Table 15 contains results produced by `results_computation_M4.R`, `privacy_assessment_M4.R`, and `forecast_privacy_assessment_M4.R`, saved to `protection_avgs.csv`, `overall_privacy_averages.csv`, and `forecast_identification_probabilities.csv` in the `Outputs/Results/M4/Tables/` directory.
+
+*********Table 16 contains the same results as Table 15 but for the M4-rate data, produced using the analagous files.
+
+Table 17 contains values output from lines 836-860 in `feature_analysis.R`.
+
+Table 18 contains values from the files `mean_corr_diffs.csv` and `mean_var_corr_diffs.csv`, both produced using `feature_analysis.R`.
+
+Tables 19 and 20 contain hyperparameter values found in the code files `Final_Forecasts_M3.py`, `Final_Forecasts_M3_rate.py`, `LGBM_functions.py` and `RNN_functions.py`.
