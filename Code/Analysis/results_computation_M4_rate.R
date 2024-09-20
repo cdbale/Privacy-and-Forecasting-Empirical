@@ -125,20 +125,20 @@ if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
 # somewhat subjective choice here...
 # we choose to exclude any cases where the forecast error was over 100,000
 
-to_exclude <- all_ir_protected_results %>%
-  group_by(Protection, Parameter, Model, Data) %>%
-  summarize(avg_AE = mean(values), .groups='drop') %>%
-  arrange(desc(avg_AE)) %>%
-  unite('file', Protection:Data) %>%
-  slice(1:3) %>%
-  pull(file)
-
-# remove the large outlying errors
-all_ir_protected_results <- all_ir_protected_results %>%
-  select(Protection, Parameter, Model, Data, Horizon, Snum, values) %>%
-  unite('file', Protection:Data) %>%
-  filter(!file %in% to_exclude) %>%
-  separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
+# to_exclude <- all_ir_protected_results %>%
+#   group_by(Protection, Parameter, Model, Data) %>%
+#   summarize(avg_AE = mean(values), .groups='drop') %>%
+#   arrange(desc(avg_AE)) %>%
+#   unite('file', Protection:Data) %>%
+#   slice(1:3) %>%
+#   pull(file)
+# 
+# # remove the large outlying errors
+# all_ir_protected_results <- all_ir_protected_results %>%
+#   select(Protection, Parameter, Model, Data, Horizon, Snum, values) %>%
+#   unite('file', Protection:Data) %>%
+#   filter(!file %in% to_exclude) %>%
+#   separate(file, c("Protection", "Parameter", "Model", "Data"), sep="_")
 
 ### calculate the average accuracy across all models and data sets
 # for each privacy method

@@ -7,9 +7,7 @@ Cameron D. Bale (cameron.bale@byu.edu), Matthew J. Schneider, and Jinwook Lee.
 Overview & Contents
 ---
 
-This repository contains the code and (links to) the data used to produce the results for [this paper](https://www.researchgate.net/publication/372621568_Can_We_Protect_Time_Series_Data_While_Maintaining_Accurate_Forecasts).
-
-`Code` contains all code files in two subdirectories (1) `Analysis`, which contains all files used to produce the results in the paper, and (2) `Exploratory`, which contains old code files no longer relevant to the project. Detailed instructions for running the code are given in the .README file in the `Code` directory.
+This repository contains the code and (links to) the data used to produce the results for [this paper](https://www.researchgate.net/publication/372621568_Can_We_Protect_Time_Series_Data_While_Maintaining_Accurate_Forecasts). This .README file outlines the computational requirements and the mapping from code files to outputs (figures and tables) in the paper. The `Code` directory contains all code files in two subdirectories (1) `Analysis`, which contains all files used to produce the results in the paper, and (2) `Exploratory`, which contains old code files no longer relevant to the project. Detailed instructions for running the code are given in the .README file in the `Code` directory.
 
 ---
 
