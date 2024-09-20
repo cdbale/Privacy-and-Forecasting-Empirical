@@ -4,16 +4,9 @@ This .README file contains instructions for running the project code files. We h
 
 We have given detailed descriptions for the M3 files, noting that the purposes and naming conventions for the files are consistent across data sets (*e.g.*, the `Forecast_for_Feature_Selection_*.py` file, where `*` is replaced with a data identifier, serves the same purpose for each data set).
 
-We have made a [.zip file](https://byu.box.com/s/958npasrq56vyjag00qjrcn6g2wuns65) with all intermediate (and final) results available at the following link for those who wish to verify certain steps in the analysis without running *all* of the code.
+We have made folders publicly available in Box containing all [code](https://byu.box.com/s/71o5ak04s0rgwdqgquphja36vtrveaw6), [data](https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9) and [outputs](https://byu.box.com/s/rqo1q53kgoluyr5o9rsxkvglozra94jk). The folders within `Outputs` that contain finel results are the `Figures` folder (which contains plots used in the paper) and the `Tables` folders nested within the `Results/data_folder/` directories, where `data_folder` is replaced with `M3/`, `M3_rate/`, `M4/`, or `M4_rate/`, which contain the accuracy and privacy results listed in tables throughout the paper.
 
-Finally, we note that some deviations in numerical results are expected as a result of the randomness of the RNN, *k*-nTS, *k*-nTS+, and VAR protection processes, and random forest-based feature selection. This can (with small probability) result in significantly worse forecast accuracy for a given model/protection method combination. Re-running the code should rectify this issue. Overall, the small differences in numerical results do not in any way affect the substantive conclusions of the paper.
-
-## Code For Simulations
-
-R files `simulation-accuracy-privacy-weighted-euclidean.R` and `simulation-accuracy-privacy-weighted-euclidean-large-N.R` are used to obtain the simulation results. Simulation Plots used in the paper will be saved to the `Outputs/Figures/Simulation/` folder. The code in the simulation files was written to work with the functions defined in the simulation files. Some of these functions (particularly the knts_alg() function) were re-written in the `knts_helper_functions.R` file to reduce execution time when running on larger data sets in later code files.
-
-Note: due to the randomness of the time series generation and $k$-nTS+ protection processes, the numerical results will vary from run to run. However, the substantive conclusions mentioned in
-the paper remain the same.
+Finally, we note that some deviations in numerical results are expected as a result of the randomness of the RNN, *k*-nTS, *k*-nTS+, and VAR-simulation protection processes, and random forest-based feature selection. This can (with small probability) result in significantly worse forecast accuracy for a given model/protection method combination, particularly when protected data point(s) near the forecast origin differ significantly from the unprotected values. Re-running the code should rectify this issue. Overall, the small differences in numerical results do not affect the substantive conclusions of the paper.
 
 ## Code For Analyzing M3 Data
 
@@ -140,3 +133,10 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 9. Run `forecast_privacy_assessment_M4_rate.R`.
 
 10. Run `results_computation_M4_rate.R`.
+
+## Code For Simulations
+
+R files `simulation-accuracy-privacy-weighted-euclidean.R` and `simulation-accuracy-privacy-weighted-euclidean-large-N.R` are used to obtain the simulation results. Simulation Plots used in the paper will be saved to the `Outputs/Figures/Simulation/` folder. The code in the simulation files was written to work with the functions defined in the simulation files. Some of these functions (particularly the `knts_alg()` function) were re-written in the `knts_helper_functions.R` file to reduce execution time when running on larger data sets in later code files.
+
+Note: due to the randomness of the time series generation and $k$-nTS+ protection processes, the numerical results will vary from run to run. However, the substantive conclusions mentioned in
+the paper remain the same.
