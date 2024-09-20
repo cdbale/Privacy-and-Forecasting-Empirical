@@ -183,5 +183,11 @@ var_weight_avg_prop_ident <- fcast_ident_data %>%
   summarize(weight_avg_prop = sum(num_series/sum(num_series) * avg_proportion_identified),
             total_series = sum(num_series))
 
-write.csv(weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_fcast_prop_ident.csv", row.names=FALSE)
-write.csv(var_weight_avg_prop_ident, "../../Outputs/Results/M3/Tables/weighted_var_fcast_prop_ident.csv", row.names=FALSE)
+if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
+  write.csv(weight_avg_prop_ident, paste0("../../Outputs/Results/", data_folder, "Tables/weighted_fcast_prop_ident.csv"), row.names=FALSE)
+  write.csv(var_weight_avg_prop_ident, paste0("../../Outputs/Results/", data_folder, "Tables/weighted_var_fcast_prop_ident.csv"), row.names=FALSE)
+} else {
+  dir.create(paste0("../../Outputs/Results/", data_folder, "Tables/"))
+  write.csv(weight_avg_prop_ident, paste0("../../Outputs/Results/", data_folder, "Tables/weighted_fcast_prop_ident.csv"), row.names=FALSE)
+  write.csv(var_weight_avg_prop_ident, paste0("../../Outputs/Results/", data_folder, "Tables/weighted_var_fcast_prop_ident.csv"), row.names=FALSE)
+}

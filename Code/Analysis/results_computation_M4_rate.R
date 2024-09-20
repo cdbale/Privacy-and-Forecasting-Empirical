@@ -63,31 +63,6 @@ original_global_avg_mae <- all_original_results %>%
   summarize(global_avg_MAE = mean(values)) %>%
   pull(global_avg_MAE)
 
-temp <- all_protected_results %>%
-  filter(Protection == "k-nts-plus-bounded") %>%
-  group_by(Protection, Parameter, Model, Data) %>%
-  summarize(global_avg_MAE = mean(values), .groups="drop")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 protection_avgs <- all_protected_results %>%
   group_by(Protection, Parameter) %>%
   summarize(global_avg_MAE = mean(values), .groups="drop") %>%

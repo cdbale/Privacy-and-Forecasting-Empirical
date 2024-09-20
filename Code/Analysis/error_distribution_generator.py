@@ -25,8 +25,6 @@ def error_distribution_generator(data_folder, file_string, forecasts_path, resul
         
         test_file = [x for x in test_files if forecast_horizon + "_test" in x and file_string in x and "rate" not in x]
 
-    print(test_file)
-
     [test_file] = test_file
     
     test_data = pd.read_csv("../../Data/Cleaned/" + data_folder + test_file).T

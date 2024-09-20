@@ -315,7 +315,7 @@ totals <- lapply(1:length(totals), function(x) tibble("Method"=names(privacy_met
 
 totals <- do.call(rbind, totals)
 
-# check if sub directory exists 
+# check if sub directory exists
 if (file.exists(paste0("../../Outputs/Results/", data_folder, "Tables/"))){
   write.csv(totals, paste0("../../Outputs/Results/", data_folder, "Tables/rate_overall_privacy_averages.csv"), row.names = FALSE)
 } else {

@@ -1,13 +1,15 @@
 # Replication Package for "Can We Protect Time Series Data While Maintaining Accurate Forecasts?"
 
-Cameron D. Bale, Matthew J. Schneider, and Jinwook Lee.
+Date Assembled: 9/20/2024
+
+Cameron D. Bale (cameron.bale@byu.edu), Matthew J. Schneider, and Jinwook Lee.
 ---
 Overview & Contents
 ---
 
 This repository contains the code and (links to) the data used to produce the results for [this paper](https://www.researchgate.net/publication/372621568_Can_We_Protect_Time_Series_Data_While_Maintaining_Accurate_Forecasts).
 
-`Code` contains all code files in two subdirectories (1) `Analysis`, which contains all files used to produce the results in the paper, and (2) `Exploratory`, which contains old code files no longer relevant to the project. The `Code-Directions.txt` file contains directions for running the code which we have also written below.
+`Code` contains all code files in two subdirectories (1) `Analysis`, which contains all files used to produce the results in the paper, and (2) `Exploratory`, which contains old code files no longer relevant to the project. Detailed instructions for running the code are given in the .README file in the `Code` directory.
 
 ---
 
