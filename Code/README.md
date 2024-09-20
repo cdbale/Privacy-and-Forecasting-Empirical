@@ -14,7 +14,7 @@ Create a `Data` folder in the main repository directory (same directory as the `
 
 Create an `M3` folder in the `Data` directory.
 
-Download the M3 data sets (-monthly, -other, -quarterly, -yearly) and place them in the `M3` folder created as a subdirectory of the `Data` folder. The data sets can be found in `.csv` format at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9.
+Download the `M3/` folder at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9 and place it as a subdirectory of the `Data` folder. The `M3/` folder contains all M3 data sets saved in `.csv` format.
 
 All python and R code files are found in the `Code/Analysis` subdirectory. Python files can be run using a command prompt (we used Anaconda Powershell Prompt).
 
@@ -88,9 +88,7 @@ All python and R code files are found in the `Code/Analysis` subdirectory. Pytho
 
 ## Code For Analyzing M4 Data ##
 
-Download the M4 data sets. They can be found in `.csv` format at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9. 
-
-Create an folder `M4` inside the `Data` directory of the repository. Place the `Train` and `Test` folders from the above link in the `M4` folder.
+Download the `M4/` folder at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9 and place it as a subdirectory of the `Data` folder. The `M4/` folder contains all M4 train and test data sets saved in `.csv` format.
 
 1. Run `Data_Cleaning_M4.py`.
 
