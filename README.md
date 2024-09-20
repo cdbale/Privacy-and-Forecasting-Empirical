@@ -128,7 +128,7 @@ Table 14 contains results produced by `results_computation_M3.R` and `results_co
 
 Table 15 contains results produced by `results_computation_M4.R`, `privacy_assessment_M4.R`, and `forecast_privacy_assessment_M4.R`, saved to `protection_avgs.csv`, `overall_privacy_averages.csv`, and `forecast_identification_probabilities.csv` in the `Outputs/Results/M4/Tables/` directory.
 
-*********Table 16 contains the same results as Table 15 but for the M4-rate data, produced using the analagous files.
+Table 16 contains the same results as Table 15 but for the M4-rate data, produced using the analagous files.
 
 Table 17 contains values output from lines 836-860 in `feature_analysis.R`.
 
