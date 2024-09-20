@@ -66,20 +66,20 @@ Please see the README.md file in the `Code` directory for detailed steps on runn
 
 The `feature_analysis.R` file is used to produce the following figures (listed in order of production in the code, not appearance in the paper). The figures are saved to the `Outputs/Figures/M3/` directory:
 
-* Figure 11 (`M3_RReliefF_Weights.pdf`)
-* Figure 12 (`M3_OOB.pdf`)
+* Appendix Figure 2 (`M3_RReliefF_Weights.pdf`)
+* Appendix Figure 3 (`M3_OOB.pdf`)
 * Figure 5 (`M3_RFE_selection.pdf`)
 * Figure 1 (`side-by-side-series.pdf`)
 * Figure 6 (`side-by-side-protected-series.pdf`)
 * Figure 7 (`features-boxplot.pdf`)
 * Figure 8 (`features-pca.pdf`)
-* Figure 14 (`full-feature-pca.pdf`)
-* Figure 13 (`cross_correlation_distributions.pdf`)
+* Appendix Figure 5 (`full-feature-pca.pdf`)
+* Appendix Figure 4 (`cross_correlation_distributions.pdf`)
 
 The `simulation-accuracy-privacy-weighted-euclidean.R` file is used to produce the following figures (listed in order of production in the code, not appearance in the paper). The figures are saved to the `Outputs/Figures/Simulation/` directory:
 
 * Figure 3 (`10_simulated_series.pdf`)
-* Figure 10 (`feature_distribution_simulation.pdf`)
+* Appendix Figure 1 (`feature_distribution_simulation.pdf`)
 * Figure 4 (`idr-mae-10-orig.pdf`)
 
 The `computation_time_analysis.R` file is used to produce Figure 9 (`computation_cost_plot.pdf`).
@@ -114,22 +114,24 @@ Table 6 contains values produced in a similar way to the values in Tables 4 and 
 
 Note that for the second rows in Tables 5 and 6, the accuracy results are obtained from the model-specific *k*-nTS+ results (`averages_by_model.csv` and `rate_averages_by_model.csv`)
 
-Tables 7, 8, and 9 (similar to Table 2) values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean.R`.
+***Remaining Tables Are Found in the Appendix***
 
-Tables 10 and 11 contain values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean-large-N.R`.
+Tables 1, 2, and 3 (similar to Table 2) values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean.R`.
 
-Table 12 contains results produced by `results_computation_M3.R` and saved to `average_accuracy_by_magnitude_protection.R`.
+Tables 4 and 5 contain values output from lines 1064-1187, and 1665-1831 from `simulation-accuracy-privacy-weighted-euclidean-large-N.R`.
 
-Table 13 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_model.csv`, `rate_averages_by_model.csv` and `ir_averages_by_model.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
+Table 6 contains results produced by `results_computation_M3.R` and saved to `average_accuracy_by_magnitude_protection.R`.
 
-Table 14 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_data.csv`, `rate_averages_by_data.csv` and `ir_averages_by_data.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
+Table 7 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_model.csv`, `rate_averages_by_model.csv` and `ir_averages_by_model.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
 
-Table 15 contains results produced by `results_computation_M4.R`, `privacy_assessment_M4.R`, and `forecast_privacy_assessment_M4.R`, saved to `protection_avgs.csv`, `overall_privacy_averages.csv`, and `forecast_identification_probabilities.csv` in the `Outputs/Results/M4/Tables/` directory.
+Table 8 contains results produced by `results_computation_M3.R` and `results_computation_M3_rate.R` and saved to `averages_by_data.csv`, `rate_averages_by_data.csv` and `ir_averages_by_data.csv` in the `M3/Tables/` and `M3_rate/Tables/` subdirectories.
 
-Table 16 contains the same results as Table 15 but for the M4-rate data, produced using the analagous files.
+Table 9 contains results produced by `results_computation_M4.R`, `privacy_assessment_M4.R`, and `forecast_privacy_assessment_M4.R`, saved to `protection_avgs.csv`, `overall_privacy_averages.csv`, and `forecast_identification_probabilities.csv` in the `Outputs/Results/M4/Tables/` directory.
 
-Table 17 contains values output from lines 836-860 in `feature_analysis.R`.
+Table 10 contains the same results as Table 9 but for the M4-rate data, produced using the analagous files.
 
-Table 18 contains values from the files `mean_corr_diffs.csv` and `mean_var_corr_diffs.csv`, both produced using `feature_analysis.R`.
+Table 11 contains values output from lines 836-860 in `feature_analysis.R`.
 
-Tables 19 and 20 contain hyperparameter values found in the code files `Final_Forecasts_M3.py`, `Final_Forecasts_M3_rate.py`, `LGBM_functions.py` and `RNN_functions.py`.
+Table 12 contains values from the files `mean_corr_diffs.csv` and `mean_var_corr_diffs.csv`, both produced using `feature_analysis.R`.
+
+Tables 13 and 14 contain hyperparameter values found in the code files `Final_Forecasts_M3.py`, `Final_Forecasts_M3_rate.py`, `LGBM_functions.py` and `RNN_functions.py`.
