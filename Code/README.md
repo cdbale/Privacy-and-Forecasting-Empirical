@@ -14,7 +14,7 @@ Create a `Data` folder in the main repository directory (same directory as the `
 
 Create an `M3` folder in the `Data` directory.
 
-Download the M3 data sets (-monthly, -other, -quarterly, -yearly) and place them in the `M3` folder created as a subdirectory of the `Data` folder. The data sets can be found in `.csv` format at the following link: https://drive.google.com/drive/folders/1VG_G2vethsJQLRFv1uNuPZFYe0K-Y_ku?usp=sharing.
+Download the M3 data sets (-monthly, -other, -quarterly, -yearly) and place them in the `M3` folder created as a subdirectory of the `Data` folder. The data sets can be found in `.csv` format at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9.
 
 All python and R code files are found in the `Code/Analysis` subdirectory. Python files can be run using a command prompt (we used Anaconda Powershell Prompt).
 
@@ -88,7 +88,7 @@ All python and R code files are found in the `Code/Analysis` subdirectory. Pytho
 
 ## Code For Analyzing M4 Data ##
 
-Download the M4 data sets. They can be found in `.csv` format at the following link: https://drive.google.com/drive/folders/1m84cDf9IzF4sTtvPBvvDKi-GEAaPfw-7?usp=sharing. 
+Download the M4 data sets. They can be found in `.csv` format at the following link: https://byu.box.com/s/oczp5f5ah5zi14n04gxkfq1flvly46n9. 
 
 Create an folder `M4` inside the `Data` directory of the repository. Place the `Train` and `Test` folders from the above link in the `M4` folder.
 
