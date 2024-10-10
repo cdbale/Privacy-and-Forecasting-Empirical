@@ -1356,3 +1356,391 @@ if (file.exists(paste0("../../Outputs/Figures/M3/"))){
   ggsave(filename="cross_correlation_distributions.pdf", plot=cc_plot, path="../../Outputs/Figures/M3/",
          width = 11.1, height = 7)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#################################################################################
+#################################################################################
+#################################################################################
+#################################################################################
+
+# compare PCA plots and loadings from M4 k-nTS+ and unprotected series
+
+# 2x2 plot
+
+# original features dataframe
+feature_file_path <- "../../Data/Features/M4/"
+
+og_feat_files <- grep("k-nts", list.files(feature_file_path), value=TRUE, invert=TRUE)
+og_feat_files <- grep("DP_", og_feat_files, value=TRUE, invert=TRUE)
+og_feat_files <- grep("AN_", og_feat_files, value=TRUE, invert=TRUE)
+og_feat_files <- grep("h1_train", og_feat_files, value=TRUE)
+
+full_og_feats <- tibble()
+
+for (f in og_feat_files){
+  sp <- ifelse(grepl("Daily", f), 7,
+               ifelse(grepl("Hourly", f), 24,
+                      ifelse(grepl("Monthly", f), 12,
+                             ifelse(grepl("Quarterly", f), 4,
+                                    ifelse(grepl("Weekly", f), 52, 1)))))
+  temp <- read_csv(paste0(feature_file_path, f)) %>%
+    mutate(data = strsplit(f, "_")[[1]][2])
+  if (sp %in% c(7, 24, 12, 4, 52)){
+    temp <- temp %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+  }
+  full_og_feats <- bind_rows(full_og_feats, temp)
+}
+
+# k-nTS features data frame
+
+kntsp_feat_files <- grep("k-nts-plus-bounded_3-1_", list.files(feature_file_path), value=TRUE)
+
+full_kntsp_feats <- tibble()
+
+for (f in kntsp_feat_files){
+  sp <- ifelse(grepl("Daily", f), 7,
+               ifelse(grepl("Hourly", f), 24,
+                      ifelse(grepl("Monthly", f), 12,
+                             ifelse(grepl("Quarterly", f), 4,
+                                    ifelse(grepl("Weekly", f), 52, 1)))))
+  temp <- read_csv(paste0(feature_file_path, f)) %>%
+    mutate(data = strsplit(f, "_")[[1]][4])
+  if (sp %in% c(7, 24, 12, 4, 52)){
+    temp <- temp %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+  }
+  full_kntsp_feats <- bind_rows(full_kntsp_feats, temp)
+}
+
+# # k-nTS features data frame
+# 
+# knts_feat_files <- grep("k-nts_3", list.files(feature_file_path), value=TRUE)
+# 
+# full_knts_feats <- tibble()
+# 
+# for (f in knts_feat_files){
+#   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+#   temp <- read_csv(paste0(feature_file_path, f)) %>%
+#     mutate(data = strsplit(f, "_")[[1]][4])
+#   if (sp %in% c(12, 4)){
+#     temp <- temp %>%
+#       select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+#   }
+#   full_knts_feats <- bind_rows(full_knts_feats, temp)
+# }
+
+# AN features data frame
+
+# an_feat_files <- grep("AN_1.5_", list.files(feature_file_path), value=TRUE)
+# an_feat_files <- grep("h1_train", an_feat_files, value=TRUE)
+# 
+# full_an_feats <- tibble()
+# 
+# for (f in an_feat_files){
+#   sp <- ifelse(grepl("monthly", f), 12, ifelse(grepl("quarterly", f), 4, 1))
+#   temp <- read_csv(paste0(feature_file_path, f)) %>%
+#     mutate(data = strsplit(f, "_")[[1]][4])
+#   if (sp %in% c(12, 4)){
+#     temp <- temp %>%
+#       select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+#   }
+#   full_an_feats <- bind_rows(full_an_feats, temp)
+# }
+
+# DP features data frame
+
+dp_feat_files <- grep("DP_4.6_", list.files(feature_file_path), value=TRUE)
+dp_feat_files <- grep("h1_train", dp_feat_files, value=TRUE)
+
+full_dp_feats <- tibble()
+
+for (f in dp_feat_files){
+  sp <- ifelse(grepl("Daily", f), 7,
+               ifelse(grepl("Hourly", f), 24,
+                      ifelse(grepl("Monthly", f), 12,
+                             ifelse(grepl("Quarterly", f), 4,
+                                    ifelse(grepl("Weekly", f), 52, 1)))))
+  temp <- read_csv(paste0(feature_file_path, f)) %>%
+    mutate(data = strsplit(f, "_")[[1]][4])
+  if (sp %in% c(7, 24, 12, 4, 52)){
+    temp <- temp %>%
+      select(-seasonal_strength, -peak, -trough, -seas_acf1, -seas_pacf)
+  }
+  full_dp_feats <- bind_rows(full_dp_feats, temp)
+}
+
+## combine feature data frames, standardize, and perform PCA
+
+full_og_feats <- full_og_feats %>%
+  mutate(series = "Original")
+
+full_kntsp_feats <- full_kntsp_feats %>%
+  mutate(series= "k-nTS+")
+
+full_dp_feats <- full_dp_feats %>%
+  mutate(series = "DP")
+
+full_feats <- full_og_feats %>%
+  bind_rows(full_kntsp_feats, full_dp_feats)
+
+seasonal_mm_feats <- m3_full_features %>%
+  filter(method %in% c("AN", "DP", "k-nts", "k-nts-plus-bounded", "Original")) %>%
+  bind_rows(var_sim_monthly_micro_feats)
+
+################################################################################
+
+# identify which features were selected across M4 data sets
+
+################################################################################
+################################################################################
+
+# creating data set and feature heatmap
+
+m4_oob_directory <- "../../Outputs/RFE OOB/M4/"
+
+m4_oob_files <- list.files(m4_oob_directory)
+
+m4_full_oob <- tibble()
+m4_rate_full_oob <- tibble()
+
+for (f in m4_oob_files){
+  temp <- read_csv(paste0(m4_oob_directory, f)) %>%
+    mutate(data_set = strsplit(f, "_")[[1]][2],
+           data_subset = strsplit(f, "_")[[1]][3])
+  
+  m4_full_oob <- bind_rows(m4_full_oob, temp)
+}
+
+# m3_monthly_micro_oob <- m3_full_oob %>%
+#   filter(data_set == "monthly-MICRO", data_subset == "1")
+# 
+# m3_oob_plot <- m3_monthly_micro_oob %>%
+#   ggplot(aes(x=num_features, y=value, color=model)) +
+#   geom_line() +
+#   geom_point() +
+#   ylim(0.0, 0.85) +
+#   xlim(0.0, 33) +
+#   labs(x = "Number of Features",
+#        y = "OOB MAE",
+#        title = "M3 Data",
+#        color = "Model")
+# # theme(plot.title = element_text(size=14, face= "bold", colour= "black" ),
+# #       axis.title.x = element_text(size=13, face="bold", colour = "black"),    
+# #       axis.title.y = element_text(size=13, face="bold", colour = "black"))
+
+################################################################################
+################################################################################
+
+# creating data set and feature heatmap
+
+m4_rfe_directory <- "../../Outputs/RFE Rankings/M4/"
+
+m4_rfe_files <- list.files(m4_rfe_directory)
+
+m4_full_rfe <- tibble()
+
+for (f in m4_rfe_files){
+  temp <- read_csv(paste0(m4_rfe_directory, f)) %>%
+    mutate(data_set = strsplit(f, "_")[[1]][2],
+           data_subset = strsplit(f, "_")[[1]][3])
+  
+  m4_full_rfe <- bind_rows(m4_full_rfe, temp)
+}
+
+avg_m4_rfe_evals <- m4_full_rfe %>%
+  group_by(data_set, data_subset, var) %>%
+  summarize(avg_rank = mean(rank), .groups='drop') %>%
+  arrange(data_set, data_subset, avg_rank)
+
+## replicate feature selection code from k-nTS+ to determine which features
+## were actually selected
+
+# for each data subset, calculate how many features were needed to achieve
+# the minimum MAE
+m4_ns <- m4_full_oob %>%
+  group_by(data_set, data_subset, model) %>%
+  mutate(min_error = min(value)) %>%
+  ungroup() %>%
+  filter(value == min_error) %>%
+  group_by(data_set, data_subset) %>%
+  summarize(ns = floor(mean(num_features)), .groups='drop')
+
+# what are the minimum and maximum numbers of features selected
+m4_ns %>%
+  summarize(min_n = min(ns),
+            max_n = max(ns))
+
+avg_m4_rfe_evals <- avg_m4_rfe_evals %>%
+  mutate(combined_data = paste0(data_set, "-", data_subset))
+
+data_levels <- unique(avg_m4_rfe_evals$combined_data)
+
+m4_sf <- avg_m4_rfe_evals %>%
+  left_join(m4_ns, by=c("data_set", "data_subset")) %>%
+  group_by(data_set, data_subset) %>%
+  mutate(var_order = 1:n(),
+         is_selected = factor(ifelse(var_order <= ns, 1, 0), levels=c(0, 1), labels=c("No", "Yes")))
+
+### look at the most frequently selected features plotted using PCA
+
+m4_sf %>%
+  filter(is_selected == "Yes") %>%
+  group_by(var) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+
+# spike, series variance, max var shift, and max level shift were selected most often,
+# followed by hurst and series mean
+
+# PCA plots of features from k-nTS+ original and rate data sets
+full_pca <- prcomp(full_feats[,names(full_feats) %in% c("series_variance",
+                                                        "max_level_shift",
+                                                        "spike",
+                                                        "max_var_shift",
+                                                        "series_mean",
+                                                        "hurst")], center=TRUE, scale=TRUE)
+
+summary(full_pca)
+
+pcs <- as_tibble(full_pca$x[,1:2]) %>%
+  bind_cols(full_feats[,c('data', 'series', 'entropy')])
+
+common_pca_plot <- pcs %>%
+  mutate(series = factor(series, levels=c("Original", "k-nTS+", "DP"), labels=c("Unprotected", "k-nTS+", "DP"))) %>%
+  ggplot(aes(x=PC1, y=PC2, color=entropy)) +
+  geom_point(alpha=0.5) +
+  facet_wrap(~series) +
+  labs(x  = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Spectral Entropy")
+
+print(common_pca_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/M4/"))){
+  ggsave(filename="features-pca.pdf", plot=common_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+} else {
+  dir.create(paste0("../../Outputs/Figures/M4/"), recursive=TRUE)
+  ggsave(filename="features-pca.pdf", plot=common_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+}
+
+## repeat with just k-nTS+
+
+common_pca_plot <- pcs %>%
+  mutate(series = factor(series, levels=c("Original", "k-nTS+", "DP"), labels=c("Unprotected", "k-nTS+", "DP"))) %>%
+  filter(series %in% c("Unprotected", "k-nTS+")) %>%
+  ggplot(aes(x=PC1, y=PC2, color=entropy)) +
+  geom_point(alpha=0.5) +
+  facet_wrap(~series) +
+  labs(x  = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Spectral Entropy")
+
+print(common_pca_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/M4/"))){
+  ggsave(filename="knts-features-pca.pdf", plot=common_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+} else {
+  dir.create(paste0("../../Outputs/Figures/M4/"), recursive=TRUE)
+  ggsave(filename="knts-features-pca.pdf", plot=common_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+}
+
+full_pca$rotation[,1:2]
+
+# calculate average spectral entropy value for each privacy method
+pcs %>%
+  group_by(series) %>%
+  summarize(avg_entropy = mean(entropy))
+
+# ### perform PCA using all features
+# # PCA plots of features from k-nTS+ original and rate data sets
+# full_pca <- prcomp(full_feats[full_feats$series %in% c("Original", "VAR Sim", "k-nTS+"), !names(full_feats) %in% c('time_level_shift',
+#                                                                                                                  'time_var_shift',
+#                                                                                                                  'time_kl_shift',
+#                                                                                                                  'data',
+#                                                                                                                  'series',
+#                                                                                                                  'cross_cor_1',
+#                                                                                                                  'cross_cor_2',
+#                                                                                                                  'cross_cor_3',
+#                                                                                                                  'cross_cor_4',
+#                                                                                                                  'cross_cor_5')], center=TRUE, scale=TRUE)
+
+full_feats_na <- full_feats %>%
+  drop_na()
+
+### perform PCA using all features
+# PCA plots of features from k-nTS+ original and rate data sets
+full_pca <- prcomp(full_feats_na[full_feats_na$series %in% c("Original", "DP", "k-nTS+"), !names(full_feats_na) %in% c('time_level_shift',
+                                                                                                                   'time_var_shift',
+                                                                                                                   'time_kl_shift',
+                                                                                                                   'data',
+                                                                                                                   'series')], center=TRUE, scale=TRUE)
+
+
+
+summary(full_pca)
+
+pcs <- as_tibble(full_pca$x[,1:2]) %>%
+  bind_cols(full_feats_na[full_feats_na$series %in% c("Original", "DP", "k-nTS+"), c('data', 'series', 'entropy')])
+
+full_pca_plot <- pcs %>%
+  filter(PC2 > -25) %>%
+  mutate(series = factor(series, levels=c("Original", "k-nTS+", "DP"), labels=c("Unprotected", "k-nTS+", "DP"))) %>%
+  ggplot(aes(x=PC1, y=PC2, color=entropy)) +
+  geom_point(alpha=0.5) +
+  facet_wrap(~series) +
+  labs(x  = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Spectral Entropy")
+
+print(full_pca_plot)
+
+if (file.exists(paste0("../../Outputs/Figures/M4/"))){
+  ggsave(filename="full-feature-pca.pdf", plot=full_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+} else {
+  dir.create(paste0("../../Outputs/Figures/M4/"), recursive=TRUE)
+  ggsave(filename="full-feature-pca.pdf", plot=full_pca_plot, path="../../Outputs/Figures/M4/",
+         width = 11.1, height = 7)
+}

@@ -12,7 +12,7 @@ from data_protection_functions import *
 data_folder = "M4_rate/"
 
 # # create protected data sets using additive noise and differential privacy
-protection_methods = {"DP": [1, 4.6, 10, 20]}
+protection_methods = {"DP": [1, 4.6, 10]}
 
 # for the h1 and h2 horizon, apply the data protection methods and save the protected
 # data sets

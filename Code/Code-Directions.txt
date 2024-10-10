@@ -159,6 +159,8 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 
 # Steps for M4 rate data
 
+CHECK FOR DP=20 IN FILES
+
 1. Run `Data_Cleaning_M4_rate.py`.
 
 2. Run `Create_DP_M4_rate.py`. Same as step 2. above but for the M4 data.
@@ -172,6 +174,11 @@ Create an folder `M4` inside the `Data` directory of the repository. Place the `
 6. Run `k-nts_plus_M4_rate_bounded_M.R`.
 
 7. Run `Final_Forecasts_M4_rate.py`. Same as above but for M4 rate data.
+
+
+
+
+
 
 8. Run `privacy_assessment_M4_rate.R` to perform the identification disclosure simulation. Results are saved to "Outputs/Results/M4/Tables/".
 

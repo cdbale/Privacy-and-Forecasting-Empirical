@@ -133,7 +133,7 @@ og_files = [x[:-12] for x in og_files if not any(y in x for y in ['_train', '_h1
 models = ["SES", "DES", "VAR", "LGBM"]
 
 protection_methods = {"original": [""],
-                      "DP": [1, 4.6, 10, 20]}
+                      "DP": [1, 4.6, 10]}
 
 # make column to store times for error computation and save since this file
 # will be called inside the `error_distribution_generator` function

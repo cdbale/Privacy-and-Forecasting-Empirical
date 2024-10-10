@@ -46,6 +46,8 @@ for (f in knts_files){
   
   file_id <- paste0(strsplit(f, "_")[[1]][3:5], collapse="_")
   
+  print(file_id)
+  
   # original file
   og_f <- grep(file_id, og_files, value=TRUE)
   
@@ -59,21 +61,21 @@ for (f in knts_files){
   # import data sets
   knts_data <- import_data(f, data_path, sp=sp, truncate=FALSE, take_log=FALSE)
   og_data <- import_data(og_f, data_path, sp=sp, truncate=FALSE, take_log=FALSE)
-  
+
   for (th in threshold_values){
-    
+
     new_protected <- list()
-    
+
     for (j in seq_along(og_data)){
       new_protected[[j]] <- knts_bounded(knts_data[[j]], og_data[[j]], th)
     }
-    
+
     ml <- max(sapply(new_protected, length))
-    
+
     for(i in seq_along(new_protected)){
       length(new_protected[[i]]) <- ml
     }
-    
+
     write.csv(do.call(rbind, new_protected), paste0("../../Data/Cleaned/", data_folder, "k-nts-plus-bounded_3-", th, "_", file_id), row.names=FALSE)
   }
 }
